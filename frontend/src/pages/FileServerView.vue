@@ -47,6 +47,7 @@ const fetchShares = async () => {
 const smartSearchQuery = ref('')
 const handleSmartSearch = () => {
   if (!smartSearchQuery.value) return
+  error.value = ''
   let query = smartSearchQuery.value.trim()
   // Normalizar separadores
   query = query.replace(/\\/g, '/')
@@ -57,7 +58,7 @@ const handleSmartSearch = () => {
   // Dividir por partes
   const parts = query.split('/').filter(p => p)
   if (parts.length < 2) {
-    alert('Ruta no válida. Debe incluir al menos el servidor y el recurso compartido (ej: \\\\192.168.1.80\\Share)')
+    error.value = 'Ruta no válida. Debe incluir al menos el servidor y el recurso compartido (ej: \\\\192.168.1.80\\Share)'
     return
   }
   // parts[0] es el servidor, parts[1] es el share
@@ -67,7 +68,7 @@ const handleSmartSearch = () => {
   // Buscar el share (case-insensitive)
   const share = shares.value.find(s => s.name.toLowerCase() === targetShareName.toLowerCase())
   if (!share) {
-    alert(`No se encontró el recurso compartido '${targetShareName}' en la lista de Shares principales.`)
+    error.value = `No se encontró el recurso compartido '${targetShareName}' en la lista de Shares principales. Verifica que el servidor se haya reiniciado para cargar recursos ocultos.`
     return
   }
   

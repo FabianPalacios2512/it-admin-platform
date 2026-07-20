@@ -532,8 +532,34 @@ def get_user_effective_folders(username: str):
                 user_identities.add(g_sid)
                 sid_to_name[g_sid] = f"{netbios}\\{group_name}"
             
-    conn.unbind()
+    # 2. Agregar grupos universales (Well-Known SIDs)
+    well_known_sids = {
+        "s-1-1-0": "Todos",
+        "todos": "Todos",
+        "everyone": "Todos",
+        "s-1-5-11": "Usuarios Autenticados",
+        "nt authority\\authenticated users": "Usuarios Autenticados",
+        "nt authority\\usuarios autenticados": "Usuarios Autenticados",
+        "s-1-5-18": "SYSTEM",
+        "nt authority\\system": "SYSTEM"
+    }
+    for wk_id, wk_name in well_known_sids.items():
+        user_identities.add(wk_id)
+        sid_to_name[wk_id] = wk_name
+        
+    # 3. Si el usuario pertenece a grupos de administración, inyectar BUILTIN\Administradores
+    admin_keywords = ["admin", "administrador", "domain admins", "administradores de ti"]
+    is_admin = any(any(k in group.lower() for k in admin_keywords) for group in user_identities)
+    
+    if is_admin:
+        user_identities.add("s-1-5-32-544")
+        user_identities.add("builtin\\administrators")
+        user_identities.add("builtin\\administradores")
+        sid_to_name["s-1-5-32-544"] = "BUILTIN\\Administradores"
+        sid_to_name["builtin\\administradores"] = "BUILTIN\\Administradores"
+        sid_to_name["builtin\\administrators"] = "BUILTIN\\Administradores"
 
+    conn.unbind()
     paths_to_scan = []
     try:
         shares = get_shared_folders()
