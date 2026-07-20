@@ -97,7 +97,8 @@ def get_shared_folders():
 
         results = []
         for share in shares:
-            if share.Name.endswith("$"):
+            # Filtrar solo shares ocultos estándar del sistema, no los creados a medida
+            if share.Name.upper() in ["ADMIN$", "IPC$", "C$", "D$", "E$", "F$", "PRINT$", "FAX$"]:
                 continue
 
             results.append({
