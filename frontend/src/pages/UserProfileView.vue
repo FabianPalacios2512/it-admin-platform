@@ -669,9 +669,23 @@ const visibleFolderGroups = computed(() => {
   let filtered = folderGroups.value;
   
   if (folderSearchQuery.value) {
-    const query = folderSearchQuery.value.toLowerCase();
+    let rawQuery = folderSearchQuery.value.trim();
+    
+    // SMART SEARCH (Rutas UNC)
+    if (rawQuery.includes('\\') || rawQuery.startsWith('//')) {
+      rawQuery = rawQuery.replace(/\\/g, '/');
+      if (rawQuery.startsWith('//')) rawQuery = rawQuery.substring(2);
+      
+      const parts = rawQuery.split('/').filter(p => p);
+      if (parts.length >= 2) {
+        // parts[0] es la IP o Nombre del Servidor (ej. APXEIO o 192.168.1.80) -> lo ignoramos
+        rawQuery = parts.slice(1).join('/');
+      }
+    }
+    
+    const query = rawQuery.toLowerCase();
     filtered = filtered.filter(f => f.path.toLowerCase().includes(query));
-    return filtered; // Si hay búsqueda, mostramos todas planas sin importar si están expandidas
+    return filtered; // Mostrar todas las coincidencias
   }
 
   return filtered.filter(folder => {

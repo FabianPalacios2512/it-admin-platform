@@ -1,4 +1,4 @@
-﻿<script setup>
+<script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import BaseModal from '../components/common/BaseModal.vue'
 
@@ -41,6 +41,38 @@ const fetchShares = async () => {
   } finally {
     loading.value = false
   }
+}
+
+// --- BUSCADOR INTELIGENTE UNC ---
+const smartSearchQuery = ref('')
+const handleSmartSearch = () => {
+  if (!smartSearchQuery.value) return
+  let query = smartSearchQuery.value.trim()
+  // Normalizar separadores
+  query = query.replace(/\\/g, '/')
+  // Quitar el prefijo si tiene
+  if (query.startsWith('//')) {
+    query = query.substring(2)
+  }
+  // Dividir por partes
+  const parts = query.split('/').filter(p => p)
+  if (parts.length < 2) {
+    alert('Ruta no válida. Debe incluir al menos el servidor y el recurso compartido (ej: \\\\192.168.1.80\\Share)')
+    return
+  }
+  // parts[0] es el servidor, parts[1] es el share
+  const targetShareName = parts[1]
+  const targetSubpath = parts.slice(2).join('/')
+  
+  // Buscar el share (case-insensitive)
+  const share = shares.value.find(s => s.name.toLowerCase() === targetShareName.toLowerCase())
+  if (!share) {
+    alert(`No se encontró el recurso compartido '${targetShareName}' en la lista de Shares principales.`)
+    return
+  }
+  
+  browsePath(share, targetSubpath)
+  smartSearchQuery.value = ''
 }
 
 const browsePath = async (share, path = '') => {
@@ -448,6 +480,11 @@ onUnmounted(() => {
           Nueva carpeta
         </button>
         <div class="w-px h-4 bg-slate-200 mx-1"></div>
+        <div class="relative w-72 lg:w-96 ml-2">
+          <input v-model="smartSearchQuery" @keyup.enter="handleSmartSearch" type="text" placeholder="Pegar ruta UNC (ej. \\192.168.1.80\Share\Carpeta)..." class="w-full pl-8 pr-8 py-1.5 bg-white border border-slate-200 rounded text-[12px] outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-shadow">
+          <svg class="w-4 h-4 text-slate-400 absolute left-2.5 top-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <button v-if="smartSearchQuery" @click="handleSmartSearch" class="absolute right-2 top-1.5 text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase transition-colors">Ir</button>
+        </div>
         <button @click="openPermissionsBulk" :disabled="selectedItems.length === 0" class="text-[12px] font-medium text-slate-700 hover:text-indigo-600 hover:bg-slate-50 px-3 py-1.5 rounded transition-colors flex items-center gap-2 disabled:opacity-30 disabled:hover:text-slate-700 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default">
           <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
           Permisos de seguridad
