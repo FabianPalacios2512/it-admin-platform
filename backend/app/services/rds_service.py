@@ -88,22 +88,38 @@ def get_rds_sessions(server: ServerConfig, temp_path: str, file_prefix: str = "N
     qw_sessions = {}
     
     if res_qw.returncode == 0:
-        lines = res_qw.stdout.strip().split("\n")
-        if len(lines) > 1:
-            for line in lines[1:]:
-                parts = line.split()
-                if len(parts) >= 3:
-                    session_name = line[0:18].strip()
-                    username = line[19:39].strip()
-                    session_id = line[39:45].strip()
-                    state = line[46:54].strip()
+        lines = res_qw.stdout.split("\n")
+        import re
+        for line in lines[1:]:
+            if not line.strip(): continue
+            # Buscar el ID (numero) y ESTADO (palabra)
+            match = re.search(r'\s+(\d+)\s+([A-Za-z]+)', line)
+            if not match: continue
+            
+            session_id = match.group(1)
+            state = match.group(2)
+            prefix = line[:match.start()]
+            
+            words = prefix.split()
+            session_name = "N/A"
+            username = ""
+            
+            if len(words) == 2:
+                session_name = words[0].replace('>', '')
+                username = words[1]
+            elif len(words) == 1:
+                # Si empieza con menos de 5 espacios, es un SessionName (ej: ' console ')
+                if len(prefix) - len(prefix.lstrip()) < 5:
+                    session_name = words[0].replace('>', '')
+                else:
+                    username = words[0]
                     
-                    if username and session_id.isdigit():
-                        qw_sessions[username.lower()] = {
-                            "session_id": session_id,
-                            "session_name": session_name,
-                            "state": state
-                        }
+            if username and session_id.isdigit():
+                qw_sessions[username.lower()] = {
+                    "session_id": session_id,
+                    "session_name": session_name,
+                    "state": state
+                }
     
     # 3. Fusionar datos
     sessions_result = []
@@ -244,11 +260,28 @@ $filePrefix = "{file_prefix}"
 
 $qwinstaOutput = qwinsta
 $activeSessions = @{{}}
+$isFirst = $true
 foreach ($line in $qwinstaOutput) {{
-    if ($line -match '^>?(?<sessionname>.{{18}})\\s+(?<username>.{{20}})\\s+(?<id>.{{8}})\\s+(?<state>.{{8}})') {{
-        $user = $matches.username.Trim().ToLower()
-        $id = $matches.id.Trim()
-        if ([int]::TryParse($id, [ref]0)) {{
+    if ($isFirst) {{ $isFirst = $false; continue }}
+    if ([string]::IsNullOrWhiteSpace($line)) {{ continue }}
+    
+    if ($line -match '\s+(?<id>\d+)\s+(?<state>[a-zA-Z]+)') {{
+        $id = $matches.id
+        $matchStr = $matches[0]
+        $prefix = $line.Substring(0, $line.IndexOf($matchStr))
+        $words = -split $prefix
+        $user = ""
+        
+        if ($words.Count -eq 2) {{
+            $user = $words[1].ToLower()
+        }} elseif ($words.Count -eq 1) {{
+            $leadingSpaces = $line.Length - $line.TrimStart(' ').Length
+            if ($leadingSpaces -ge 5) {{
+                $user = $words[0].ToLower()
+            }}
+        }}
+        
+        if ($user -ne "") {{
             $activeSessions[$user] = $id
         }}
     }}
