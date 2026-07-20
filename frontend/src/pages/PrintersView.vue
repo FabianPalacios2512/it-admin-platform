@@ -13,12 +13,17 @@ const error = ref('')
 
 const showAddModal = ref(false)
 const showEditModal = ref(false)
-const showJobsModal = ref(false)
+const showDetailsDrawer = ref(false)
+const activeTab = ref('jobs')
 const submitting = ref(false)
+
+const selectedPrinter = ref(null)
 
 const printerJobs = ref([])
 const loadingJobs = ref(false)
-const currentJobsPrinter = ref(null)
+
+const printerHistory = ref([])
+const loadingHistory = ref(false)
 
 const newPrinter = ref({
   name: '',
@@ -131,37 +136,7 @@ const submitEditPrinter = async () => {
   }
 }
 
-const selectedPrinters = ref(new Set())
-const hasSelection = computed(() => selectedPrinters.value.size > 0)
-const hasSingleSelection = computed(() => selectedPrinters.value.size === 1)
-
-const singleSelectedPrinter = computed(() => {
-  if (!hasSingleSelection.value) return null
-  const pName = Array.from(selectedPrinters.value)[0]
-  return printers.value.find(p => p.Name === pName)
-})
-
-const toggleSelection = (printerName) => {
-  const newSet = new Set(selectedPrinters.value)
-  if (newSet.has(printerName)) {
-    newSet.delete(printerName)
-  } else {
-    newSet.add(printerName)
-  }
-  selectedPrinters.value = newSet
-}
-
-const toggleAll = (e) => {
-  if (e.target.checked) {
-    selectedPrinters.value = new Set(printers.value.map(p => p.Name))
-  } else {
-    selectedPrinters.value = new Set()
-  }
-}
-
-const isAllSelected = computed(() => {
-  return printers.value.length > 0 && selectedPrinters.value.size === printers.value.length
-})
+// Removing unused selection logic
 
 const confirmModal = ref({
   show: false,
@@ -279,7 +254,8 @@ const deletePrinter = async (printer) => {
           const err = await res.json()
           throw new Error(err.detail || 'Error al eliminar impresora')
         }
-        selectedPrinters.value = new Set()
+        showDetailsDrawer.value = false
+        selectedPrinter.value = null
         await fetchPrinters()
       } catch (err) {
         alert(err.message)
@@ -288,25 +264,42 @@ const deletePrinter = async (printer) => {
   )
 }
 
-const openJobsModal = async (printer) => {
-  if (!printer) return
-  currentJobsPrinter.value = printer
+const loadJobs = async () => {
+  if (!selectedPrinter.value) return
   printerJobs.value = []
   loadingJobs.value = true
-  showJobsModal.value = true
   try {
-    const res = await fetch(`${API_BASE}/printers/${encodeURIComponent(printer.Name)}/jobs`)
-    if (!res.ok) {
-      const err = await res.json()
-      throw new Error(err.detail || 'Error al cargar cola de impresión')
-    }
+    const res = await fetch(`${API_BASE}/printers/${encodeURIComponent(selectedPrinter.value.Name)}/jobs`)
+    if (!res.ok) throw new Error('Error al cargar cola')
     printerJobs.value = await res.json()
   } catch (err) {
-    alert(err.message)
-    showJobsModal.value = false
+    console.error(err)
   } finally {
     loadingJobs.value = false
   }
+}
+
+const loadHistory = async () => {
+  if (!selectedPrinter.value) return
+  printerHistory.value = []
+  loadingHistory.value = true
+  try {
+    const res = await fetch(`${API_BASE}/printers/${encodeURIComponent(selectedPrinter.value.Name)}/history`)
+    if (!res.ok) throw new Error('Error al cargar historial')
+    printerHistory.value = await res.json()
+  } catch (err) {
+    console.error(err)
+  } finally {
+    loadingHistory.value = false
+  }
+}
+
+const openDetails = (printer) => {
+  selectedPrinter.value = printer
+  activeTab.value = 'jobs'
+  showDetailsDrawer.value = true
+  loadJobs()
+  loadHistory()
 }
 
 onMounted(() => {
@@ -339,29 +332,7 @@ onMounted(() => {
           Reiniciar Spooler
         </button>
 
-        <!-- Contextual actions -->
-        <template v-if="hasSelection">
-          <div class="h-4 border-r border-gray-200 mx-1"></div>
-          
-          <button v-if="hasSingleSelection" @click="openJobsModal(singleSelectedPrinter)" class="flex items-center gap-1.5 px-3 py-1.5 text-gray-500 hover:text-gray-700 font-semibold text-[13px] transition-colors bg-transparent hover:bg-gray-100 rounded">
-            Ver cola
-          </button>
-          <button v-if="hasSingleSelection" @click="testPage(singleSelectedPrinter)" class="flex items-center gap-1.5 px-3 py-1.5 text-gray-500 hover:text-gray-700 font-semibold text-[13px] transition-colors bg-transparent hover:bg-gray-100 rounded">
-            Pág. de prueba
-          </button>
-          <button v-if="hasSingleSelection" @click="clearSpooler(singleSelectedPrinter)" class="flex items-center gap-1.5 px-3 py-1.5 text-gray-500 hover:text-gray-700 font-semibold text-[13px] transition-colors bg-transparent hover:bg-gray-100 rounded">
-            Limpiar cola
-          </button>
-          <button v-if="hasSingleSelection && singleSelectedPrinter?.Shared" @click="generateMappingScript(singleSelectedPrinter)" class="flex items-center gap-1.5 px-3 py-1.5 text-gray-500 hover:text-gray-700 font-semibold text-[13px] transition-colors bg-transparent hover:bg-gray-100 rounded">
-            Script de mapeo
-          </button>
-          <button v-if="hasSingleSelection" @click="openEditModal(singleSelectedPrinter)" class="flex items-center gap-1.5 px-3 py-1.5 text-gray-500 hover:text-gray-700 font-semibold text-[13px] transition-colors bg-transparent hover:bg-gray-100 rounded">
-            Editar
-          </button>
-          <button v-if="hasSingleSelection" @click="deletePrinter(singleSelectedPrinter)" class="flex items-center gap-1.5 px-3 py-1.5 text-red-500 hover:text-red-700 font-semibold text-[13px] transition-colors bg-transparent hover:bg-red-50 rounded">
-            Eliminar
-          </button>
-        </template>
+        <!-- Actions removed, now in Drawer -->
       </div>
       
       <div class="flex items-center gap-2">
@@ -396,13 +367,11 @@ onMounted(() => {
         <table class="w-full text-left min-w-[800px]">
           <thead class="border-b border-gray-200">
             <tr>
-              <th class="w-10 px-4 py-3 text-center">
-                <input type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" :checked="isAllSelected" @change="toggleAll">
-              </th>
               <th class="px-4 py-3 text-[11px] font-semibold text-gray-500 hover:text-gray-800 cursor-pointer transition-colors">Impresora</th>
               <th class="px-4 py-3 text-[11px] font-semibold text-gray-500 hover:text-gray-800 cursor-pointer transition-colors">IP / Puerto</th>
               <th class="px-4 py-3 text-[11px] font-semibold text-gray-500 hover:text-gray-800 cursor-pointer transition-colors">Driver</th>
               <th class="px-4 py-3 text-[11px] font-semibold text-gray-500 hover:text-gray-800 cursor-pointer transition-colors">Compartido</th>
+              <th class="px-4 py-3 text-[11px] font-semibold text-gray-500 hover:text-gray-800 cursor-pointer transition-colors text-right">Acción</th>
             </tr>
           </thead>
           <tbody>
@@ -411,10 +380,7 @@ onMounted(() => {
                 No se encontraron impresoras en el servidor.
               </td>
             </tr>
-            <tr v-for="p in printers" :key="p.Name" @click="toggleSelection(p.Name)" class="border-b border-slate-100 transition-colors duration-150 cursor-pointer group hover:bg-slate-50" :class="{ 'bg-blue-50/30': selectedPrinters.has(p.Name) }">
-              <td class="w-10 px-4 py-3 text-center">
-                <input type="checkbox" :checked="selectedPrinters.has(p.Name)" @change="toggleSelection(p.Name)" @click.stop class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
-              </td>
+            <tr v-for="p in printers" :key="p.Name" @click="openDetails(p)" class="border-b border-slate-100 transition-colors duration-150 cursor-pointer group hover:bg-slate-50">
               <td class="px-4 py-2.5 whitespace-nowrap">
                 <div class="flex items-center gap-3">
                   <div class="w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-slate-100 text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
@@ -440,6 +406,9 @@ onMounted(() => {
                 <span v-else class="text-[12px] font-medium text-gray-500">
                   Local
                 </span>
+              </td>
+              <td class="px-4 py-2.5 whitespace-nowrap text-right">
+                <button class="text-blue-600 hover:text-blue-800 text-[12px] font-medium transition-colors">Detalles &rarr;</button>
               </td>
             </tr>
           </tbody>
@@ -535,54 +504,170 @@ onMounted(() => {
       </template>
     </BaseDrawer>
 
-    <!-- Modal Cola de Impresión -->
-    <BaseModal :show="showJobsModal" :title="`Cola de impresión: ${currentJobsPrinter?.Name || ''}`" @close="showJobsModal = false">
+    <!-- Drawer Detalles Impresora -->
+    <BaseDrawer :show="showDetailsDrawer" :title="selectedPrinter?.Name || 'Detalles'" width="w-[600px]" @close="showDetailsDrawer = false">
       <template #body>
-        <div class="overflow-x-auto min-h-[150px]">
-          <div v-if="loadingJobs" class="flex flex-col items-center justify-center py-10">
-            <div class="w-6 h-6 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin mb-2"></div>
-            <span class="text-xs text-gray-500">Cargando trabajos...</span>
+        <div class="flex flex-col h-full space-y-4">
+          <!-- Info básica -->
+          <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <span class="block text-[11px] text-slate-500 uppercase tracking-wider font-semibold">IP / Puerto</span>
+                <span class="text-[13px] text-slate-900 font-mono">{{ selectedPrinter?.IPAddress || selectedPrinter?.PortName }}</span>
+              </div>
+              <div>
+                <span class="block text-[11px] text-slate-500 uppercase tracking-wider font-semibold">Driver</span>
+                <span class="text-[13px] text-slate-900">{{ selectedPrinter?.DriverName }}</span>
+              </div>
+              <div>
+                <span class="block text-[11px] text-slate-500 uppercase tracking-wider font-semibold">Uso Compartido</span>
+                <span class="text-[13px] text-slate-900">{{ selectedPrinter?.Shared ? `Sí (${selectedPrinter.ShareName})` : 'No' }}</span>
+              </div>
+              <div>
+                <span class="block text-[11px] text-slate-500 uppercase tracking-wider font-semibold">Estado de Red</span>
+                <span class="text-[13px] text-green-600 font-medium">Online</span>
+              </div>
+            </div>
           </div>
-          <table v-else class="w-full text-left min-w-[500px]">
-            <thead class="border-b border-gray-100">
-              <tr>
-                <th class="px-2 py-2 text-[11px] font-semibold text-gray-500">ID</th>
-                <th class="px-2 py-2 text-[11px] font-semibold text-gray-500">Usuario</th>
-                <th class="px-2 py-2 text-[11px] font-semibold text-gray-500">Documento</th>
-                <th class="px-2 py-2 text-[11px] font-semibold text-gray-500">Estado</th>
-                <th class="px-2 py-2 text-[11px] font-semibold text-gray-500 text-right">Págs</th>
-                <th class="px-2 py-2 text-[11px] font-semibold text-gray-500 text-right">Tamaño</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-if="printerJobs.length === 0">
-                <td colspan="6" class="px-2 py-10 text-center text-[13px] text-gray-500">
-                  No hay documentos en la cola en este momento.
-                </td>
-              </tr>
-              <tr v-for="job in printerJobs" :key="job.JobId" class="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                <td class="px-2 py-2 text-[12px] font-mono text-gray-500">{{ job.JobId }}</td>
-                <td class="px-2 py-2 text-[12px] text-gray-800">{{ job.User }}</td>
-                <td class="px-2 py-2 text-[12px] text-gray-600 truncate max-w-[150px]" :title="job.Document">{{ job.Document }}</td>
-                <td class="px-2 py-2 text-[12px]">
-                  <span class="px-1.5 py-0.5 rounded text-[10px] font-medium" 
-                        :class="job.Status === 'En cola' ? 'bg-gray-100 text-gray-600' : 'bg-blue-50 text-blue-700'">
-                    {{ job.Status }}
-                  </span>
-                </td>
-                <td class="px-2 py-2 text-[12px] text-gray-500 text-right">{{ job.Pages }}</td>
-                <td class="px-2 py-2 text-[12px] text-gray-500 text-right">{{ Math.round((job.Size || 0) / 1024) }} KB</td>
-              </tr>
-            </tbody>
-          </table>
+
+          <!-- Tabs -->
+          <div class="border-b border-slate-200">
+            <nav class="-mb-px flex space-x-6">
+              <button @click="activeTab = 'jobs'" :class="[activeTab === 'jobs' ? 'border-blue-500 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300', 'whitespace-nowrap pb-3 border-b-2 font-medium text-[13px] transition-colors']">
+                Cola Actual
+              </button>
+              <button @click="activeTab = 'history'" :class="[activeTab === 'history' ? 'border-blue-500 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300', 'whitespace-nowrap pb-3 border-b-2 font-medium text-[13px] transition-colors']">
+                Auditoría
+              </button>
+              <button @click="activeTab = 'actions'" :class="[activeTab === 'actions' ? 'border-blue-500 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300', 'whitespace-nowrap pb-3 border-b-2 font-medium text-[13px] transition-colors']">
+                Administración
+              </button>
+            </nav>
+          </div>
+
+          <!-- Tab: Jobs -->
+          <div v-if="activeTab === 'jobs'" class="flex-1 overflow-y-auto min-h-[250px] border border-slate-100 rounded-lg">
+            <div v-if="loadingJobs" class="flex flex-col items-center justify-center py-10">
+              <div class="w-6 h-6 border-2 border-slate-300 border-t-blue-600 rounded-full animate-spin mb-2"></div>
+              <span class="text-xs text-slate-500">Cargando cola...</span>
+            </div>
+            <table v-else class="w-full text-left">
+              <thead class="bg-slate-50 border-b border-slate-100">
+                <tr>
+                  <th class="px-3 py-2 text-[11px] font-semibold text-slate-500">Doc / Usuario</th>
+                  <th class="px-3 py-2 text-[11px] font-semibold text-slate-500 text-right">Págs</th>
+                  <th class="px-3 py-2 text-[11px] font-semibold text-slate-500 text-right">Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="printerJobs.length === 0">
+                  <td colspan="3" class="px-3 py-8 text-center text-[12px] text-slate-500">
+                    No hay documentos en cola.
+                  </td>
+                </tr>
+                <tr v-for="job in printerJobs" :key="job.JobId" class="border-b border-slate-50 hover:bg-slate-50">
+                  <td class="px-3 py-2">
+                    <div class="text-[12px] text-slate-800 font-medium truncate max-w-[200px]" :title="job.Document">{{ job.Document }}</div>
+                    <div class="text-[11px] text-slate-500">{{ job.User }}</div>
+                  </td>
+                  <td class="px-3 py-2 text-[12px] text-slate-600 text-right">{{ job.Pages }}</td>
+                  <td class="px-3 py-2 text-[12px] text-right">
+                    <span class="px-1.5 py-0.5 rounded text-[10px] font-medium" :class="job.Status === 'En cola' ? 'bg-slate-100 text-slate-600' : 'bg-blue-50 text-blue-700'">
+                      {{ job.Status }}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Tab: History -->
+          <div v-if="activeTab === 'history'" class="flex-1 overflow-y-auto min-h-[250px] border border-slate-100 rounded-lg">
+            <div v-if="loadingHistory" class="flex flex-col items-center justify-center py-10">
+              <div class="w-6 h-6 border-2 border-slate-300 border-t-blue-600 rounded-full animate-spin mb-2"></div>
+              <span class="text-xs text-slate-500">Consultando eventos...</span>
+            </div>
+            <table v-else class="w-full text-left">
+              <thead class="bg-slate-50 border-b border-slate-100">
+                <tr>
+                  <th class="px-3 py-2 text-[11px] font-semibold text-slate-500">Fecha/Hora</th>
+                  <th class="px-3 py-2 text-[11px] font-semibold text-slate-500">Usuario</th>
+                  <th class="px-3 py-2 text-[11px] font-semibold text-slate-500 text-right">Págs</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="printerHistory.length === 0">
+                  <td colspan="3" class="px-3 py-8 text-center text-[12px] text-slate-500">
+                    No hay historial registrado aún.
+                  </td>
+                </tr>
+                <tr v-for="(job, i) in printerHistory" :key="i" class="border-b border-slate-50 hover:bg-slate-50">
+                  <td class="px-3 py-2 text-[11px] text-slate-500">{{ job.Time }}</td>
+                  <td class="px-3 py-2">
+                    <div class="text-[12px] text-slate-800 font-medium">{{ job.User }}</div>
+                    <div class="text-[11px] text-slate-500 truncate max-w-[150px]" :title="job.Document">{{ job.Document }}</div>
+                  </td>
+                  <td class="px-3 py-2 text-[12px] text-slate-600 text-right">{{ job.Pages }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Tab: Actions -->
+          <div v-if="activeTab === 'actions'" class="flex-1 min-h-[250px]">
+            <div class="space-y-2">
+              <button @click="testPage(selectedPrinter)" class="w-full flex items-center justify-between px-4 py-3 bg-white border border-slate-200 rounded-lg hover:border-blue-300 hover:shadow-sm transition-all group">
+                <div class="flex items-center gap-3">
+                  <div class="p-2 bg-blue-50 text-blue-600 rounded-md group-hover:bg-blue-100 transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                  </div>
+                  <div class="text-left">
+                    <div class="text-[13px] font-semibold text-slate-800">Imprimir Página de Prueba</div>
+                    <div class="text-[11px] text-slate-500">Envía un documento de prueba al spooler.</div>
+                  </div>
+                </div>
+                <span class="text-slate-400 group-hover:text-blue-500">&rarr;</span>
+              </button>
+
+              <button @click="clearSpooler(selectedPrinter)" class="w-full flex items-center justify-between px-4 py-3 bg-white border border-slate-200 rounded-lg hover:border-amber-300 hover:shadow-sm transition-all group">
+                <div class="flex items-center gap-3">
+                  <div class="p-2 bg-amber-50 text-amber-600 rounded-md group-hover:bg-amber-100 transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  </div>
+                  <div class="text-left">
+                    <div class="text-[13px] font-semibold text-slate-800">Limpiar Cola (Vaciar Spooler)</div>
+                    <div class="text-[11px] text-slate-500">Cancela y borra todos los documentos atascados.</div>
+                  </div>
+                </div>
+                <span class="text-slate-400 group-hover:text-amber-500">&rarr;</span>
+              </button>
+
+              <button v-if="selectedPrinter?.Shared" @click="generateMappingScript(selectedPrinter)" class="w-full flex items-center justify-between px-4 py-3 bg-white border border-slate-200 rounded-lg hover:border-slate-400 hover:shadow-sm transition-all group">
+                <div class="flex items-center gap-3">
+                  <div class="p-2 bg-slate-100 text-slate-600 rounded-md group-hover:bg-slate-200 transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg>
+                  </div>
+                  <div class="text-left">
+                    <div class="text-[13px] font-semibold text-slate-800">Generar Script de Mapeo</div>
+                    <div class="text-[11px] text-slate-500">Copia un código PowerShell para instalar a usuarios.</div>
+                  </div>
+                </div>
+                <span class="text-slate-400">&rarr;</span>
+              </button>
+            </div>
+            
+            <div class="mt-6 pt-4 border-t border-slate-200 flex items-center justify-between">
+              <button @click="openEditModal(selectedPrinter)" class="text-[13px] text-slate-600 font-medium hover:text-slate-900 px-3 py-1.5 rounded hover:bg-slate-100 transition-colors">
+                Editar/Re-enrutar
+              </button>
+              <button @click="deletePrinter(selectedPrinter)" class="text-[13px] text-red-600 font-medium hover:text-red-800 px-3 py-1.5 rounded hover:bg-red-50 transition-colors">
+                Eliminar Impresora
+              </button>
+            </div>
+          </div>
         </div>
       </template>
-      <template #footer>
-        <button @click="showJobsModal = false" class="px-4 py-2 bg-gray-50 border border-gray-200 text-gray-700 font-medium rounded-lg shadow-sm hover:bg-gray-100 transition-colors text-sm">
-          Cerrar
-        </button>
-      </template>
-    </BaseModal>
+    </BaseDrawer>
 
     <!-- Confirm Modal -->
     <ConfirmActionModal

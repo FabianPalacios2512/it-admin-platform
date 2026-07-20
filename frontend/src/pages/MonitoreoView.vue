@@ -1,4 +1,4 @@
-﻿<script setup>
+<script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import Sparkline from '@/components/common/Sparkline.vue'
 
@@ -161,7 +161,7 @@ onUnmounted(() => {
     <div v-if="servers.length === 0 && !loading" class="bg-white rounded-xl shadow-sm border border-gray-200 p-16 text-center">
       <svg class="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" /></svg>
       <h3 class="text-lg font-semibold text-gray-900">No hay servidores registrados</h3>
-      <p class="text-sm text-gray-500 mt-2">Ve al mÃ³dulo de ConfiguraciÃ³n para agregar infraestructura.</p>
+      <p class="text-sm text-gray-500 mt-2">Ve al módulo de Configuración para agregar infraestructura.</p>
     </div>
 
     <!-- Server Grid -->

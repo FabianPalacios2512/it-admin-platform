@@ -47,7 +47,7 @@ def get_unc_path(server_ip: str, local_path: str) -> str:
         return f"\\\\{server_ip}\\{drive}$\\{rest}"
     return local_path
 
-def get_rds_sessions(server: ServerConfig, temp_path: str, file_prefix: str = "nova.xl"):
+def get_rds_sessions(server: ServerConfig, temp_path: str, file_prefix: str = "Nova_est"):
     admin_pass = decrypt_password(server.admin_pass)
     establish_ipc_connection(server, admin_pass)
     
@@ -71,6 +71,8 @@ def get_rds_sessions(server: ServerConfig, temp_path: str, file_prefix: str = "n
                 matched += 1
                 username = f[len(file_prefix):].strip()
                 if username:
+                    # Ignorar todo después del primer punto (extensiones como .dbc, .dcx, etc.)
+                    username = username.split('.')[0]
                     file_users.add(username)
                     
         if matched == 0:
@@ -124,7 +126,7 @@ def get_rds_sessions(server: ServerConfig, temp_path: str, file_prefix: str = "n
     
     return sessions_result
 
-def kill_rds_session(server: ServerConfig, temp_path: str, session_id: str = None, username: str = None, file_prefix: str = "nova.xl"):
+def kill_rds_session(server: ServerConfig, temp_path: str, session_id: str = None, username: str = None, file_prefix: str = "Nova_est"):
     admin_pass = decrypt_password(server.admin_pass)
     establish_ipc_connection(server, admin_pass)
     
@@ -172,7 +174,7 @@ def clean_temp_folder(server: ServerConfig, temp_path: str, file_prefix: str = "
         raise Exception(f"Error borrando temporales por UNC: {e}")
     return True
 
-def execute_mass_cleanup(server: ServerConfig, temp_path: str, file_prefix: str = "nova.xl"):
+def execute_mass_cleanup(server: ServerConfig, temp_path: str, file_prefix: str = "Nova_est"):
     # Cierra todas las sesiones que tengan archivos
     sessions = get_rds_sessions(server, temp_path, file_prefix)
     for s in sessions:
@@ -248,6 +250,9 @@ if (Test-Path $tempPath) {{
             $name = $name.Substring(0, $name.Length - 4)
         }}
         $username = $name.Substring($filePrefix.Length).Trim()
+        if ($username -match '\.') {
+            $username = $username.Split('.')[0]
+        }
         if ($username -ne "") {{
             $userLower = $username.ToLower()
             if ($activeSessions.ContainsKey($userLower)) {{

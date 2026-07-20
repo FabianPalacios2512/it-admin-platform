@@ -11,7 +11,8 @@ from app.services.printer_service import (
     delete_printer,
     restart_spooler,
     generate_mapping_script,
-    get_printer_jobs
+    get_printer_jobs,
+    get_printer_history
 )
 
 router = APIRouter()
@@ -145,4 +146,16 @@ def api_get_printer_jobs(name: str):
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/{name}/history")
+def api_get_printer_history(name: str):
+    """Retorna el historial de impresiones (Auditoría)."""
+    try:
+        history = get_printer_history(name, limit=50)
+        return history
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 

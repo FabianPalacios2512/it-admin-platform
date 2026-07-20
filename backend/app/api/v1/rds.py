@@ -13,13 +13,13 @@ class ScheduleRequest(BaseModel):
     cron_time: str
     cron_days: str
     temp_path: str
-    file_prefix: str = "nova.xl"
+    file_prefix: str = "Nova_est"
 
 class KillRequest(BaseModel):
     session_id: Optional[str] = None
     username: Optional[str] = None
     temp_path: str = "C:\\conteo"
-    file_prefix: str = "nova.xl"
+    file_prefix: str = "Nova_est"
 
 @router.get("/sessions")
 async def fetch_sessions(
@@ -37,7 +37,7 @@ async def fetch_sessions(
     
     # Use query params if provided, otherwise fallback to DB config
     final_temp_path = temp_path if temp_path else (config.temp_path if config else "C:\\conteo")
-    final_file_prefix = file_prefix if file_prefix else (getattr(config, "file_prefix", "nova.xl") if config else "nova.xl")
+    final_file_prefix = file_prefix if file_prefix else (getattr(config, "file_prefix", "Nova_est") if config else "Nova_est")
     
     try:
         sessions = get_rds_sessions(server, final_temp_path, final_file_prefix)
@@ -72,7 +72,7 @@ async def get_schedule(db: Session = Depends(get_db)):
                 "cron_time": config.cron_time,
                 "cron_days": config.cron_days,
                 "temp_path": config.temp_path,
-                "file_prefix": getattr(config, "file_prefix", "nova.xl"),
+                "file_prefix": getattr(config, "file_prefix", "Nova_est"),
                 "is_active": config.is_active,
                 "last_run": task_status["last_run"] if task_status else "No disponible",
                 "next_run": task_status["next_run"] if task_status else "No disponible"

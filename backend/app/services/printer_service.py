@@ -375,3 +375,56 @@ def get_printer_jobs(name: str):
     except Exception as e:
         raise ValueError(f"Error nativo obteniendo trabajos de {name}: {e}")
 
+def get_printer_history(name: str, limit: int = 50):
+    """Obtiene el historial de impresiones (Auditoría) leyendo el EventViewer."""
+    try:
+        cfg = get_primary_server("printers")
+    except Exception:
+        raise ValueError("Servidor de impresoras no configurado.")
+        
+    ip = cfg["ip"]
+    
+    ps_script = f"""
+    $ErrorActionPreference = 'SilentlyContinue'
+    $events = Get-WinEvent -ComputerName "{ip}" -FilterHashtable @{{LogName='Microsoft-Windows-PrintService/Operational'; Id=307}} -MaxEvents 1000
+    if (-not $events) {{
+        Write-Output "[]"
+        exit
+    }}
+    $result = @()
+    foreach ($e in $events) {{
+        # Param 4 (index 3) is Printer Name
+        if ($e.Properties[3].Value -match "{name}") {{
+            $result += [PSCustomObject]@{{
+                Time = $e.TimeCreated.ToString('yyyy-MM-dd HH:mm:ss')
+                User = $e.Properties[2].Value
+                Document = $e.Properties[1].Value
+                Pages = $e.Properties[6].Value
+                Size = $e.Properties[5].Value
+            }}
+        }}
+    }}
+    $result | Select-Object -First {limit} | ConvertTo-Json -Compress
+    """
+    
+    import subprocess
+    import json
+    res = subprocess.run(
+        [r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps_script],
+        capture_output=True,
+        text=True,
+        encoding='utf-8'
+    )
+    
+    out = res.stdout.strip()
+    if not out or out == "[]":
+        return []
+        
+    try:
+        data = json.loads(out)
+        if isinstance(data, dict):
+            return [data]
+        return data
+    except Exception:
+        return []
+

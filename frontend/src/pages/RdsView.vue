@@ -16,7 +16,7 @@ const schedule = ref({
   cron_time: '23:00',
   cron_days: '0,1,2,3,4,5,6',
   temp_path: 'C:\\conteo',
-  file_prefix: 'nova.xl',
+  file_prefix: 'Nova_est',
   is_active: false,
   last_run: 'No disponible',
   next_run: 'No disponible'
