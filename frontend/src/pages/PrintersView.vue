@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import BaseDrawer from '@/components/common/BaseDrawer.vue'
+import BaseModal from '@/components/common/BaseModal.vue'
 import ConfirmActionModal from '@/components/common/ConfirmActionModal.vue'
 
 const API_BASE = '/api/v1'
@@ -12,7 +13,12 @@ const error = ref('')
 
 const showAddModal = ref(false)
 const showEditModal = ref(false)
+const showJobsModal = ref(false)
 const submitting = ref(false)
+
+const printerJobs = ref([])
+const loadingJobs = ref(false)
+const currentJobsPrinter = ref(null)
 
 const newPrinter = ref({
   name: '',
@@ -282,6 +288,27 @@ const deletePrinter = async (printer) => {
   )
 }
 
+const openJobsModal = async (printer) => {
+  if (!printer) return
+  currentJobsPrinter.value = printer
+  printerJobs.value = []
+  loadingJobs.value = true
+  showJobsModal.value = true
+  try {
+    const res = await fetch(`${API_BASE}/printers/${encodeURIComponent(printer.Name)}/jobs`)
+    if (!res.ok) {
+      const err = await res.json()
+      throw new Error(err.detail || 'Error al cargar cola de impresión')
+    }
+    printerJobs.value = await res.json()
+  } catch (err) {
+    alert(err.message)
+    showJobsModal.value = false
+  } finally {
+    loadingJobs.value = false
+  }
+}
+
 onMounted(() => {
   fetchPrinters()
 })
@@ -316,6 +343,9 @@ onMounted(() => {
         <template v-if="hasSelection">
           <div class="h-4 border-r border-gray-200 mx-1"></div>
           
+          <button v-if="hasSingleSelection" @click="openJobsModal(singleSelectedPrinter)" class="flex items-center gap-1.5 px-3 py-1.5 text-gray-500 hover:text-gray-700 font-semibold text-[13px] transition-colors bg-transparent hover:bg-gray-100 rounded">
+            Ver cola
+          </button>
           <button v-if="hasSingleSelection" @click="testPage(singleSelectedPrinter)" class="flex items-center gap-1.5 px-3 py-1.5 text-gray-500 hover:text-gray-700 font-semibold text-[13px] transition-colors bg-transparent hover:bg-gray-100 rounded">
             Pág. de prueba
           </button>
@@ -504,6 +534,55 @@ onMounted(() => {
         </button>
       </template>
     </BaseDrawer>
+
+    <!-- Modal Cola de Impresión -->
+    <BaseModal :show="showJobsModal" :title="`Cola de impresión: ${currentJobsPrinter?.Name || ''}`" @close="showJobsModal = false">
+      <template #body>
+        <div class="overflow-x-auto min-h-[150px]">
+          <div v-if="loadingJobs" class="flex flex-col items-center justify-center py-10">
+            <div class="w-6 h-6 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin mb-2"></div>
+            <span class="text-xs text-gray-500">Cargando trabajos...</span>
+          </div>
+          <table v-else class="w-full text-left min-w-[500px]">
+            <thead class="border-b border-gray-100">
+              <tr>
+                <th class="px-2 py-2 text-[11px] font-semibold text-gray-500">ID</th>
+                <th class="px-2 py-2 text-[11px] font-semibold text-gray-500">Usuario</th>
+                <th class="px-2 py-2 text-[11px] font-semibold text-gray-500">Documento</th>
+                <th class="px-2 py-2 text-[11px] font-semibold text-gray-500">Estado</th>
+                <th class="px-2 py-2 text-[11px] font-semibold text-gray-500 text-right">Págs</th>
+                <th class="px-2 py-2 text-[11px] font-semibold text-gray-500 text-right">Tamaño</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="printerJobs.length === 0">
+                <td colspan="6" class="px-2 py-10 text-center text-[13px] text-gray-500">
+                  No hay documentos en la cola en este momento.
+                </td>
+              </tr>
+              <tr v-for="job in printerJobs" :key="job.JobId" class="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                <td class="px-2 py-2 text-[12px] font-mono text-gray-500">{{ job.JobId }}</td>
+                <td class="px-2 py-2 text-[12px] text-gray-800">{{ job.User }}</td>
+                <td class="px-2 py-2 text-[12px] text-gray-600 truncate max-w-[150px]" :title="job.Document">{{ job.Document }}</td>
+                <td class="px-2 py-2 text-[12px]">
+                  <span class="px-1.5 py-0.5 rounded text-[10px] font-medium" 
+                        :class="job.Status === 'En cola' ? 'bg-gray-100 text-gray-600' : 'bg-blue-50 text-blue-700'">
+                    {{ job.Status }}
+                  </span>
+                </td>
+                <td class="px-2 py-2 text-[12px] text-gray-500 text-right">{{ job.Pages }}</td>
+                <td class="px-2 py-2 text-[12px] text-gray-500 text-right">{{ Math.round((job.Size || 0) / 1024) }} KB</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+      <template #footer>
+        <button @click="showJobsModal = false" class="px-4 py-2 bg-gray-50 border border-gray-200 text-gray-700 font-medium rounded-lg shadow-sm hover:bg-gray-100 transition-colors text-sm">
+          Cerrar
+        </button>
+      </template>
+    </BaseModal>
 
     <!-- Confirm Modal -->
     <ConfirmActionModal

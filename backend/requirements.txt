@@ -8,3 +8,4 @@ sqlalchemy
 wmi
 apscheduler
 httpx
+cryptography

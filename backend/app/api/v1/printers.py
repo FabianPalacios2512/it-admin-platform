@@ -10,7 +10,8 @@ from app.services.printer_service import (
     print_test_page,
     delete_printer,
     restart_spooler,
-    generate_mapping_script
+    generate_mapping_script,
+    get_printer_jobs
 )
 
 router = APIRouter()
@@ -133,3 +134,15 @@ def api_mapping_script(name: str):
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/{name}/jobs")
+def api_get_printer_jobs(name: str):
+    """Retorna los trabajos actuales en la cola de impresión."""
+    try:
+        jobs = get_printer_jobs(name)
+        return jobs
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

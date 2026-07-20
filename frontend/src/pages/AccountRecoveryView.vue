@@ -314,7 +314,7 @@ async function executeUnlock() {
 
           <!-- Footer -->
           <div class="px-4 py-2 border-t border-slate-200">
-            <p class="text-[10px] text-slate-400">{{ blockedUsers.length }} cuentas bloqueadas â€¢ Actualización en vivo</p>
+            <p class="text-[10px] text-slate-400">{{ blockedUsers.length }} cuentas bloqueadas • Actualización en vivo</p>
           </div>
         </div>
       </div>
