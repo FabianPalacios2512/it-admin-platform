@@ -105,20 +105,32 @@ def get_rds_sessions(server: ServerConfig, temp_path: str, file_prefix: str = "N
                             "state": state
                         }
     
-    # 3. Fusionar datos (Prioridad a los archivos físicos)
+    # 3. Fusionar datos
     sessions_result = []
     
-    for u in file_users:
-        u_lower = u.lower()
-        full_name = get_ad_fullname(u)
+    all_users_lower = set(u.lower() for u in file_users)
+    all_users_lower.update(qw_sessions.keys())
+    
+    # Mapeo inverso para recuperar las mayúsculas/minúsculas originales del nombre de archivo
+    file_user_map = {u.lower(): u for u in file_users}
+    
+    for u_lower in all_users_lower:
+        has_file = u_lower in file_user_map
+        has_session = u_lower in qw_sessions
+        
+        # Usar el nombre original del archivo si existe, sino el de qwinsta
+        username = file_user_map.get(u_lower, u_lower)
+        full_name = get_ad_fullname(username)
         qw_data = qw_sessions.get(u_lower)
         
         sessions_result.append({
-            "username": u,
+            "username": username,
             "full_name": full_name,
             "session_id": qw_data["session_id"] if qw_data else None,
             "session_name": qw_data["session_name"] if qw_data else "N/A",
-            "state": qw_data["state"] if qw_data else "Sin Sesión"
+            "state": qw_data["state"] if qw_data else "Sin Sesión de Windows",
+            "has_file": has_file,
+            "has_session": has_session
         })
         
     # Ordenar alfabéticamente por username
@@ -250,9 +262,9 @@ if (Test-Path $tempPath) {{
             $name = $name.Substring(0, $name.Length - 4)
         }}
         $username = $name.Substring($filePrefix.Length).Trim()
-        if ($username -match '\.') {
+        if ($username -match '\.') {{
             $username = $username.Split('.')[0]
-        }
+        }}
         if ($username -ne "") {{
             $userLower = $username.ToLower()
             if ($activeSessions.ContainsKey($userLower)) {{
