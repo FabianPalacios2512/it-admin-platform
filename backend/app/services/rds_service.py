@@ -57,31 +57,21 @@ def get_rds_sessions(server: ServerConfig, temp_path: str, file_prefix: str = "N
     
     try:
         if not os.path.exists(unc_path):
-            raise Exception(f"La ruta UNC no es accesible o no existe: {unc_path}")
-            
-        files = os.listdir(unc_path)
-        if not files:
-            raise Exception(f"La carpeta {unc_path} está vacía. No hay archivos.")
-            
-        matched = 0
-        for f in files:
-            if f.lower().endswith(".txt"):
-                f = f[:-4]
-            if f.lower().startswith(file_prefix.lower()):
-                matched += 1
-                username = f[len(file_prefix):].strip()
-                if username:
-                    # Ignorar todo después del primer punto (extensiones como .dbc, .dcx, etc.)
-                    username = username.split('.')[0]
-                    file_users.add(username)
-                    
-        if matched == 0:
-            sample = files[0] if files else "N/A"
-            raise Exception(f"Hay {len(files)} archivos en la carpeta (ej: {sample}), pero ninguno utiliza tu prefijo actual ('{file_prefix}').")
-            
+            print(f"Advertencia: La ruta UNC no es accesible o no existe: {unc_path}")
+        else:
+            files = os.listdir(unc_path)
+            if files:
+                for f in files:
+                    if f.lower().endswith(".txt"):
+                        f = f[:-4]
+                    if f.lower().startswith(file_prefix.lower()):
+                        username = f[len(file_prefix):].strip()
+                        if username:
+                            if "." in username:
+                                username = username.split(".")[0]
+                            file_users.add(username)
     except Exception as e:
-        logger.error(f"Error de lectura en {unc_path}: {e}")
-        raise Exception(f"Error leyendo archivos: {e}")
+        print(f"Error leyendo archivos en {unc_path}: {e}")
     
     # 2. Obtener sesiones activas de qwinsta
     res_qw = subprocess.run(["qwinsta", f"/server:{server.ip}"], capture_output=True, text=True)
@@ -281,33 +271,14 @@ foreach ($line in $qwinstaOutput) {{
             }}
         }}
         
-        if ($user -ne "") {{
-            $activeSessions[$user] = $id
+        if ($user -ne "" -and $user -ne "administrador" -and $user -ne "administrator") {{
+            logoff $id
         }}
     }}
 }}
 
 if (Test-Path $tempPath) {{
-    $files = Get-ChildItem -Path $tempPath -Filter "$($filePrefix)*"
-    foreach ($f in $files) {{
-        $name = $f.Name
-        if ($name.ToLower().EndsWith(".txt")) {{
-            $name = $name.Substring(0, $name.Length - 4)
-        }}
-        $username = $name.Substring($filePrefix.Length).Trim()
-        if ($username -match '\.') {{
-            $username = $username.Split('.')[0]
-        }}
-        if ($username -ne "") {{
-            $userLower = $username.ToLower()
-            if ($activeSessions.ContainsKey($userLower)) {{
-                $sessionId = $activeSessions[$userLower]
-                logoff $sessionId
-            }}
-            Remove-Item -Path $f.FullName -Force -ErrorAction SilentlyContinue
-        }}
-    }}
-    Remove-Item -Path "$tempPath\\$filePrefix*" -Force -ErrorAction SilentlyContinue
+    Remove-Item -Path "$tempPath\$filePrefix*" -Force -ErrorAction SilentlyContinue
 }}
 """
     # 1. Copiar el script al servidor via UNC (esto ya funciona)
