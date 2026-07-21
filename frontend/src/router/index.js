@@ -11,6 +11,7 @@ import PrintersView from '@/pages/PrintersView.vue'
 import RdsView from '@/pages/RdsView.vue'
 import WifiView from '@/pages/WifiView.vue'
 import SettingsView from '@/pages/SettingsView.vue'
+import SecurityView from '@/pages/SecurityView.vue'
 
 const routes = [
   {
@@ -44,6 +45,11 @@ const routes = [
         path: 'cuentas/recuperacion',
         name: 'AccountRecovery',
         component: AccountRecoveryView,
+      },
+      {
+        path: 'seguridad',
+        name: 'Seguridad',
+        component: SecurityView,
       },
       {
         path: 'cuentas/usuario/:username',

@@ -84,7 +84,7 @@ class MicrosoftGraphService:
 
     async def get_security_alerts(self):
         """Radar de Seguridad (Inicios de sesión fallidos)"""
-        data = await self._request("GET", "/auditLogs/signIns?$filter=status/errorCode ne 0&$top=10")
+        data = await self._request("GET", "/auditLogs/signIns?$filter=status/errorCode ne 0&$orderby=createdDateTime desc&$top=100")
         return data.get("value", [])
 
     async def resolve_user_id(self, username: str) -> str:
