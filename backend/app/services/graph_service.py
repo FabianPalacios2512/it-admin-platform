@@ -82,9 +82,16 @@ class MicrosoftGraphService:
             return value[0].get("onPremisesLastSyncDateTime")
         return None
 
-    async def get_security_alerts(self):
-        """Radar de Seguridad (Inicios de sesión fallidos)"""
-        data = await self._request("GET", "/auditLogs/signIns?$filter=status/errorCode ne 0&$orderby=createdDateTime desc&$top=100")
+    async def get_security_alerts(self, status: str = "blocked"):
+        """Radar de Seguridad (Inicios de sesión). status puede ser 'blocked', 'success' o 'all'"""
+        filter_query = ""
+        if status == "blocked":
+            filter_query = "$filter=status/errorCode ne 0&"
+        elif status == "success":
+            filter_query = "$filter=status/errorCode eq 0&"
+            
+        endpoint = f"/auditLogs/signIns?{filter_query}$orderby=createdDateTime desc&$top=100"
+        data = await self._request("GET", endpoint)
         return data.get("value", [])
 
     async def get_risky_users(self):

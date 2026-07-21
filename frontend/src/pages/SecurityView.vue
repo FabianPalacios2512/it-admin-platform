@@ -9,6 +9,7 @@ async function authFetch(url, opts = {}) {
 }
 
 const activeTab = ref('signIns') // 'signIns', 'riskyUsers', 'riskDetections'
+const signInFilter = ref('blocked') // 'blocked', 'success', 'all'
 
 const alerts = ref([])
 const riskyUsers = ref([])
@@ -24,7 +25,7 @@ async function fetchData() {
   error.value = ''
   licenseError.value = false
   try {
-    const p1 = authFetch(`${API_BASE}/graph/security-radar`).then(r => r.ok ? r.json() : [])
+    const p1 = authFetch(`${API_BASE}/graph/security-radar?status=${signInFilter.value}`).then(r => r.ok ? r.json() : [])
     const p2 = authFetch(`${API_BASE}/graph/security/risky-users`).then(r => r.ok ? r.json() : {error: 'error'})
     const p3 = authFetch(`${API_BASE}/graph/security/risk-detections`).then(r => r.ok ? r.json() : {error: 'error'})
     
@@ -93,7 +94,8 @@ function getErrorDescription(code) {
     '50058': 'Token revocado / Sesión inválida',
     '50074': 'MFA requerido',
     '50158': 'Desafío de seguridad falló',
-    '53003': 'Bloqueado por Acceso Condicional'
+    '53003': 'Bloqueado por Acceso Condicional',
+    '0': 'Acceso Concedido'
   }
   return map[code] || `Error ${code}`
 }
@@ -168,9 +170,18 @@ async function revokeSessions(username) {
 
       <!-- Tab: Sign Ins -->
       <div v-if="activeTab === 'signIns'">
+        <div class="flex items-center gap-2 mb-4">
+          <label class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Filtrar por Estado:</label>
+          <select v-model="signInFilter" @change="fetchData" class="px-2 py-1 text-[12px] font-medium bg-white border border-slate-200 rounded outline-none focus:border-blue-500">
+            <option value="blocked">Bloqueados / Fallidos</option>
+            <option value="success">Exitosos</option>
+            <option value="all">Todos</option>
+          </select>
+        </div>
+
         <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <div class="bg-white border border-slate-200 rounded-md p-4 shadow-sm">
-            <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Ataques Bloqueados</span>
+            <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Registros ({{ signInFilter === 'success' ? 'Exitosos' : 'Bloqueos' }})</span>
             <div class="text-3xl font-black text-slate-800 mt-2">{{ alerts.length }}</div>
           </div>
           <div class="bg-white border border-slate-200 rounded-md p-4 shadow-sm">
@@ -217,8 +228,18 @@ async function revokeSessions(username) {
                       </div>
                     </div>
                   </td>
-                  <td class="px-5 py-3">
-                    <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 uppercase">{{ getErrorDescription(String(alert.status?.errorCode)) }}</span>
+                  <td class="px-5 py-3 align-top">
+                    <div class="flex flex-col items-start gap-1">
+                      <span v-if="String(alert.status?.errorCode) !== '0'" class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-700 border border-red-200">
+                        BLOQUEADO
+                      </span>
+                      <span v-else class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-green-100 text-green-700 border border-green-200">
+                        ÉXITO
+                      </span>
+                      <span class="text-[11px] text-slate-600 font-medium" :title="'Error Code: ' + alert.status?.errorCode">
+                        {{ getErrorDescription(String(alert.status?.errorCode)) }} ({{ alert.status?.errorCode || '0' }})
+                      </span>
+                    </div>
                   </td>
                   <td class="px-5 py-3">
                     <button @click="revokeSessions(alert.userPrincipalName)" class="px-3 py-1 bg-slate-100 hover:bg-red-100 hover:text-red-700 text-slate-600 text-[11px] font-bold rounded transition-colors">Bloquear Sesiones</button>

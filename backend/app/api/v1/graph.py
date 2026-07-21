@@ -113,10 +113,10 @@ async def get_sync_status():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/security-radar", response_model=List[Dict[str, Any]])
-async def get_security_radar():
-    """Devuelve los últimos inicios de sesión fallidos desde Entra ID."""
+async def get_security_radar(status: str = "blocked"):
+    """Devuelve los últimos inicios de sesión desde Entra ID."""
     try:
-        return await graph_service.get_security_alerts()
+        return await graph_service.get_security_alerts(status=status)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
