@@ -431,8 +431,15 @@ watch(activeTab, async (tab) => {
           const e = await res.json()
           if (e.success) userEntraStatus.value = e.data
           else userEntraStatus.value = { error: e.error || 'No encontrado en Entra ID' }
-        } else if (res.status === 404 || res.status === 500) {
+        } else if (res.status === 404) {
           userEntraStatus.value = { notSynced: true }
+        } else {
+          try {
+            const err = await res.json()
+            userEntraStatus.value = { error: err.detail || 'Error en Graph API' }
+          } catch {
+            userEntraStatus.value = { error: `Error HTTP ${res.status}` }
+          }
         }
       }).catch(err => {
         console.error("Error cargando estado de Entra:", err)
@@ -444,6 +451,13 @@ watch(activeTab, async (tab) => {
         if (res.ok) {
           const m = await res.json()
           if (m.success) userMailbox.value = m.data
+        } else {
+          try {
+            const err = await res.json()
+            userMailbox.value = { error: err.detail || 'Error cargando buzón' }
+          } catch {
+            userMailbox.value = { error: `Error HTTP ${res.status}` }
+          }
         }
       }).catch(err => console.error("Error cargando buzón:", err))
 
@@ -1639,6 +1653,11 @@ const statusConfig = computed(() => {
                   <svg v-else class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                   {{ isSyncingAd ? 'Sincronizando...' : 'Forzar sincronizaciÃ³n de AD Connect' }}
                 </button>
+              </div>
+
+              <div v-else-if="userEntraStatus && userEntraStatus.loading" class="flex flex-col items-center justify-center py-20 gap-3">
+                <div class="w-8 h-8 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+                <span class="text-[13px] text-slate-500">Consultando con Microsoft Graph...</span>
               </div>
 
               <div v-else class="flex flex-col items-center justify-center py-16 text-center">

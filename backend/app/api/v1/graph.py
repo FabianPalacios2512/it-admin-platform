@@ -129,7 +129,7 @@ async def get_user_devices(username: str):
     except ValueError as e:
         if "No se encontró" in str(e):
             raise HTTPException(status_code=404, detail=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -142,7 +142,7 @@ async def get_user_mailbox(username: str):
     except ValueError as e:
         if "No se encontró" in str(e):
             raise HTTPException(status_code=404, detail=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -159,7 +159,7 @@ async def get_user_entra_status(username: str):
     except ValueError as e:
         if "No se encontró" in str(e):
             raise HTTPException(status_code=404, detail=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -172,7 +172,7 @@ async def reset_user_mfa(username: str):
     except ValueError as e:
         if "No se encontró" in str(e):
             raise HTTPException(status_code=404, detail=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -185,7 +185,7 @@ async def offboard_user(username: str):
     except ValueError as e:
         if "No se encontró" in str(e):
             raise HTTPException(status_code=404, detail=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -202,7 +202,7 @@ async def get_user_mfa_status(username: str):
     except ValueError as e:
         if "No se encontró" in str(e):
             raise HTTPException(status_code=404, detail=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -215,7 +215,7 @@ async def set_user_mfa_status(username: str, req: MfaStatusRequest):
     except ValueError as e:
         if "No se encontró" in str(e):
             raise HTTPException(status_code=404, detail=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
