@@ -357,7 +357,7 @@ async function resetMFA() {
 }
 
 async function revokeSessions() {
-  if (!confirm(`Â¿Deseas cerrar todas las sesiones activas en la nube para ${userProfile.value.username}?`)) return
+  if (!confirm(`¿Deseas cerrar todas las sesiones activas en la nube para ${userProfile.value.username}?`)) return
   revokeLoading.value = true
   try {
     const res = await authFetch(`${API_BASE}/graph/users/${userProfile.value.username}/revoke-sessions`, { method: 'POST' })
@@ -370,9 +370,9 @@ async function revokeSessions() {
   }
 }
 
-// â”€â”€ Vista 360 (Hardware y Mailbox) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Vista 360 (Hardware y Mailbox) ──────────────────────────────────
 
-// â”€â”€ Carga inicial â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Carga inicial ──────────────────────────────────────────────────
 async function fetchUserProfile() {
   const username = route.params.username
   const profileRes = await authFetch(`${API_BASE}/accounts/profile/${username}`)
@@ -406,26 +406,46 @@ onMounted(async () => {
     // 2. Desbloquear la vista inmediatamente para que el usuario pueda interactuar
     isLoading.value = false
 
-    // 3. Carga Lenta en Segundo Plano (Totalmente Desacoplada)
-    // El buzÃ³n y el estado de Entra cargarÃ¡n apenas estÃ©n listos sin esperar a los dispositivos
-    authFetch(`${API_BASE}/graph/users/${username}/mailbox`)
-      .then(async (res) => {
-        if (res.ok) {
-          const m = await res.json()
-          if (m.success) userMailbox.value = m.data
-        }
-      }).catch(err => console.error("Error cargando buzÃ³n:", err))
+    // No cargamos Entra ni Dispositivos aquí para no bloquear el sistema.
+    // Se cargarán "Lazy" (perezosamente) cuando el usuario haga clic en sus pestañas.
 
+  } catch (err) {
+    error.value = `Error de conexión: ${err.message}`
+    isLoading.value = false
+  }
+})
+
+// Carga perezosa de atributos y carpetas y Entra ID
+watch(activeTab, async (tab) => {
+  const username = route.params.username
+  if (tab === 'attributes' && allAttributes.value.length === 0) {
+    const res = await authFetch(`${API_BASE}/accounts/attributes/${username}`)
+    if (res.ok) allAttributes.value = await res.json()
+  }
+
+  if (tab === 'entra' && !userEntraStatus.value) {
+    userEntraStatus.value = { loading: true }
     authFetch(`${API_BASE}/graph/users/${username}/entra-status`)
       .then(async (res) => {
         if (res.ok) {
           const e = await res.json()
           if (e.success) userEntraStatus.value = e.data
           else userEntraStatus.value = { error: e.error || 'No encontrado en Entra ID' }
-        } else if (res.status === 404) {
+        } else if (res.status === 404 || res.status === 500) {
           userEntraStatus.value = { notSynced: true }
         }
-      }).catch(err => console.error("Error cargando estado de Entra:", err))
+      }).catch(err => {
+        console.error("Error cargando estado de Entra:", err)
+        userEntraStatus.value = { notSynced: true }
+      })
+
+    authFetch(`${API_BASE}/graph/users/${username}/mailbox`)
+      .then(async (res) => {
+        if (res.ok) {
+          const m = await res.json()
+          if (m.success) userMailbox.value = m.data
+        }
+      }).catch(err => console.error("Error cargando buzón:", err))
 
     authFetch(`${API_BASE}/graph/users/${username}/devices`)
       .then(async (res) => {
@@ -434,19 +454,6 @@ onMounted(async () => {
           if (d.success) userDevices.value = d.data
         }
       }).catch(err => console.error("Error cargando dispositivos:", err))
-
-  } catch (err) {
-    error.value = `Error de conexión: ${err.message}`
-    isLoading.value = false
-  }
-})
-
-// Carga perezosa de atributos y carpetas
-watch(activeTab, async (tab) => {
-  const username = route.params.username
-  if (tab === 'attributes' && allAttributes.value.length === 0) {
-    const res = await authFetch(`${API_BASE}/accounts/attributes/${username}`)
-    if (res.ok) allAttributes.value = await res.json()
   }
   if (tab === 'folders' && folderGroups.value.length === 0) {
     loadFolderGroups()

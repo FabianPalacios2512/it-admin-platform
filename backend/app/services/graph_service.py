@@ -92,7 +92,10 @@ class MicrosoftGraphService:
         username_lower = username.lower()
         if username_lower in _user_id_cache:
             if time.time() - _user_id_cache[username_lower]["time"] < _USER_CACHE_TTL:
-                return _user_id_cache[username_lower]["id"]
+                cached_id = _user_id_cache[username_lower]["id"]
+                if not cached_id:
+                    raise ValueError(f"No se encontró el usuario '{username}' en Microsoft Entra ID. Verifica la sincronización.")
+                return cached_id
                 
         headers = {"ConsistencyLevel": "eventual"}
         
@@ -114,6 +117,7 @@ class MicrosoftGraphService:
             _user_id_cache[username_lower] = {"id": data["value"][0]["id"], "time": time.time()}
             return data["value"][0]["id"]
 
+        _user_id_cache[username_lower] = {"id": None, "time": time.time()}
         raise ValueError(f"No se encontró el usuario '{username}' en Microsoft Entra ID. Verifica la sincronización.")
 
     async def assign_license(self, username: str, sku_id: str):
