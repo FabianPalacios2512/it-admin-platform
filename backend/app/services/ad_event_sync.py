@@ -58,21 +58,6 @@ def sync_ad_events():
         
     except Exception as e:
         print(f"❌ [AD Sync] Aviso: Falló conexión WMI. (Revisa Firewall, Permisos DCOM, IP). Error: {e}")
-        # Como fallback para que el laboratorio no quede vacío si WMI falla
-        # Insertaremos un evento de prueba simulado.
-        
-        fake_id = f"FAKE-{int(datetime.datetime.utcnow().timestamp())}"
-        if not db.query(AuditLog).filter(AuditLog.event_id == fake_id).first():
-            audit = AuditLog(
-                username="Admin AD Nativo",
-                action="Sincronización Fallida (WMI Offline)",
-                target="Servidor Local",
-                status="Error",
-                source="AD Nativo",
-                event_id=fake_id
-            )
-            db.add(audit)
-            db.commit()
     finally:
         db.close()
         # Liberar los recursos de COM
