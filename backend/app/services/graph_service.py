@@ -87,6 +87,35 @@ class MicrosoftGraphService:
         data = await self._request("GET", "/auditLogs/signIns?$filter=status/errorCode ne 0&$orderby=createdDateTime desc&$top=100")
         return data.get("value", [])
 
+    async def get_risky_users(self):
+        """Usuarios marcados en riesgo por Identity Protection"""
+        try:
+            data = await self._request("GET", "/identityProtection/riskyUsers?$filter=riskLevel eq 'high' or riskLevel eq 'medium'&$orderby=riskLastUpdatedDateTime desc&$top=50")
+            return data.get("value", [])
+        except ValueError as e:
+            if "403" in str(e) or "Forbidden" in str(e):
+                return {"error": "license_required"}
+            raise
+
+    async def get_risk_detections(self):
+        """Detecciones de riesgo específicas (Viajes imposibles, IP anónima)"""
+        try:
+            data = await self._request("GET", "/identityProtection/riskDetections?$orderby=detectedDateTime desc&$top=50")
+            return data.get("value", [])
+        except ValueError as e:
+            if "403" in str(e) or "Forbidden" in str(e):
+                return {"error": "license_required"}
+            raise
+
+    async def revoke_user_sessions(self, username: str):
+        """Revoca todas las sesiones de un usuario (Desconectar)"""
+        try:
+            user_id = await self.resolve_user_id(username)
+            await self._request("POST", f"/users/{user_id}/revokeSignInSessions")
+            return {"success": True}
+        except Exception as e:
+            raise ValueError(str(e))
+
     async def resolve_user_id(self, username: str) -> str:
         """Encuentra el ID del usuario en Entra ID utilizando su username local."""
         username_lower = username.lower()

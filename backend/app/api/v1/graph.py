@@ -120,6 +120,29 @@ async def get_security_radar():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/security/risky-users")
+async def get_risky_users():
+    try:
+        return await graph_service.get_risky_users()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/security/risk-detections")
+async def get_risk_detections():
+    try:
+        return await graph_service.get_risk_detections()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/users/{username}/revoke-sessions")
+async def revoke_user_sessions(username: str):
+    try:
+        return await graph_service.revoke_user_sessions(username)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/users/{username}/devices")
 async def get_user_devices(username: str):
     """Devuelve los dispositivos de un usuario (Hardware)."""
