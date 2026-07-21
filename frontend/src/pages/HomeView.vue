@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { getFriendlyLicenseName } from '@/utils/licenses'
 
 // --- Data State ---
 const healthStats = ref({
@@ -347,7 +348,7 @@ const severityText = {
           <div class="space-y-4 mb-8">
             <div v-for="sku in licenses" :key="sku.skuId" class="flex flex-col gap-1.5">
               <div class="flex items-center justify-between text-[12px]">
-                <span class="text-slate-800" :title="sku.skuPartNumber">{{ sku.skuPartNumber === 'SPB' ? 'Microsoft 365' : sku.skuPartNumber }}</span>
+                <span class="text-slate-800" :title="sku.skuPartNumber">{{ getFriendlyLicenseName(sku.skuPartNumber) }}</span>
                 <span class="text-slate-500 font-mono text-[11px]">{{ sku.consumedUnits }}/{{ sku.prepaidUnits?.enabled || 0 }}</span>
               </div>
               <div class="w-full bg-slate-100 rounded-full h-1.5">

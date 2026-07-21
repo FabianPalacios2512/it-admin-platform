@@ -58,6 +58,8 @@ const tabs = [
   { id: 'entra',     name: 'Nube (Entra ID)',                  icon: 'M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z' }
 ]
 
+import { getFriendlyLicenseName } from '@/utils/licenses'
+
 // --- Licencias ---
 const availableLicenses = ref([])
 const userLicenses = ref([])
@@ -66,13 +68,10 @@ const assigningLicense = ref(false)
 const fetchingLicenses = ref(false)
 
 const getLicenseName = (skuId, skuPartNumber) => {
-  const name = availableLicenses.value.find(s => s.skuId === skuId)?.skuPartNumber || skuPartNumber;
-  if (name === 'SPB') return 'Microsoft 365 Empresa Premium';
-  if (name === 'ENTERPRISEPACK') return 'Office 365 E3';
-  if (name === 'STANDARDPACK') return 'Office 365 E1';
-  if (name === 'TEAMS_EXPLORATORY') return 'Microsoft Teams Exploratory';
-  return name;
+  return getFriendlyLicenseName(skuPartNumber)
 }
+
+
 
 async function fetchLicenses() {
   fetchingLicenses.value = true
