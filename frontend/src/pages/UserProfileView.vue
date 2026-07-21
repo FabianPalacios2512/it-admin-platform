@@ -76,21 +76,22 @@ const getLicenseName = (skuId, skuPartNumber) => {
 async function fetchLicenses() {
   fetchingLicenses.value = true
   try {
-    const res = await authFetch('/api/v1/graph/licenses')
-    if (res.ok) {
-      availableLicenses.value = await res.json()
-    } else {
-      console.error("Failed to load licenses, status:", res.status)
+    const promises = [
+      authFetch('/api/v1/graph/licenses').then(res => res.ok ? res.json() : [])
+    ]
+    
+    if (userProfile.value?.username) {
+      promises.push(
+        authFetch(`/api/v1/graph/licenses/${userProfile.value.username}`).then(res => res.ok ? res.json() : null)
+      )
     }
 
-    if (userProfile.value?.username) {
-      const userRes = await authFetch(`/api/v1/graph/licenses/${userProfile.value.username}`)
-      if (userRes.ok) {
-        const userData = await userRes.json()
-        if (userData.success) {
-          userLicenses.value = userData.data || []
-        }
-      }
+    const [allLicensesData, userLicensesData] = await Promise.all(promises)
+    
+    availableLicenses.value = allLicensesData || []
+    
+    if (userLicensesData && userLicensesData.success) {
+      userLicenses.value = userLicensesData.data || []
     }
   } catch (e) {
     console.error("Error fetching licenses:", e)

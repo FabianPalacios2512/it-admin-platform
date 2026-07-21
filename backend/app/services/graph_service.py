@@ -3,7 +3,10 @@ import time
 from app.core.config import env_settings
 
 _license_summary_cache = {"time": 0, "data": None}
-_LICENSE_CACHE_TTL = 60
+_subscribed_skus_cache = {"time": 0, "data": None}
+_user_id_cache = {}
+_LICENSE_CACHE_TTL = 300
+_USER_CACHE_TTL = 3600
 
 class MicrosoftGraphService:
     def __init__(self):
@@ -60,8 +63,16 @@ class MicrosoftGraphService:
 
     async def get_subscribed_skus(self):
         """Termómetro de Licencias"""
+        global _subscribed_skus_cache
+        if time.time() - _subscribed_skus_cache["time"] < _LICENSE_CACHE_TTL and _subscribed_skus_cache["data"]:
+            return _subscribed_skus_cache["data"]
+            
         data = await self._request("GET", "/subscribedSkus")
-        return data.get("value", [])
+        skus = data.get("value", [])
+        
+        _subscribed_skus_cache["data"] = skus
+        _subscribed_skus_cache["time"] = time.time()
+        return skus
 
     async def get_sync_status(self):
         """Monitor de Sincronización (Entra Connect)"""
@@ -78,21 +89,29 @@ class MicrosoftGraphService:
 
     async def resolve_user_id(self, username: str) -> str:
         """Encuentra el ID del usuario en Entra ID utilizando su username local."""
+        username_lower = username.lower()
+        if username_lower in _user_id_cache:
+            if time.time() - _user_id_cache[username_lower]["time"] < _USER_CACHE_TTL:
+                return _user_id_cache[username_lower]["id"]
+                
         headers = {"ConsistencyLevel": "eventual"}
         
         # Intentamos primero por onPremisesSamAccountName (si hay AD Connect)
         data = await self._request("GET", f"/users?$filter=onPremisesSamAccountName eq '{username}'&$select=id,userPrincipalName&$count=true", headers=headers)
         if data.get("value"):
+            _user_id_cache[username_lower] = {"id": data["value"][0]["id"], "time": time.time()}
             return data["value"][0]["id"]
             
         # Fallback: mailNickname (usualmente coincide con el username si es nube nativa)
         data = await self._request("GET", f"/users?$filter=mailNickname eq '{username}'&$select=id,userPrincipalName&$count=true", headers=headers)
         if data.get("value"):
+            _user_id_cache[username_lower] = {"id": data["value"][0]["id"], "time": time.time()}
             return data["value"][0]["id"]
             
         # Fallback 2: userPrincipalName empiece con el username
         data = await self._request("GET", f"/users?$filter=startsWith(userPrincipalName,'{username}@')&$select=id,userPrincipalName&$count=true", headers=headers)
         if data.get("value"):
+            _user_id_cache[username_lower] = {"id": data["value"][0]["id"], "time": time.time()}
             return data["value"][0]["id"]
 
         raise ValueError(f"No se encontró el usuario '{username}' en Microsoft Entra ID. Verifica la sincronización.")
