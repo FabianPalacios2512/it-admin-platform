@@ -1,6 +1,12 @@
+import sys
+import asyncio
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.v1 import auth, audit, accounts, servers, fileserver, graph, groups, printers, rds, devices, monitoring, wifi, system
+from app.api.v1 import auth, audit, accounts, servers, fileserver, graph, groups, printers, rds, devices, monitoring, wifi, system, terminal
 from app.core.database import Base, engine
 from app.models.server import ServerConfig
 from app.models.rds import RdsConfig  # Ensure table is created
@@ -60,6 +66,7 @@ app.include_router(devices.router, prefix="/api/v1/devices", tags=["devices"])
 app.include_router(monitoring.router, prefix="/api/v1/monitoring", tags=["monitoring"])
 app.include_router(wifi.router, prefix="/api/v1/wifi", tags=["wifi"])
 app.include_router(system.router, prefix="/api/v1/system", tags=["system"])
+app.include_router(terminal.router, prefix="/api/v1/terminal", tags=["terminal"])
 
 # ---------------------------------------------------------
 # Integración: Servir Frontend Estático (Vue SPA)

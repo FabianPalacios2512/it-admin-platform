@@ -200,18 +200,17 @@ onMounted(() => {
               <th class="w-1/6 px-3 py-3 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer transition-colors">OS</th>
               <th class="w-1/6 px-3 py-3 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer transition-colors">Estado Red</th>
               <th class="w-1/6 px-3 py-3 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer transition-colors">Último Acceso</th>
-              <th class="w-24 px-3 py-3 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer transition-colors text-right">Acciones</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="loading">
-              <td colspan="5" class="px-2 py-16 text-center">
+              <td colspan="4" class="px-2 py-16 text-center">
                 <div class="inline-block w-6 h-6 border-2 border-slate-300 border-t-blue-600 rounded-full animate-spin mb-3"></div>
                 <p class="text-[13px] text-slate-500">Buscando computadoras en Active Directory...</p>
               </td>
             </tr>
             <tr v-else-if="error">
-              <td colspan="5" class="px-2 py-16 text-center">
+              <td colspan="4" class="px-2 py-16 text-center">
                 <div class="inline-flex items-center gap-2 bg-red-50 text-red-700 px-4 py-2 rounded-lg text-[13px]">
                   <svg class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                   {{ error }}
@@ -219,7 +218,7 @@ onMounted(() => {
               </td>
             </tr>
             <tr v-else-if="filteredDevices.length === 0">
-              <td colspan="5" class="px-2 py-16 text-center">
+              <td colspan="4" class="px-2 py-16 text-center">
                 <p class="text-[13px] text-slate-500">No se encontraron equipos que coincidan con la búsqueda.</p>
               </td>
             </tr>
@@ -257,19 +256,6 @@ onMounted(() => {
               </td>
               <td class="px-3 py-2.5 text-[11px] text-slate-500 font-mono">
                 {{ dev.last_logon }}
-              </td>
-              <td class="px-3 py-2.5 text-right">
-                <div class="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button @click.stop="pingDevice(dev)" title="Hacer Ping" class="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors">
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                  </button>
-                  <button @click.stop="checkBitLocker(dev)" title="Ver BitLocker" class="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors">
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                  </button>
-                  <button @click.stop="rebootDevice(dev)" title="Reiniciar" class="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors">
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                  </button>
-                </div>
               </td>
             </tr>
           </tbody>

@@ -86,7 +86,7 @@ def search_users(query: str, limit: int = 20) -> list:
         conn=conn,
         search_base=search_base,
         search_filter=search_filter,
-        attributes=['sAMAccountName', 'displayName', 'title', 'mail', 'department', 'userAccountControl', 'distinguishedName'],
+        attributes=['sAMAccountName', 'displayName', 'title', 'mail', 'department', 'userAccountControl', 'distinguishedName', 'userPrincipalName'],
         limit=limit
     )
 
@@ -113,6 +113,7 @@ def search_users(query: str, limit: int = 20) -> list:
 
         results.append({
             "username": str(entry.sAMAccountName),
+            "userPrincipalName": str(entry.userPrincipalName) if entry.userPrincipalName else "",
             "fullName": str(entry.displayName) if entry.displayName else str(entry.sAMAccountName),
             "title": str(entry.title) if entry.title else "",
             "email": str(entry.mail) if entry.mail else "",

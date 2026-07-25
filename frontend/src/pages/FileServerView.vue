@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import BaseModal from '../components/common/BaseModal.vue'
+import ClonePermissionsModal from '../components/ClonePermissionsModal.vue'
 
 const API_BASE = '/api/v1'
 
@@ -157,7 +158,7 @@ const fetchPermissions = async () => {
   }
 }
 
-// --- ESTADO DE AÃ‘ADIR PERMISOS (Buscador AD) ---
+// --- ESTADO DE AÑADIR PERMISOS (Buscador AD) ---
 const showAddPermission = ref(false)
 const adSearchQuery = ref('')
 const adSearchResults = ref([])
@@ -166,7 +167,7 @@ const selectedADAccount = ref(null)
 const selectedPermissionLevel = ref('ReadAndExecute')
 const addingPerm = ref(false)
 
-// --- ESTADO DE CONFIRMACIÃ“N DE ELIMINACIÃ“N ---
+// --- ESTADO DE CONFIRMACIÓN DE ELIMINACIÓN ---
 const showConfirmRemove = ref(false)
 const pendingRemovePerm = ref(null)
 const removingPerm = ref(false)
@@ -334,7 +335,7 @@ const generateCloudLink = async (item, isShare) => {
   }
 }
 
-// --- ESTADO AUDITORÃA DE ACCESOS ---
+// --- ESTADO AUDITORÍA DE ACCESOS ---
 const showAuditDrawer = ref(false)
 const auditData = ref([])
 const auditingPath = ref('')
@@ -344,7 +345,7 @@ const formatAccess = (rawAccess) => {
   if (!rawAccess) return 'Especial'
   if (rawAccess.includes('FullControl')) return 'Control Total'
   if (rawAccess.includes('Modify')) return 'Modificar'
-  if (rawAccess.includes('ReadAndExecute')) return 'Lectura y EjecuciÃ³n'
+  if (rawAccess.includes('ReadAndExecute')) return 'Lectura y Ejecución'
   if (rawAccess.includes('Write')) return 'Escritura'
   if (rawAccess.includes('Read')) return 'Lectura'
   return 'Personalizado'
@@ -352,7 +353,7 @@ const formatAccess = (rawAccess) => {
 
 const formatAccount = (account) => {
   if (!account) return 'Desconocido'
-  if (account.startsWith('S-1-5-')) return `SID HuÃ©rfano (${account.substring(0, 15)}...)`
+  if (account.startsWith('S-1-5-')) return `SID Huérfano (${account.substring(0, 15)}...)`
   return account
 }
 
@@ -383,7 +384,7 @@ const auditAccess = async (item, isShare) => {
   }
 }
 
-// --- SELECCIÃ“N MULTIPLE ---
+// --- SELECCIÓN MULTIPLE ---
 const selectedItems = ref([])
 const toggleSelection = (item) => {
   const isShare = !item.modified_at
@@ -417,7 +418,7 @@ const clearSelection = () => {
   selectedItems.value = []
 }
 
-// Watchers para limpiar selecciÃ³n al navegar
+// Watchers para limpiar selección al navegar
 watch([currentShare, currentPath], () => {
   clearSelection()
 })
@@ -433,7 +434,7 @@ const generateCloudLinkBulk = () => {
   if (selectedItems.value.length === 0) return
   const item = selectedItems.value[0]
   const isShare = !item.modified_at
-  // Si tuviÃ©ramos un generateCloudLink async, lo llamarÃ­amos aquÃ­
+  // Si tuviéramos un generateCloudLink async, lo llamaríamos aquí
   alert(`Generar enlace M365 para: ${item.name}`)
 }
 
@@ -443,6 +444,8 @@ const openPermissionsBulk = () => {
   const isShare = !item.modified_at
   openPermissions(item, isShare)
 }
+
+const showCloneModal = ref(false)
 
 onMounted(() => {
   document.addEventListener('click', closeKebab)
@@ -455,17 +458,16 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="h-full flex flex-col font-sans max-w-7xl mx-auto w-full">
-    
+  <div class="h-full flex flex-col font-sans max-w-7xl mx-auto w-full px-4 py-6">
     <!-- Header / Title -->
-    <div class="mb-4 mt-6">
+    <div class="mb-4">
       <div class="flex items-center gap-1.5 mb-1">
-        <router-link to="/" class="text-[11px] text-slate-400 hover:text-slate-600 transition-colors">Panel de control</router-link>
-        <span class="text-[11px] text-slate-300">/</span>
-        <span class="text-[11px] text-slate-600 font-medium">Archivos</span>
+        <router-link to="/" class="text-[11px] text-gray-400 hover:text-gray-600 transition-colors">Panel de control</router-link>
+        <span class="text-[11px] text-gray-300">/</span>
+        <span class="text-[11px] text-gray-600 font-medium">Archivos</span>
       </div>
-      <h2 class="text-2xl font-semibold text-slate-900 tracking-tight flex items-center gap-2">
-        <svg class="w-6 h-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <h2 class="text-2xl font-semibold text-gray-900 tracking-tight flex items-center gap-2">
+        <svg class="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
         </svg>
         Administrador de Archivos
@@ -474,45 +476,49 @@ onUnmounted(() => {
     </div>
 
     <!-- Command Bar (Global) -->
-    <div class="flex flex-col md:flex-row md:items-center justify-between mb-4 border-b border-slate-200 pb-3 gap-3">
-      <div class="flex items-center gap-1 flex-wrap">
-        <button @click="openCreateFolder" class="text-[12px] font-medium text-slate-700 hover:text-indigo-600 hover:bg-slate-50 px-3 py-1.5 rounded transition-colors flex items-center gap-2">
-          <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+    <div class="flex flex-col md:flex-row md:items-center justify-between mb-2 border-b border-gray-200 pb-3 h-12">
+      <div class="flex items-center gap-4 flex-wrap w-full">
+        <button @click="openCreateFolder" class="text-[13px] font-medium text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-2 py-1.5 rounded transition-colors flex items-center gap-1.5">
+          <svg class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
           Nueva carpeta
         </button>
-        <div class="w-px h-4 bg-slate-200 mx-1"></div>
-        <div class="relative w-72 lg:w-96 ml-2">
-          <input v-model="smartSearchQuery" @keyup.enter="handleSmartSearch" type="text" placeholder="Pegar ruta UNC (ej. \\192.168.1.80\Share\Carpeta)..." class="w-full pl-8 pr-8 py-1.5 bg-white border border-slate-200 rounded text-[12px] outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-shadow">
-          <svg class="w-4 h-4 text-slate-400 absolute left-2.5 top-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-          <button v-if="smartSearchQuery" @click="handleSmartSearch" class="absolute right-2 top-1.5 text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase transition-colors">Ir</button>
+        <button @click="showCloneModal = true" class="text-[13px] font-medium text-indigo-700 hover:text-indigo-800 hover:bg-indigo-100 bg-indigo-50 px-2 py-1.5 rounded transition-colors flex items-center gap-1.5 border border-indigo-100">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
+          Clonar Permisos (Espejo)
+        </button>
+        <div class="relative w-64">
+          <input v-model="smartSearchQuery" @keyup.enter="handleSmartSearch" type="text" placeholder="Ruta UNC (ej. \\Server\Share)..." class="w-full pl-7 pr-8 py-1.5 bg-gray-50 border border-gray-200 rounded-md text-[12px] text-gray-900 outline-none focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all">
+          <svg class="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <button v-if="smartSearchQuery" @click="handleSmartSearch" class="absolute right-1 top-1 text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase transition-colors">Ir</button>
         </div>
-        <button @click="openPermissionsBulk" :disabled="selectedItems.length === 0" class="text-[12px] font-medium text-slate-700 hover:text-indigo-600 hover:bg-slate-50 px-3 py-1.5 rounded transition-colors flex items-center gap-2 disabled:opacity-30 disabled:hover:text-slate-700 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default">
-          <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-          Permisos de seguridad
-        </button>
-        <button @click="auditAccessBulk" :disabled="selectedItems.length === 0" class="text-[12px] font-medium text-slate-700 hover:text-indigo-600 hover:bg-slate-50 px-3 py-1.5 rounded transition-colors flex items-center gap-2 disabled:opacity-30 disabled:hover:text-slate-700 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default">
-          <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-          Auditar Accesos
-        </button>
-        <button @click="generateCloudLinkBulk" :disabled="selectedItems.length === 0" class="text-[12px] font-medium text-slate-700 hover:text-indigo-600 hover:bg-slate-50 px-3 py-1.5 rounded transition-colors flex items-center gap-2 disabled:opacity-30 disabled:hover:text-slate-700 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default">
-          <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/></svg>
-          Enlace M365
-        </button>
-        <div class="w-px h-4 bg-slate-200 mx-1"></div>
-        <button @click="isBrowsing ? browsePath(currentShare, currentPath) : fetchShares()" class="text-[12px] font-medium text-slate-700 hover:text-indigo-600 hover:bg-slate-50 px-3 py-1.5 rounded transition-colors flex items-center gap-2">
-          <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-          Actualizar
-        </button>
-      </div>
+        
+        <div class="w-px h-5 bg-gray-200"></div>
 
-      <!-- SelecciÃ³n -->
-      <div class="flex items-center justify-end gap-3">
-        <transition name="modal">
-          <span v-if="selectedItems.length > 0" class="text-[12px] text-slate-500 font-semibold transition-opacity duration-300 flex items-center gap-2">
-            {{ selectedItems.length }} seleccionado(s)
-            <button @click="clearSelection" class="text-indigo-600 hover:underline">Desmarcar</button>
+        <template v-if="selectedItems.length === 0">
+          <button @click="isBrowsing ? browsePath(currentShare, currentPath) : fetchShares()" class="text-[13px] font-medium text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-2 py-1.5 rounded transition-colors flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+            Actualizar
+          </button>
+        </template>
+        <template v-else>
+          <span class="text-[13px] text-gray-500 font-medium flex items-center gap-2 bg-blue-50 px-2 py-1 rounded-md border border-blue-100">
+            <span class="w-5 h-5 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-[10px] font-bold">{{ selectedItems.length }}</span>
+            seleccionado(s)
+            <button @click="clearSelection" class="text-blue-600 hover:underline ml-1">Desmarcar</button>
           </span>
-        </transition>
+          <button @click="openPermissionsBulk" class="text-[13px] font-medium text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-2 py-1.5 rounded transition-colors flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+            Permisos
+          </button>
+          <button @click="auditAccessBulk" class="text-[13px] font-medium text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-2 py-1.5 rounded transition-colors flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+            Auditar
+          </button>
+          <button @click="generateCloudLinkBulk" class="text-[13px] font-medium text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-2 py-1.5 rounded transition-colors flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/></svg>
+            Enlace
+          </button>
+        </template>
       </div>
     </div>
 
@@ -522,7 +528,7 @@ onUnmounted(() => {
       {{ error }}
     </div>
 
-    <!-- Barra de NavegaciÃ³n (Breadcrumbs) -->
+    <!-- Barra de Navegación (Breadcrumbs) -->
     <div v-if="isBrowsing && !error" class="bg-gray-50 border-b border-gray-100 py-3 px-4 flex items-center gap-2 text-sm rounded-lg my-4">
       <button @click="navigateUp" class="p-1 hover:bg-gray-200 rounded-md text-gray-500 transition-colors" title="Subir un nivel">
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
@@ -542,7 +548,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Content Area -->
-    <div class="flex-1 flex flex-col py-4">
+    <div class="flex-1 flex flex-col overflow-hidden mb-6 mt-2">
       <div v-if="loading" class="flex-1 flex items-center justify-center">
         <span class="w-8 h-8 border-2 border-gray-200 border-t-indigo-600 rounded-full animate-spin"></span>
       </div>
@@ -555,16 +561,16 @@ onUnmounted(() => {
       <!-- VISTA: LISTA DE SHARES -->
       <div v-else-if="!isBrowsing" class="flex-1 overflow-auto">
         <table class="w-full text-left text-sm">
-          <thead class="text-gray-500 font-semibold uppercase tracking-wider text-xs border-b border-gray-100">
+          <thead class="text-gray-500 font-bold uppercase tracking-wider text-xs border-b-2 border-gray-200">
             <tr>
-              <th class="px-5 py-4 w-12 text-center"></th>
-              <th class="px-2 py-4 w-1/3">Recurso Compartido</th>
-              <th class="px-5 py-4 w-1/3">Ruta Local Servidor</th>
-              <th class="px-5 py-4 w-1/4">DescripciÃ³n</th>
+              <th class="px-5 py-3 w-12 text-center"></th>
+              <th class="px-2 py-3 w-1/3">Recurso Compartido</th>
+              <th class="px-5 py-3 w-1/3">Ruta Local Servidor</th>
+              <th class="px-5 py-3 w-1/4">DESCRIPCIÓN</th>
             </tr>
           </thead>
           <tbody class="text-gray-700">
-            <tr v-for="share in shares" :key="share.name" :class="['hover:bg-gray-50 transition-colors group cursor-pointer border-b border-gray-50', isSelected(share) ? 'bg-indigo-50/30' : '']" @dblclick="browsePath(share)">
+            <tr v-for="share in shares" :key="share.name" class="hover:bg-gray-50/80 transition-colors cursor-pointer border-b border-gray-100" @dblclick="browsePath(share)">
               <td class="px-5 py-4 text-center" @click.stop>
                 <input type="checkbox" class="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer" :checked="isSelected(share)" @change="toggleSelection(share)"/>
               </td>
@@ -584,19 +590,19 @@ onUnmounted(() => {
       <!-- VISTA: NAVEGADOR DE CARPETA -->
       <div v-else class="flex-1 overflow-auto">
         <table class="w-full text-left text-sm">
-          <thead class="text-gray-500 font-semibold uppercase tracking-wider text-xs border-b border-gray-100">
+          <thead class="text-gray-500 font-bold uppercase tracking-wider text-xs border-b-2 border-gray-200">
             <tr>
-              <th class="px-5 py-4 w-12 text-center"></th>
-              <th class="px-2 py-4 w-1/2">Nombre</th>
-              <th class="px-5 py-4 w-1/4">Fecha ModificaciÃ³n</th>
-              <th class="px-5 py-4 w-1/4">TamaÃ±o</th>
+              <th class="px-5 py-3 w-12 text-center"></th>
+              <th class="px-2 py-3 w-1/2">Nombre</th>
+              <th class="px-5 py-3 w-1/4">Fecha Modificación</th>
+              <th class="px-5 py-3 w-1/4">Tamaño</th>
             </tr>
           </thead>
           <tbody class="text-gray-700">
-            <tr v-if="folderContents.length === 0" class="hover:bg-gray-50 border-b border-gray-50">
-              <td colspan="5" class="px-5 py-6 text-center text-gray-500 text-sm font-medium">Esta carpeta estÃ¡ vacÃ­a.</td>
+            <tr v-if="folderContents.length === 0" class="hover:bg-gray-50 border-b border-gray-100">
+              <td colspan="5" class="px-5 py-6 text-center text-gray-500 text-sm font-medium">Esta carpeta está vacía.</td>
             </tr>
-            <tr v-for="item in folderContents" :key="item.name" :class="['hover:bg-gray-50 transition-colors group border-b border-gray-50 cursor-pointer', isSelected(item) ? 'bg-indigo-50/30' : '']">
+            <tr v-for="item in folderContents" :key="item.name" class="hover:bg-gray-50/80 transition-colors cursor-pointer border-b border-gray-100">
               <td class="px-5 py-3 text-center" @click.stop>
                 <input type="checkbox" class="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer" :checked="isSelected(item)" @change="toggleSelection(item)"/>
               </td>
@@ -638,7 +644,7 @@ onUnmounted(() => {
             <label for="inheritChk" class="text-sm text-gray-700">Heredar permisos de la carpeta padre</label>
           </div>
           <p v-if="!newFolderInherit" class="text-xs text-orange-600 bg-orange-50 border border-orange-100 p-2 rounded-md">
-            Al no heredar, la carpeta se crearÃ¡ sin permisos explÃ­citos. DeberÃ¡s asignar permisos manualmente para que sea accesible.
+            Al no heredar, la carpeta se creará sin permisos explícitos. Deberás asignar permisos manualmente para que sea accesible.
           </p>
         </div>
       </template>
@@ -685,7 +691,7 @@ onUnmounted(() => {
               <div v-if="showAddPermission" class="mb-4 pb-4 border-b border-gray-100">
                 <h4 class="text-[13px] font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <svg class="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" /></svg>
-                  Agregar Permiso ExplÃ­cito
+                  Agregar Permiso Explícito
                 </h4>
                 
                 <label class="block text-xs font-medium text-gray-700 mb-1">Buscar Usuario / Grupo AD:</label>
@@ -712,9 +718,9 @@ onUnmounted(() => {
 
                 <label class="block text-xs font-medium text-gray-700 mb-1">Nivel de Acceso a Otorgar:</label>
                 <select v-model="selectedPermissionLevel" class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm mb-4 focus:outline-none focus:ring-1 focus:ring-gray-400">
-                  <option value="ReadAndExecute">Lectura y EjecuciÃ³n (Recomendado para visualizaciÃ³n)</option>
+                  <option value="ReadAndExecute">Lectura y Ejecución (Recomendado para visualización)</option>
                   <option value="Modify">Modificar (Lectura/Escritura/Borrado)</option>
-                  <option value="FullControl">Control Total (AdministraciÃ³n absoluta)</option>
+                  <option value="FullControl">Control Total (Administración absoluta)</option>
                 </select>
 
                 <div class="flex justify-end gap-3 pt-2">
@@ -764,7 +770,7 @@ onUnmounted(() => {
                               {{ formatAccess(perm.access) }}
                             </span>
                             <span class="text-xs text-gray-500">
-                              {{ perm.inherited ? 'Heredado' : 'ExplÃ­cito' }}
+                              {{ perm.inherited ? 'Heredado' : 'Explícito' }}
                             </span>
                           </div>
                         </td>
@@ -775,7 +781,7 @@ onUnmounted(() => {
                         </td>
                       </tr>
                       <tr v-if="permissions.length === 0 && !loadingPermissions">
-                        <td colspan="3" class="px-4 py-6 text-center text-gray-500 text-[13px] font-medium border-b-0">No hay permisos asignados explÃ­citamente en esta ruta.</td>
+                        <td colspan="3" class="px-4 py-6 text-center text-gray-500 text-[13px] font-medium border-b-0">No hay permisos asignados explícitamente en esta ruta.</td>
                       </tr>
                     </tbody>
                   </table>
@@ -796,7 +802,7 @@ onUnmounted(() => {
       </div>
     </Teleport>
 
-    <!-- Modal de ConfirmaciÃ³n de EliminaciÃ³n -->
+    <!-- Modal de Confirmación de Eliminación -->
     <BaseModal 
       :show="showConfirmRemove" 
       title="Eliminar Permiso Explicito" 
@@ -810,8 +816,8 @@ onUnmounted(() => {
             </svg>
           </div>
           <div>
-            <p class="text-sm font-medium text-gray-900 mb-1">Â¿EstÃ¡s seguro de eliminar este permiso?</p>
-            <p class="text-sm text-gray-600">Se revocarÃ¡n los permisos explÃ­citos para el usuario/grupo:</p>
+            <p class="text-sm font-medium text-gray-900 mb-1">¿Estás seguro de eliminar este permiso?</p>
+            <p class="text-sm text-gray-600">Se revocarán los permisos explícitos para el usuario/grupo:</p>
             <p class="text-sm font-semibold text-gray-900 mt-2 bg-gray-50 p-2 rounded-md border border-gray-200">{{ pendingRemovePerm?.account }}</p>
           </div>
         </div>
@@ -821,12 +827,12 @@ onUnmounted(() => {
           Cancelar
         </button>
         <button @click="confirmRemovePermission" :disabled="removingPerm" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg disabled:opacity-50 flex items-center gap-2 transition-colors">
-          {{ removingPerm ? 'Eliminando...' : 'SÃ­, Eliminar' }}
+          {{ removingPerm ? 'Eliminando...' : 'Sí, Eliminar' }}
         </button>
       </template>
     </BaseModal>
 
-    <!-- Drawer de AuditorÃ­a de Accesos -->
+    <!-- Drawer de Auditoría de Accesos -->
     <Teleport to="body">
       <div v-if="showAuditDrawer" class="fixed inset-0 z-50 overflow-hidden" aria-labelledby="slide-over-title" role="dialog" aria-modal="true">
         <!-- Background backdrop -->
@@ -843,7 +849,7 @@ onUnmounted(() => {
                   <svg class="w-5 h-5 text-indigo-600" fill="currentColor" viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 2.18l7.25 3.22c-.04 4.54-2.88 8.87-7.25 10.37-4.37-1.5-7.21-5.83-7.25-10.37L12 3.18zM12 7a5 5 0 100 10 5 5 0 000-10zm0 1.5a3.5 3.5 0 110 7 3.5 3.5 0 010-7z"/></svg>
                 </div>
                 <div>
-                  <h2 class="text-lg font-bold text-gray-900">AuditorÃ­a de Accesos Efectivos</h2>
+                  <h2 class="text-lg font-bold text-gray-900">Auditoría de Accesos Efectivos</h2>
                   <p class="text-xs text-gray-500 font-mono mt-0.5 break-all">{{ auditingPath }}</p>
                 </div>
               </div>
@@ -858,7 +864,7 @@ onUnmounted(() => {
               <div v-if="isAuditing" class="flex flex-col items-center justify-center py-16">
                 <span class="w-10 h-10 border-2 border-gray-200 border-t-indigo-600 rounded-full animate-spin mb-4"></span>
                 <p class="text-sm font-medium text-gray-600">Consultando Active Directory y el servidor de archivos...</p>
-                <p class="text-xs text-gray-400 mt-1">Calculando accesos heredados y explÃ­citos</p>
+                <p class="text-xs text-gray-400 mt-1">Calculando accesos heredados y explícitos</p>
               </div>
 
               <div v-else-if="auditData.length === 0" class="text-center py-16">
@@ -901,7 +907,7 @@ onUnmounted(() => {
                         </span>
                         <span v-else class="flex items-center gap-1.5 text-gray-500">
                           <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                          ExplÃ­cito
+                          Explícito
                         </span>
                       </td>
                       <td class="px-4 py-1.5 text-center">
@@ -921,7 +927,7 @@ onUnmounted(() => {
             <!-- Footer -->
             <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end shrink-0">
               <button @click="showAuditDrawer = false" class="px-6 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium transition-colors shadow-sm">
-                Cerrar AuditorÃ­a
+                Cerrar Auditoría
               </button>
             </div>
             
@@ -930,5 +936,7 @@ onUnmounted(() => {
       </div>
     </Teleport>
 
+    <!-- Modals -->
+    <ClonePermissionsModal v-if="showCloneModal" @close="showCloneModal = false" />
   </div>
 </template>

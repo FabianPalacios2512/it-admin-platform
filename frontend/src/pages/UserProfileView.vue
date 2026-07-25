@@ -153,7 +153,7 @@ async function addAlias() {
     const data = await res.json()
     if (res.ok && data.success) {
       newAlias.value = ''
-      aliasStatus.value = "Alias agregado y sincronizaciÃ³n iniciada."
+      aliasStatus.value = "Alias agregado y sincronización iniciada."
       const r = await authFetch(`${API_BASE}/accounts/profile/${userProfile.value.username}`)
       if (r.ok) userProfile.value = await r.json()
     } else {
@@ -168,7 +168,7 @@ async function addAlias() {
 }
 
 async function removeAlias(alias) {
-  if (!confirm(`Â¿Eliminar alias ${alias}?`)) return
+  if (!confirm(`¿Eliminar alias ${alias}?`)) return
   aliasLoading.value = true
   aliasStatus.value = ''
   try {
@@ -179,7 +179,7 @@ async function removeAlias(alias) {
     })
     const data = await res.json()
     if (res.ok && data.success) {
-      aliasStatus.value = "Alias eliminado y sincronizaciÃ³n iniciada."
+      aliasStatus.value = "Alias eliminado y sincronización iniciada."
       const r = await authFetch(`${API_BASE}/accounts/profile/${userProfile.value.username}`)
       if (r.ok) userProfile.value = await r.json()
     } else {
@@ -221,17 +221,17 @@ async function syncLocalAD() {
     if (res.ok && data.success) {
       syncModalType.value = 'success'
       syncModalTitle.value = 'Sincronización Iniciada'
-      syncModalMessage.value = data.message || 'La sincronizaciÃ³n local se iniciÃ³ correctamente. Puede tardar un par de minutos en reflejarse en la nube.'
+      syncModalMessage.value = data.message || 'La sincronización local se inició correctamente. Puede tardar un par de minutos en reflejarse en la nube.'
       showSyncModal.value = true
     } else {
       syncModalType.value = 'error'
       syncModalTitle.value = 'Error de Sincronización'
-      syncModalMessage.value = data.detail || data.error || 'Fallo al iniciar sincronizaciÃ³n'
+      syncModalMessage.value = data.detail || data.error || 'Fallo al iniciar sincronización'
       showSyncModal.value = true
     }
   } catch (e) {
     syncModalType.value = 'error'
-    syncModalTitle.value = 'Error de ConexiÃ³n'
+    syncModalTitle.value = 'Error de Conexión'
     syncModalMessage.value = "Error de red: " + e.message
     showSyncModal.value = true
   } finally {
@@ -286,7 +286,7 @@ async function addM365Group() {
 }
 
 async function removeM365Group(groupId, groupName) {
-  if (!confirm(`Â¿Remover al usuario del grupo ${groupName}?`)) return
+  if (!confirm(`¿Remover al usuario del grupo ${groupName}?`)) return
   m365GroupLoading.value = true
   try {
     const res = await authFetch(`${API_BASE}/groups/remove`, {
@@ -317,7 +317,7 @@ async function offboardUser() {
   offboardLoading.value = true
   offboardResult.value = null
   try {
-    const res = await authFetch(`${API_BASE}/graph/users/${userProfile.value.username}/offboard`, {
+    const res = await authFetch(`${API_BASE}/accounts/offboard/${userProfile.value.username}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ admin_user: adminUser })
@@ -343,7 +343,7 @@ const resetMfaLoading = ref(false)
 const revokeLoading = ref(false)
 
 async function resetMFA() {
-  if (!confirm(`Â¿EstÃ¡s seguro de que deseas restablecer los métodos MFA para ${userProfile.value.username}?`)) return
+  if (!confirm(`¿Estás seguro de que deseas restablecer los métodos MFA para ${userProfile.value.username}?`)) return
   resetMfaLoading.value = true
   try {
     const res = await authFetch(`${API_BASE}/graph/users/${userProfile.value.username}/reset-mfa`, { method: 'POST' })
@@ -384,7 +384,7 @@ async function fetchUserProfile() {
 onMounted(async () => {
   const username = route.params.username
   try {
-    // 1. Carga RÃ¡pida (Directorio Activo Local)
+    // 1. Carga Rápida (Directorio Activo Local)
     const [profileRes, optsRes] = await Promise.all([
       authFetch(`${API_BASE}/accounts/profile/${username}`),
       authFetch(`${API_BASE}/accounts/account-options/${username}`)
@@ -482,7 +482,7 @@ watch(activeTab, async (tab) => {
 
 function goBack() { router.push('/cuentas') }
 
-// â”€â”€ ContraseÃ±a â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Contraseña ───────────────────────────────────────
 function generateSecurePassword() {
   const u = 'ABCDEFGHJKLMNPQRSTUVWXYZ', l = 'abcdefghjkmnpqrstuvwxyz', d = '23456789', s = '!@#$%&*'
   let pwd = u[~~(Math.random()*u.length)] + l[~~(Math.random()*l.length)] + d[~~(Math.random()*d.length)] + s[~~(Math.random()*s.length)]
@@ -623,13 +623,13 @@ async function updateFolderPermission(folder) {
   const parts = folder.path.split('/');
   const shareName = parts[0];
   const subpath = parts.slice(1).join('\\'); 
-  const permissionMap = { 'Control Total': 'FullControl', 'Modificar': 'Modify', 'Lectura y Ejecución': 'ReadAndExecute', 'Lectura': 'Read', 'Escritura': 'Write', 'Denegar Acceso': 'Deny', 'TrÃ¡nsito / Solo Lectura (Explícito)': 'ReadAndExecute' };
+  const permissionMap = { 'Control Total': 'FullControl', 'Modificar': 'Modify', 'Lectura y Ejecución': 'ReadAndExecute', 'Lectura': 'Read', 'Escritura': 'Write', 'Denegar Acceso': 'Deny', 'Tránsito / Solo Lectura (Explícito)': 'ReadAndExecute' };
   const mappedPerm = permissionMap[folder.access];
   if (!mappedPerm) return;
 
   const isInherited = folder.inherited || folder.origin.includes('Heredado');
   if (isInherited && folder.access !== 'Denegar Acceso') {
-    if (!confirm('Para modificar este permiso heredado, debemos deshabilitar la herencia. Â¿Continuar?')) { loadFolderGroups(); return; }
+    if (!confirm('Para modificar este permiso heredado, debemos deshabilitar la herencia. ¿Continuar?')) { loadFolderGroups(); return; }
     try {
       const bRes = await authFetch(`${API_BASE}/fileserver/shares/${shareName}/acl/break-inheritance`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subpath }) });
       const bData = await bRes.json();
@@ -649,7 +649,7 @@ async function updateFolderPermission(folder) {
 async function removeFolderPermission(folder, skipConfirm = false) {
   const isInherited = folder.inherited || folder.origin.includes('Heredado');
   if (isInherited) {
-    if (!confirm('Este permiso es heredado. Â¿Deshabilitar herencia y quitar acceso?')) { loadFolderGroups(); return; }
+    if (!confirm('Este permiso es heredado. ¿Deshabilitar herencia y quitar acceso?')) { loadFolderGroups(); return; }
     const parts = folder.path.split('/');
     const shareName = parts[0];
     const subpath = parts.slice(1).join('\\');
@@ -658,7 +658,7 @@ async function removeFolderPermission(folder, skipConfirm = false) {
       const bData = await bRes.json();
       if (!bData.success) throw new Error(bData.detail || 'Error rompiendo herencia');
     } catch(e) { alert('Error rompiendo herencia: ' + e.message); loadFolderGroups(); return; }
-  } else if (!skipConfirm && !confirm(`Â¿Revocar acceso a ${folder.path}?`)) { loadFolderGroups(); return; }
+  } else if (!skipConfirm && !confirm(`¿Revocar acceso a ${folder.path}?`)) { loadFolderGroups(); return; }
   
   const parts = folder.path.split('/');
   const shareName = parts[0];
@@ -726,6 +726,88 @@ function hasChildren(rootPath) {
   return folderGroups.value.some(f => f.path.startsWith(rootPath + '/') && f.path.split('/').length > 1);
 }
 
+const foldersSubTab = ref('view');
+const cloneSourceUser = ref('');
+const isAnalyzingClone = ref(false);
+const isExecutingClone = ref(false);
+const cloneDelta = ref(null);
+const cloneAnalyzeError = ref('');
+const cloneExecuteError = ref('');
+const cloneExecuteSuccess = ref(false);
+const cloneResults = ref([]);
+
+const cloneTotalChanges = computed(() => {
+  if (!cloneDelta.value) return 0;
+  return (cloneDelta.value.groups_to_add?.length || 0) + (cloneDelta.value.folders_to_add?.length || 0);
+});
+
+async function analyzeClone() {
+  if (!cloneSourceUser.value) return;
+  isAnalyzingClone.value = true;
+  cloneAnalyzeError.value = '';
+  cloneDelta.value = null;
+  cloneExecuteError.value = '';
+  cloneExecuteSuccess.value = false;
+  
+  try {
+    const res = await authFetch(`${API_BASE}/fileserver/clone-preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        source_user: cloneSourceUser.value.trim(),
+        target_user: userProfile.value.username
+      })
+    });
+    
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Error analizando permisos');
+    }
+    
+    const data = await res.json();
+    cloneDelta.value = data.delta;
+  } catch (err) {
+    cloneAnalyzeError.value = err.message;
+  } finally {
+    isAnalyzingClone.value = false;
+  }
+}
+
+async function executeClone() {
+  if (!cloneDelta.value) return;
+  
+  isExecutingClone.value = true;
+  cloneExecuteError.value = '';
+  
+  try {
+    const res = await authFetch(`${API_BASE}/fileserver/clone-execute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        source_user: cloneSourceUser.value.trim(),
+        target_user: userProfile.value.username,
+        delta: cloneDelta.value,
+        admin_user: adminUser
+      })
+    });
+    
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Error ejecutando clonación');
+    }
+    
+    const data = await res.json();
+    cloneExecuteSuccess.value = true;
+    cloneResults.value = data.results || [];
+    // Recargar permisos
+    loadFolderGroups();
+  } catch (err) {
+    cloneExecuteError.value = err.message;
+  } finally {
+    isExecutingClone.value = false;
+  }
+}
+
 const statusConfig = computed(() => {
   if (!userProfile.value) return {}
   return {
@@ -740,22 +822,22 @@ const statusConfig = computed(() => {
   <!-- Contenedor Edge-to-Edge -->
   <div class="flex h-[calc(100vh-64px)] w-full overflow-hidden bg-white">
     
-    <!-- Columna Izquierda: Sub-menÃº Pegado -->
+    <!-- Columna Izquierda: Sub-menú Pegado -->
     <div class="hidden md:flex flex-col w-64 bg-white border-r border-slate-200 shrink-0 overflow-y-auto">
       <div class="p-5 pb-2">
         <h2 class="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Administrar</h2>
       </div>
-      <nav class="flex flex-col gap-0.5 px-3 pb-6">
+      <nav class="flex flex-col gap-1 px-3 pb-6">
         <button v-for="tab in tabs" :key="tab.id" @click="activeTab = tab.id"
-          :class="['flex items-center gap-3 px-3 py-2 text-[13px] font-medium transition-all text-left w-full rounded-md', activeTab === tab.id ? 'bg-blue-50/80 text-blue-700' : 'text-slate-600 hover:bg-slate-100']">
-          <svg :class="['w-4 h-4 shrink-0', activeTab === tab.id ? 'text-blue-600' : 'text-slate-400']" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" :d="tab.icon"/></svg>
+          :class="['flex items-center gap-3 px-3 py-2 text-sm transition-all text-left w-full rounded-md', activeTab === tab.id ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-600 hover:bg-gray-100']">
+          <svg :class="['w-4 h-4 shrink-0', activeTab === tab.id ? 'text-blue-700' : 'text-gray-400']" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" :d="tab.icon"/></svg>
           <span class="truncate">{{ tab.name }}</span>
         </button>
       </nav>
     </div>
 
-    <!-- Columna Derecha: Ãrea de Contenido -->
-    <div class="flex-1 overflow-y-auto flex flex-col relative bg-white">
+    <!-- Columna Derecha: Área de Contenido -->
+    <div class="flex-1 overflow-y-auto flex flex-col relative bg-gray-50">
 
       <!-- Modals and Overlays -->
       <Teleport to="body">
@@ -788,7 +870,7 @@ const statusConfig = computed(() => {
                 </div>
                 <div class="min-w-0">
                   <p class="text-[13px] font-semibold text-slate-800 truncate">{{ userProfile.fullName }}</p>
-                  <p class="text-[11px] text-slate-500 font-mono">{{ userProfile.username }}@code.local</p>
+                  <p class="text-[11px] text-slate-500 font-mono">{{ userProfile.userPrincipalName || userProfile.email || userProfile.username }}</p>
                 </div>
               </div>
               <div>
@@ -803,7 +885,7 @@ const statusConfig = computed(() => {
                 <p v-if="confirmError" class="text-[11px] text-red-600 mt-1">{{ confirmError }}</p>
                 <p v-else-if="confirmPassword && confirmPassword===generatedPassword" class="text-[11px] text-emerald-600 mt-1 flex items-center gap-1">
                   <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-                  ContraseÃ±as coinciden
+                  Contraseñas coinciden
                 </p>
               </div>
               <div class="space-y-2">
@@ -885,7 +967,7 @@ const statusConfig = computed(() => {
               </span>
               <div v-else class="h-5 w-16 bg-slate-200 rounded-sm animate-pulse"></div>
             </div>
-            <p v-if="userProfile" class="text-[13px] text-slate-500 mt-1">{{ userProfile.userPrincipalName || userProfile.email || userProfile.username + '@code.local' }}</p>
+            <p v-if="userProfile" class="text-[13px] text-slate-500 mt-1">{{ userProfile.userPrincipalName || userProfile.email || userProfile.username }}</p>
             <div v-else class="h-3.5 w-32 bg-slate-200 rounded-sm animate-pulse mt-1.5"></div>
           </div>
         </div>
@@ -896,7 +978,7 @@ const statusConfig = computed(() => {
         </div>
       </div>
 
-      <!-- Ãrea de PestaÃ±as (Tarjetas Blancas) -->
+      <!-- Área de Pestañas (Tarjetas Blancas) -->
       <div class="p-6 md:p-8 w-full max-w-[1400px] relative">
         <div v-if="isLoading" class="flex flex-col items-center justify-center py-20 gap-3">
           <div class="w-8 h-8 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
@@ -910,53 +992,80 @@ const statusConfig = computed(() => {
 
         <template v-else-if="userProfile">
           <div v-if="activeTab==='general'">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-10">
-              <div>
-                <h3 class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-4 pb-2 border-b border-slate-100">Información personal</h3>
-                <dl class="space-y-3">
-                  <template v-for="[label, val] in [['Nombre', userProfile.firstName], ['Apellido', userProfile.lastName], ['Nombre mostrado', userProfile.fullName], ['Descripción', userProfile.description], ['Correo electrónico', userProfile.email], ['Teléfono', userProfile.phone], ['Celular', userProfile.mobile]]" :key="label">
-                    <div class="flex flex-col">
-                      <dt class="text-[10px] uppercase text-slate-500 tracking-wider mb-0.5">{{ label }}</dt>
-                      <dd :class="['text-[12px] font-medium', val ? 'text-slate-900' : 'text-slate-400 italic']">{{ val || '—' }}</dd>
+            <div class="bg-white rounded-lg border border-gray-200 shadow-sm">
+              <div class="grid grid-cols-1 lg:grid-cols-5">
+                <!-- Columna Izquierda: Información Personal + Organización (60%) -->
+                <div class="lg:col-span-3 p-6 lg:border-r border-gray-200">
+                  <!-- Información Personal -->
+                  <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Información personal</h3>
+                  <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
+                    <template v-for="[label, val] in [['Nombre', userProfile.firstName], ['Apellido', userProfile.lastName], ['Nombre mostrado', userProfile.fullName], ['Descripción', userProfile.description], ['Correo electrónico', userProfile.email], ['Teléfono', userProfile.phone], ['Celular', userProfile.mobile]]" :key="label">
+                      <div class="flex flex-col">
+                        <dt class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">{{ label }}</dt>
+                        <dd :class="['text-sm font-medium', val ? 'text-gray-900' : 'text-gray-400 italic']">{{ val || '—' }}</dd>
+                      </div>
+                    </template>
+                  </dl>
+
+                  <!-- Divisor suave -->
+                  <div class="border-b border-gray-100 my-6"></div>
+
+                  <!-- Organización -->
+                  <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Organización</h3>
+                  <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
+                    <template v-for="[label, val] in [['Cargo', userProfile.title], ['Departamento', userProfile.department], ['Empresa', userProfile.company], ['Jefe directo', userProfile.manager], ['Oficina', userProfile.office]]" :key="label">
+                      <div class="flex flex-col">
+                        <dt class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">{{ label }}</dt>
+                        <dd :class="['text-sm font-medium', val ? 'text-gray-900' : 'text-gray-400 italic']">{{ val || '—' }}</dd>
+                      </div>
+                    </template>
+                  </dl>
+                </div>
+
+                <!-- Columna Derecha: Estado de Seguridad (40%) -->
+                <div class="lg:col-span-2 p-6 border-t lg:border-t-0 border-gray-200">
+                  <div v-if="accountOptions">
+                    <div class="flex items-center justify-between mb-5">
+                      <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest">Estado de Seguridad</h3>
+                      <span v-if="optionsSaving" class="text-[10px] text-blue-600 font-medium animate-pulse">Guardando...</span>
+                      <span v-else-if="optionsResult?.success" class="text-[10px] text-emerald-600 font-medium">Guardado ✓</span>
                     </div>
-                  </template>
-                </dl>
-              </div>
-              <div>
-                <h3 class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-4 pb-2 border-b border-slate-100">Organización</h3>
-                <dl class="space-y-3">
-                  <template v-for="[label, val] in [['Cargo', userProfile.title], ['Departamento', userProfile.department], ['Empresa', userProfile.company], ['Jefe directo', userProfile.manager], ['Oficina', userProfile.office]]" :key="label">
-                    <div class="flex flex-col">
-                      <dt class="text-[10px] uppercase text-slate-500 tracking-wider mb-0.5">{{ label }}</dt>
-                      <dd :class="['text-[12px] font-medium', val ? 'text-slate-900' : 'text-slate-400 italic']">{{ val || '—' }}</dd>
+                    <ul class="space-y-4">
+                      <li v-for="(label, key) in { account_locked: 'Cuenta bloqueada', account_disabled: 'Cuenta deshabilitada', must_change_password: 'Debe cambiar contraseña al inicio', password_never_expires: 'La contraseña nunca expira', smart_card_required: 'Requiere tarjeta inteligente', trusted_for_delegation: 'Confianza para delegación', store_reversible_encryption: 'Cifrado reversible' }" :key="key" class="flex items-center justify-between gap-3">
+                        <span class="text-sm text-gray-900">{{ label }}</span>
+                        <button
+                          type="button"
+                          role="switch"
+                          :aria-checked="localOptions[key]"
+                          :disabled="key === 'account_locked' && !accountOptions.account_locked"
+                          @click="localOptions[key] = !localOptions[key]; saveAccountOptions()"
+                          :class="[
+                            'relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2',
+                            localOptions[key] ? 'bg-blue-600' : 'bg-gray-300',
+                            (key === 'account_locked' && !accountOptions.account_locked) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                          ]"
+                        >
+                          <span
+                            :class="[
+                              'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                              localOptions[key] ? 'translate-x-4' : 'translate-x-0'
+                            ]"
+                          ></span>
+                        </button>
+                      </li>
+                    </ul>
+                    <div v-if="optionsResult && !optionsResult.success" class="mt-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+                      Error: {{ optionsResult.error }}
                     </div>
-                  </template>
-                </dl>
-              </div>
-              <div>
-                <div v-if="accountOptions">
-                  <div class="flex items-center justify-between mb-4 pb-2 border-b border-slate-100">
-                    <h3 class="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Estado de Seguridad</h3>
-                    <span v-if="optionsSaving" class="text-[10px] text-blue-600 font-medium animate-pulse">Guardando...</span>
-                    <span v-else-if="optionsResult?.success" class="text-[10px] text-emerald-600 font-medium">Guardado</span>
-                  </div>
-                  <ul class="space-y-3.5">
-                    <li v-for="(label, key) in { account_locked: 'Cuenta bloqueada', account_disabled: 'Cuenta deshabilitada', must_change_password: 'Debe cambiar contraseña al inicio', password_never_expires: 'La contraseña nunca expira', smart_card_required: 'Requiere tarjeta inteligente', trusted_for_delegation: 'Confianza para delegación', store_reversible_encryption: 'Cifrado reversible' }" :key="key" class="flex items-center justify-between gap-2 group">
-                      <span :class="['text-[12px] leading-tight', localOptions[key] ? 'text-slate-900 font-medium' : 'text-slate-500']">{{ label }}</span>
-                      <label class="relative inline-flex items-center cursor-pointer shrink-0">
-                        <input type="checkbox" v-model="localOptions[key]" class="sr-only peer" :disabled="key === 'account_locked' && !accountOptions.account_locked" @change="saveAccountOptions">
-                        <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600 peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"></div>
-                      </label>
-                    </li>
-                  </ul>
-                  <div v-if="userEntraStatus && userEntraStatus.signInActivity" class="mt-4 pt-4 border-t border-slate-100">
-                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Último  inicio en la nube</span>
-                    <p class="text-[12px] text-slate-900 font-medium">
-                      {{ userEntraStatus.signInActivity.lastSignInDateTime ? new Date(userEntraStatus.signInActivity.lastSignInDateTime).toLocaleString() : 'Nunca' }}
-                    </p>
-                    <p v-if="userEntraStatus.signInActivity.ipAddress" class="text-[11px] text-slate-500 mt-0.5">
-                      IP: {{ userEntraStatus.signInActivity.ipAddress }}
-                    </p>
+                    <div v-if="userEntraStatus && userEntraStatus.signInActivity" class="mt-6 pt-4 border-t border-gray-100">
+                      <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-2">Último inicio en la nube</span>
+                      <p class="text-sm text-gray-900 font-medium">
+                        {{ userEntraStatus.signInActivity.lastSignInDateTime ? new Date(userEntraStatus.signInActivity.lastSignInDateTime).toLocaleString() : 'Nunca' }}
+                      </p>
+                      <p v-if="userEntraStatus.signInActivity.ipAddress" class="text-xs text-gray-500 mt-1 font-mono">
+                        IP: {{ userEntraStatus.signInActivity.ipAddress }}
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1044,75 +1153,115 @@ const statusConfig = computed(() => {
           </div>
 
           <div v-else-if="activeTab==='account'">
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <div class="space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-2">
+              
+              <!-- Columna Izquierda: Datos -->
+              <div class="lg:border-r border-gray-200 lg:pr-8 pb-8 lg:pb-0">
+                
+                <!-- Identidad de Red -->
                 <div>
-                  <div class="flex items-center gap-2 mb-4 pb-2 border-b border-slate-100">
-                    <svg class="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/></svg>
-                    <h3 class="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Inicio de sesión</h3>
-                  </div>
+                  <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest mt-2 mb-4 border-b border-gray-100 pb-2">Identidad de Red</h3>
                   <dl class="space-y-4">
                     <div class="flex flex-col">
-                      <dt class="text-[11px] uppercase text-slate-500 tracking-wider mb-0.5">sAMAccountName</dt>
-                      <dd class="text-[13px] text-slate-900 font-mono font-medium">{{ userProfile.username }}</dd>
+                      <dt class="text-[11px] text-gray-400 uppercase mb-0.5">sAMAccountName</dt>
+                      <dd class="flex items-center text-sm font-mono text-gray-900">
+                        {{ userProfile.username }}
+                        <button @click="navigator.clipboard.writeText(userProfile.username)" title="Copiar" class="text-gray-400 hover:text-blue-500 cursor-pointer ml-2 transition-colors">
+                          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                        </button>
+                      </dd>
                     </div>
                     <div class="flex flex-col">
-                      <dt class="text-[11px] uppercase text-slate-500 tracking-wider mb-0.5">UPN (User Principal)</dt>
-                      <dd class="text-[12px] text-slate-900 font-mono font-medium">{{ userProfile.username }}@code.local</dd>
+                      <dt class="text-[11px] text-gray-400 uppercase mb-0.5">UPN (User Principal)</dt>
+                      <dd class="flex items-center text-sm font-mono text-gray-900">
+                        {{ userProfile.userPrincipalName || userProfile.username }}
+                        <button @click="navigator.clipboard.writeText(userProfile.userPrincipalName || userProfile.username)" title="Copiar" class="text-gray-400 hover:text-blue-500 cursor-pointer ml-2 transition-colors">
+                          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                        </button>
+                      </dd>
                     </div>
                     <div class="flex flex-col">
-                      <dt class="text-[11px] uppercase text-slate-500 tracking-wider mb-0.5">Nombre anterior (Win2000)</dt>
-                      <dd class="text-[12px] text-slate-900 font-mono font-medium">CODE\{{ userProfile.username }}</dd>
+                      <dt class="text-[11px] text-gray-400 uppercase mb-0.5">Nombre anterior (Win2000)</dt>
+                      <dd class="flex items-center text-sm font-mono text-gray-900">
+                        {{ (userProfile.userPrincipalName ? userProfile.userPrincipalName.split('@')[1].split('.')[0].toUpperCase() + '\\' : '') + userProfile.username }}
+                        <button @click="navigator.clipboard.writeText((userProfile.userPrincipalName ? userProfile.userPrincipalName.split('@')[1].split('.')[0].toUpperCase() + '\\\\' : '') + userProfile.username)" title="Copiar" class="text-gray-400 hover:text-blue-500 cursor-pointer ml-2 transition-colors">
+                          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                        </button>
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+
+                <!-- Auditoría de Acceso -->
+                <div>
+                  <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest mt-10 mb-4 border-b border-gray-100 pb-2">Auditoría de Acceso</h3>
+                  <dl class="space-y-4">
+                    <div class="flex flex-col">
+                      <dt class="text-[11px] text-gray-400 uppercase mb-0.5">Último inicio de sesión</dt>
+                      <dd class="text-sm font-mono text-gray-900">{{ userProfile.lastLogon }}</dd>
                     </div>
                     <div class="flex flex-col">
-                      <dt class="text-[11px] uppercase text-slate-500 tracking-wider mb-0.5">Ãšltimo inicio de sesión</dt>
-                      <dd class="text-[13px] font-medium text-slate-900">{{ userProfile.lastLogon }}</dd>
+                      <dt class="text-[11px] text-gray-400 uppercase mb-0.5">Cuenta creada</dt>
+                      <dd class="text-sm font-mono text-gray-900">{{ userProfile.created }}</dd>
                     </div>
                     <div class="flex flex-col">
-                      <dt class="text-[11px] uppercase text-slate-500 tracking-wider mb-0.5">Cuenta creada</dt>
-                      <dd class="text-[13px] font-medium text-slate-900">{{ userProfile.created }}</dd>
+                      <dt class="text-[11px] text-gray-400 uppercase mb-0.5">Último cambio de clave</dt>
+                      <dd class="text-sm font-mono text-gray-900">{{ userProfile.passwordLastSet }}</dd>
                     </div>
-                    <div class="flex flex-col">
-                      <dt class="text-[11px] uppercase text-slate-500 tracking-wider mb-0.5">Ãšltimo cambio de clave</dt>
-                      <dd class="text-[13px] font-medium text-slate-900">{{ userProfile.passwordLastSet }}</dd>
-                    </div>
-                    <div class="flex flex-col">
-                      <dt class="text-[11px] uppercase text-slate-500 tracking-wider mb-0.5">Intentos fallidos</dt>
-                      <dd :class="['text-[13px] font-semibold', userProfile.badPwdCount > 0 ? 'text-red-700' : 'text-emerald-700']">{{ userProfile.badPwdCount }}</dd>
+                    <div class="flex flex-col pt-2">
+                      <dt class="text-[11px] text-gray-400 uppercase mb-1">Intentos fallidos</dt>
+                      <dd>
+                        <span v-if="userProfile.badPwdCount === 0" class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-green-100 text-green-800">
+                          0 Intentos
+                        </span>
+                        <span v-else class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-100 text-red-800">
+                          {{ userProfile.badPwdCount }} Intentos fallidos
+                        </span>
+                      </dd>
                     </div>
                   </dl>
                 </div>
               </div>
-              <div>
+
+              <!-- Columna Derecha: Seguridad -->
+              <div class="lg:pl-8">
                 <div v-if="localOptions && Object.keys(localOptions).length">
-                  <h3 class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-4 pb-2 border-b border-slate-100">Seguridad de la cuenta</h3>
-                  <div class="mb-4">
-                    <label :class="['flex items-start gap-2 w-fit', accountOptions.account_locked ? 'cursor-pointer' : 'cursor-not-allowed opacity-70']">
-                      <input type="checkbox" v-model="localOptions.account_locked" :disabled="!accountOptions.account_locked" class="mt-0.5 w-3.5 h-3.5 border-slate-300 rounded-sm accent-slate-700 shrink-0"/>
-                      <span class="text-[12px] text-slate-800 font-medium leading-snug">
-                        Desbloquear cuenta<span v-if="accountOptions.account_locked">. Esta cuenta estÃ¡ bloqueada en este controlador de dominio de Active Directory.</span>
-                        <span v-else class="text-slate-400 font-normal ml-1">(La cuenta no estÃ¡ bloqueada)</span>
-                      </span>
-                    </label>
-                  </div>
-                  <div class="border border-slate-200 rounded-sm overflow-hidden">
-                    <div class="bg-slate-50 px-4 py-2.5 border-b border-slate-200 flex items-center justify-between">
-                      <span class="text-[11px] font-semibold text-slate-600 uppercase tracking-wider">Opciones Avanzadas</span>
+                  <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest mt-2 mb-4 border-b border-gray-100 pb-2">Seguridad y Opciones</h3>
+                  
+                  <!-- Estado de Bloqueo -->
+                  <div class="mb-8">
+                    <div v-if="!accountOptions.account_locked" class="bg-green-50 border border-green-200 rounded p-2 px-3 flex items-center gap-2">
+                      <svg class="w-4 h-4 text-green-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                      <span class="text-xs font-bold text-green-900">Cuenta Segura (0 bloqueos)</span>
                     </div>
-                    <div class="p-3 space-y-1.5">
-                      <label v-for="(label, key) in { must_change_password: 'El usuario debe cambiar la contraseña en el siguiente inicio de sesión', password_never_expires: 'La contraseña nunca expira', account_disabled: 'La cuenta está deshabilitada', smart_card_required: 'Se requiere tarjeta inteligente para el inicio de sesión', trusted_for_delegation: 'La cuenta es de confianza para delegación', store_reversible_encryption: 'Almacenar contraseña con cifrado reversible' }" :key="key" class="flex items-start gap-2 cursor-pointer group py-1 px-1 hover:bg-slate-50 rounded-sm">
-                        <input type="checkbox" v-model="localOptions[key]" :disabled="key === 'account_locked'" class="mt-0.5 w-3.5 h-3.5 rounded-sm border-slate-300 cursor-pointer shrink-0"/>
-                        <span :class="['text-[12px] leading-snug font-medium', localOptions[key] && (key === 'account_disabled' || key === 'must_change_password') ? 'text-amber-700' : 'text-slate-700']">
+                    <div v-else class="bg-red-50 border border-red-200 rounded p-3 flex flex-col gap-2">
+                      <div class="flex items-center gap-2">
+                        <svg class="w-4 h-4 text-red-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                        <span class="text-sm font-bold text-red-900">Cuenta Bloqueada</span>
+                      </div>
+                      <button @click="localOptions.account_locked = false; saveAccountOptions()" :disabled="optionsSaving" class="bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1.5 px-3 rounded shadow-sm transition-colors disabled:opacity-50 self-start">
+                        {{ optionsSaving ? 'Desbloqueando...' : 'Desbloquear Cuenta Ahora' }}
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Controles Avanzados -->
+                  <div>
+                    <div class="space-y-1.5">
+                      <label v-for="(label, key) in { must_change_password: 'El usuario debe cambiar la contraseña en el siguiente inicio de sesión', password_never_expires: 'La contraseña nunca expira', account_disabled: 'La cuenta está deshabilitada', smart_card_required: 'Se requiere tarjeta inteligente para el inicio de sesión', trusted_for_delegation: 'La cuenta es de confianza para delegación', store_reversible_encryption: 'Almacenar contraseña con cifrado reversible' }" :key="key" class="flex items-center gap-2 cursor-pointer group hover:bg-gray-50 p-1 -mx-1 rounded transition-colors">
+                        <input type="checkbox" v-model="localOptions[key]" @change="saveAccountOptions()" :disabled="key === 'account_locked'" class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 transition-colors cursor-pointer disabled:cursor-not-allowed"/>
+                        <span :class="['text-sm font-medium', localOptions[key] && (key === 'account_disabled' || key === 'must_change_password') ? 'text-yellow-700' : 'text-gray-700']">
                           {{ label }}
                         </span>
                       </label>
                     </div>
-                    <div class="border-t border-slate-200 px-3 py-2.5 flex flex-col gap-2">
-                      <button @click="saveAccountOptions" :disabled="optionsSaving" class="w-full text-[12px] font-medium text-slate-700 border border-slate-300 bg-white hover:bg-slate-50 rounded-sm py-1.5 disabled:opacity-40 flex items-center justify-center gap-1.5 shadow-sm transition-colors">
-                        <span v-if="optionsSaving" class="w-3 h-3 border-2 border-slate-400/30 border-t-slate-600 rounded-full animate-spin"></span>
-                        {{ optionsSaving ? 'Guardando...' : 'Aplicar cambios' }}
-                      </button>
-                      <div v-if="optionsResult" :class="['text-[11px] px-3 py-1.5 rounded-sm border', optionsResult.success ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200']">
+
+                    <div class="mt-4 min-h-[24px]">
+                      <div v-if="optionsSaving" class="text-xs text-blue-600 font-medium animate-pulse flex items-center gap-1.5">
+                        <span class="w-3 h-3 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin"></span>
+                        Aplicando cambios...
+                      </div>
+                      <div v-if="optionsResult && !optionsSaving" :class="['text-xs px-3 py-2 rounded-md border', optionsResult.success ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200']">
                         {{ optionsResult.success ? optionsResult.message : optionsResult.error }}
                       </div>
                     </div>
@@ -1151,7 +1300,7 @@ const statusConfig = computed(() => {
                         </td>
                       </tr>
                       <tr v-if="userProfile.groups.length === 0">
-                        <td class="px-4 py-10 text-center text-[12px] text-slate-400">Este usuario no pertenece a ningÃºn grupo local.</td>
+                        <td class="px-4 py-10 text-center text-[12px] text-slate-400">Este usuario no pertenece a ningún grupo local.</td>
                       </tr>
                     </tbody>
                   </table>
@@ -1279,16 +1428,29 @@ const statusConfig = computed(() => {
           </div>
 
           <div v-else-if="activeTab==='folders'">
-            <div class="flex items-center justify-between mb-5">
-              <div class="flex items-center gap-2">
-                <svg class="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
-                <h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Recursos de red y carpetas asignadas</h3>
-              </div>
-              <div class="relative w-64">
-                <input v-model="folderSearchQuery" type="text" placeholder="Buscar carpeta..." class="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-sm text-[12px] outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition-shadow">
-                <svg class="w-4 h-4 text-slate-400 absolute left-2.5 top-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-              </div>
+            <!-- Sub-tabs para Carpetas -->
+            <div class="flex border-b border-slate-200 mb-5">
+              <button @click="foldersSubTab = 'view'" :class="['px-4 py-2 text-sm font-medium border-b-2 transition-colors', foldersSubTab === 'view' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300']">
+                Permisos Actuales y Asignación
+              </button>
+              <button @click="foldersSubTab = 'clone'" :class="['px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2', foldersSubTab === 'clone' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300']">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
+                Clonar Permisos (Usuario Espejo)
+              </button>
             </div>
+
+            <!-- TAB: VIEW / ASSIGN -->
+            <div v-if="foldersSubTab === 'view'">
+              <div class="flex items-center justify-between mb-5">
+                <div class="flex items-center gap-2">
+                  <svg class="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                  <h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Recursos de red y carpetas asignadas</h3>
+                </div>
+                <div class="relative w-64">
+                  <input v-model="folderSearchQuery" type="text" placeholder="Buscar carpeta..." class="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-sm text-[12px] outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition-shadow">
+                  <svg class="w-4 h-4 text-slate-400 absolute left-2.5 top-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                </div>
+              </div>
             <div v-if="foldersLoading" class="flex flex-col items-center justify-center py-16 gap-3 border border-slate-200 rounded-sm bg-slate-50/50">
               <div class="w-6 h-6 border-2 border-slate-300 border-t-blue-500 rounded-full animate-spin"></div>
               <span class="text-[12px] text-slate-500 font-medium">Consultando permisos en el servidor...</span>
@@ -1349,11 +1511,104 @@ const statusConfig = computed(() => {
             </div>
           </div>
 
+          <!-- TAB: CLONE -->
+          <div v-else-if="foldersSubTab === 'clone'" class="pt-2">
+            <div class="bg-indigo-50 border-l-4 border-indigo-500 p-4 rounded-md mb-6">
+              <div class="flex">
+                <div class="flex-shrink-0">
+                  <svg class="h-5 w-5 text-indigo-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                  </svg>
+                </div>
+                <div class="ml-3">
+                  <p class="text-sm text-indigo-700">
+                    Ingresa el nombre del <strong>Usuario Origen (Plantilla)</strong>. Se calcularán sus permisos y se copiarán a <strong>{{ userProfile?.username }}</strong> sin afectar sus permisos actuales.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex items-end gap-4 mb-6 bg-white p-4 rounded-lg border border-slate-200">
+              <div class="flex-1 max-w-sm">
+                <label class="block text-xs font-medium text-slate-700 mb-1">Usuario Origen (sAMAccountName)</label>
+                <input v-model="cloneSourceUser" @keyup.enter="analyzeClone" type="text" placeholder="Ej. j.perez" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none" :disabled="isAnalyzingClone || isExecutingClone">
+              </div>
+              <button @click="analyzeClone" :disabled="!cloneSourceUser || isAnalyzingClone || isExecutingClone" class="bg-slate-800 text-white px-6 py-2 rounded-md text-sm font-medium hover:bg-slate-700 disabled:opacity-50 transition-colors flex items-center gap-2">
+                <svg v-if="isAnalyzingClone" class="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                <svg v-else class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                Comparar Permisos
+              </button>
+            </div>
+
+            <!-- Errores -->
+            <div v-if="cloneAnalyzeError" class="bg-red-50 text-red-600 p-3 rounded-md text-sm border border-red-100 mb-4">{{ cloneAnalyzeError }}</div>
+            <div v-if="cloneExecuteError" class="bg-red-50 text-red-600 p-3 rounded-md text-sm border border-red-100 mb-4">{{ cloneExecuteError }}</div>
+            <div v-if="cloneExecuteSuccess" class="bg-emerald-50 text-emerald-700 p-4 rounded-md text-sm border border-emerald-100 mb-4">
+              <p class="font-bold mb-2 flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                Clonación completada con éxito.
+              </p>
+              <ul class="list-disc pl-5 space-y-1 mt-2 text-xs">
+                <li v-for="(r, i) in cloneResults" :key="i">{{ r }}</li>
+              </ul>
+            </div>
+
+            <!-- Vista Previa -->
+            <div v-if="cloneDelta && !cloneExecuteSuccess" class="bg-white border border-slate-200 rounded-lg p-5">
+              <h3 class="text-sm font-semibold text-slate-900 mb-4">
+                Permisos a agregar para {{ userProfile?.username }}
+              </h3>
+              
+              <div v-if="cloneTotalChanges === 0" class="text-center py-8 bg-slate-50 rounded-lg border border-slate-100">
+                <p class="text-sm text-slate-500 font-medium">El usuario ya cuenta con los mismos accesos (o superiores).</p>
+                <p class="text-xs text-slate-400 mt-1">No se detectaron diferencias para clonar.</p>
+              </div>
+
+              <div v-else class="space-y-6">
+                <!-- Grupos AD -->
+                <div v-if="cloneDelta.groups_to_add?.length > 0">
+                  <h4 class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Se unirá a estos Grupos de AD:</h4>
+                  <div class="flex flex-wrap gap-2">
+                    <span v-for="grp in cloneDelta.groups_to_add" :key="grp" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-xs font-medium text-slate-700">
+                      <svg class="w-3.5 h-3.5 text-indigo-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                      {{ grp }}
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Carpetas -->
+                <div v-if="cloneDelta.folders_to_add?.length > 0">
+                  <h4 class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Se otorgarán estos permisos de carpeta:</h4>
+                  <ul class="border border-slate-200 rounded-md divide-y divide-slate-100">
+                    <li v-for="(fld, i) in cloneDelta.folders_to_add" :key="i" class="p-3 flex items-center justify-between text-sm hover:bg-slate-50">
+                      <div class="flex items-center gap-3">
+                        <svg class="w-4 h-4 text-blue-500 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+                        <span class="font-medium text-slate-700">{{ fld.path }}</span>
+                      </div>
+                      <span class="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700 ring-1 ring-inset ring-blue-700/20">
+                        {{ fld.access }}
+                      </span>
+                    </li>
+                  </ul>
+                </div>
+                
+                <div class="pt-4 flex justify-end">
+                  <button @click="executeClone" :disabled="isExecutingClone" class="bg-indigo-600 text-white px-5 py-2.5 rounded-md text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors flex items-center gap-2 shadow-sm">
+                    <svg v-if="isExecutingClone" class="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    Confirmar y Aplicar Clonación
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          </div>
+
           <div v-else-if="activeTab==='licenses'">
             <div class="flex justify-between items-center mb-5 pb-3 border-b border-slate-100">
               <div>
                 <h2 class="text-[14px] font-bold text-slate-800 uppercase tracking-wide">Licencias y Aplicaciones</h2>
-                <p class="text-[11px] text-slate-500 mt-0.5">Administre el acceso a los servicios de M365 (Sincronizado vÃ­a Microsoft Graph)</p>
+                <p class="text-[11px] text-slate-500 mt-0.5">Administre el acceso a los servicios de M365 (Sincronizado vía Microsoft Graph)</p>
               </div>
               <button @click="fetchLicenses" class="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 transition-colors">
                 <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
@@ -1488,10 +1743,10 @@ const statusConfig = computed(() => {
 
               <div v-else-if="userEntraStatus && userEntraStatus.id" class="grid grid-cols-1 md:grid-cols-12 gap-5">
                 
-                <!-- Columna Izquierda: Información BÃ¡sica (Span 8) -->
+                <!-- Columna Izquierda: Información Básica (Span 8) -->
                 <div class="md:col-span-8 bg-white border border-slate-200 shadow-sm rounded-md p-5 flex flex-col">
                   <div class="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
-                    <h2 class="text-[14px] font-bold text-slate-800 uppercase tracking-wide">Información BÃ¡sica</h2>
+                    <h2 class="text-[14px] font-bold text-slate-800 uppercase tracking-wide">Información Básica</h2>
                     <button 
                       @click="syncLocalAD" 
                       :disabled="isSyncingAd"
@@ -1531,7 +1786,7 @@ const statusConfig = computed(() => {
                     </div>
 
                     <div class="flex flex-col">
-                      <span class="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-1">Ãšltima sincronizaciÃ³n</span>
+                      <span class="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-1">Última sincronización</span>
                       <span class="text-[13px] font-medium text-slate-800">{{ userEntraStatus.onPremisesLastSyncDateTime ? new Date(userEntraStatus.onPremisesLastSyncDateTime).toLocaleString() : '--' }}</span>
                     </div>
                   </div>
@@ -1557,9 +1812,9 @@ const statusConfig = computed(() => {
                   </div>
                 </div>
 
-                <!-- Fila Inferior: AuditorÃ­a de Atributos (Span 12) -->
+                <!-- Fila Inferior: Auditoría de Atributos (Span 12) -->
                 <div class="md:col-span-12 bg-white border border-slate-200 shadow-sm rounded-md p-5">
-                  <h2 class="text-[14px] font-bold text-slate-800 uppercase tracking-wide mb-4 border-b border-slate-100 pb-3">AuditorÃ­a de atributos</h2>
+                  <h2 class="text-[14px] font-bold text-slate-800 uppercase tracking-wide mb-4 border-b border-slate-100 pb-3">Auditoría de atributos</h2>
                   
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
                     
@@ -1647,11 +1902,11 @@ const statusConfig = computed(() => {
                   <path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
                 </svg>
                 <h3 class="text-[15px] font-semibold text-slate-600 mb-1">Usuario no sincronizado</h3>
-                <p class="text-[12px] text-slate-400 max-w-sm">Este usuario aÃºn no existe en Microsoft Entra ID. Ejecute una sincronizaciÃ³n de AD Connect o espere al prÃ³ximo ciclo automÃ¡tico para que aparezca en la nube.</p>
+                <p class="text-[12px] text-slate-400 max-w-sm">Este usuario aún no existe en Microsoft Entra ID. Ejecute una sincronización de AD Connect o espere al próximo ciclo automático para que aparezca en la nube.</p>
                 <button @click="syncLocalAD" :disabled="isSyncingAd" class="mt-4 flex items-center gap-1.5 px-4 py-2 text-[12px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded transition-colors disabled:opacity-50">
                   <svg v-if="isSyncingAd" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                   <svg v-else class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                  {{ isSyncingAd ? 'Sincronizando...' : 'Forzar sincronizaciÃ³n de AD Connect' }}
+                  {{ isSyncingAd ? 'Sincronizando...' : 'Forzar sincronización de AD Connect' }}
                 </button>
               </div>
 
@@ -1681,12 +1936,12 @@ const statusConfig = computed(() => {
       <template #body>
         <div v-if="!offboardResult">
           <div class="mb-4 space-y-2">
-            <p>Al confirmar el offboarding para <strong>{{ userProfile.displayName }}</strong> ({{ userProfile.username }}), el sistema realizarÃ¡ automÃ¡ticamente las siguientes acciones:</p>
+            <p>Al confirmar el offboarding para <strong>{{ userProfile.displayName }}</strong> ({{ userProfile.username }}), el sistema realizará automáticamente las siguientes acciones:</p>
             <ul class="list-disc pl-5 space-y-1 mt-2">
               <li>Deshabilitar la cuenta en el Active Directory local.</li>
               <li>Revocar inmediatamente todas las sesiones de inicio de sesión en Entra ID / Microsoft 365.</li>
               <li>Remover todas las licencias de Office/Microsoft 365 asignadas al usuario.</li>
-              <li>Generar un script sugerido para convertir su buzÃ³n a Compartido.</li>
+              <li>Generar un script sugerido para convertir su buzón a Compartido.</li>
             </ul>
           </div>
         </div>
@@ -1704,7 +1959,7 @@ const statusConfig = computed(() => {
             <div class="relative bg-gray-900 rounded-lg p-3 border border-gray-700">
               <code class="text-emerald-400 font-mono break-all">{{ offboardResult.exchange_script }}</code>
             </div>
-            <p class="text-gray-400 mt-2 text-xs">Copia y ejecuta este script en Exchange Online PowerShell para conservar el buzÃ³n sin costo.</p>
+            <p class="text-gray-400 mt-2 text-xs">Copia y ejecuta este script en Exchange Online PowerShell para conservar el buzón sin costo.</p>
           </div>
         </div>
       </template>

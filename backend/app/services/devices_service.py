@@ -47,9 +47,11 @@ def get_all_devices():
 
 def ping_device(hostname: str) -> bool:
     """Realiza un ping rápido (1 paquete, timeout corto) al equipo."""
-    # En Windows, -n 1 es un ping, -w 1000 es timeout en ms
-    res = subprocess.run(["ping", "-n", "1", "-w", "1000", hostname], capture_output=True, text=True)
-    if "TTL=" in res.stdout:
+    # En Windows, -n 1 es un ping, -w 1000 es timeout en ms. Forzamos IPv4 con -4.
+    res = subprocess.run(["ping", "-4", "-n", "1", "-w", "1000", hostname], capture_output=True, text=True)
+    out = res.stdout.lower()
+    # Verificamos si hay respuesta real (bytes= o ttl=), ya que host inaccesible no tiene "bytes="
+    if "ttl=" in out or "bytes=" in out:
         return True
     return False
 

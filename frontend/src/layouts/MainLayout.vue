@@ -18,53 +18,78 @@ watch(
   { immediate: true }
 )
 
-const navigationItems = [
+const navigationGroups = [
   {
-    name: 'Inicio',
-    path: '/',
-    icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1',
+    title: 'MONITORING',
+    items: [
+      {
+        name: 'Inicio',
+        path: '/',
+        icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1',
+      },
+      {
+        name: 'Monitoreo',
+        path: '/monitoring',
+        icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
+      }
+    ]
   },
   {
-    name: 'Equipos',
-    path: '/devices',
-    icon: 'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
+    title: 'ACTIVE DIRECTORY',
+    items: [
+      {
+        name: 'Equipos',
+        path: '/devices',
+        icon: 'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
+      },
+      {
+        name: 'Cuentas AD',
+        path: '/cuentas',
+        icon: 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z',
+      },
+      {
+        name: 'Seguridad',
+        path: '/seguridad',
+        icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
+      },
+      {
+        name: 'Auditoría IT',
+        path: '/auditoria',
+        icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4',
+      }
+    ]
   },
   {
-    name: 'Cuentas AD',
-    path: '/cuentas',
-    icon: 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z',
-  },
-  {
-    name: 'Servidor Archivos',
-    path: '/fileserver',
-    icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z',
-  },
-  {
-    name: 'Seguridad',
-    path: '/seguridad',
-    icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
-  },
-  {
-    name: 'Monitoreo',
-    path: '/monitoring',
-    icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
-  },
-  {
-    name: 'Servidor Impresión',
-    path: '/printers',
-    icon: 'M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z',
-  },
-  {
-    name: 'Gestor RDS',
-    path: '/rds',
-    icon: 'M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2',
-  },
-  {
-    name: 'Gestión Wi-Fi',
-    path: '/wifi',
-    icon: 'M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0',
-  },
+    title: 'CORE SERVICES',
+    items: [
+      {
+        name: 'Servidor Archivos',
+        path: '/fileserver',
+        icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z',
+      },
+      {
+        name: 'Servidor Impresión',
+        path: '/printers',
+        icon: 'M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z',
+      },
+      {
+        name: 'Gestor RDS',
+        path: '/rds',
+        icon: 'M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2',
+      },
+      {
+        name: 'Gestión Wi-Fi',
+        path: '/wifi',
+        icon: 'M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0',
+      }
+    ]
+  }
 ]
+
+// Mantener compatibilidad con mobile (si la lista es plana)
+const navigationItems = computed(() => {
+  return navigationGroups.flatMap(group => group.items)
+})
 
 const currentTime = ref('')
 function updateClock() {
@@ -88,7 +113,7 @@ function isActive(path) {
   return route.path === path || route.path.startsWith(path + '/')
 }
 
-const sidebarWidth = computed(() => sidebarCollapsed.value ? 'w-14' : 'w-56')
+const sidebarWidth = computed(() => sidebarCollapsed.value ? 'w-16' : 'w-56')
 
 const displayName = ref(localStorage.getItem('display_name') || 'Administrador')
 
@@ -160,7 +185,6 @@ const handleGlobalSearch = async () => {
   quickActionUser.value = null
   try {
     const token = localStorage.getItem('access_token')
-    // Usamos el endpoint de perfil para ver si hay un usuario exacto
     const res = await fetch(`${apiBase}/accounts/profile/${encodeURIComponent(searchQuery.value.trim())}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
@@ -203,7 +227,7 @@ const doQuickAction = async (actionUrl, method='POST') => {
   setTimeout(() => { qaStatus.value = '' }, 5000)
 }
 
-// Lógica de inactividad de 3 minutos (180,000 ms)
+// Lógica de inactividad de 3 minutos
 let inactivityTimer = null
 const INACTIVITY_LIMIT_MS = 3 * 60 * 1000 
 
@@ -248,79 +272,92 @@ onUnmounted(() => {
     <!-- Sidebar desktop (NIVEL 1) -->
     <aside
       :class="[
-        'hidden md:flex flex-col bg-slate-800 border-r border-slate-700 transition-all duration-200 ease-in-out shrink-0 z-20 shadow-xl shadow-slate-900/10',
+        'hidden md:flex flex-col bg-slate-800 border-r border-slate-700 transition-all duration-200 ease-in-out shrink-0 z-20 shadow-xl',
         sidebarWidth
       ]"
     >
       <!-- Brand -->
-      <div class="flex items-center h-12 px-3 border-b border-slate-700/80">
-        <div class="flex items-center gap-2 overflow-hidden w-full">
+      <div class="flex items-center h-12 px-4 border-b border-slate-700/80">
+        <div class="flex items-center gap-3 overflow-hidden w-full">
           <img src="/logo.png" alt="Logo" class="w-7 h-7 object-contain shrink-0" />
-          <span v-show="!sidebarCollapsed" class="text-[13px] font-semibold text-white tracking-wide whitespace-nowrap">AdInfra F2</span>
+          <span v-show="!sidebarCollapsed" class="text-sm font-semibold text-white tracking-wide whitespace-nowrap">AdInfra F2</span>
         </div>
       </div>
 
       <!-- Nav -->
-      <nav class="flex-1 py-4 space-y-1 overflow-y-auto px-2">
-        <router-link
-          v-for="item in navigationItems"
-          :key="item.path"
-          :to="item.path"
-          :class="[
-            'flex items-center gap-3 py-2 rounded-sm text-[13px] font-medium transition-all duration-150',
-            sidebarCollapsed ? 'justify-center px-0' : 'px-3',
-            isActive(item.path)
-              ? 'bg-slate-800 text-white border-l-[3px] border-blue-500 shadow-sm'
-              : 'text-slate-400 hover:bg-slate-800/60 hover:text-white border-l-[3px] border-transparent'
-          ]"
-        >
-          <svg
-            :class="['w-[18px] h-[18px] shrink-0', isActive(item.path) ? 'text-blue-400' : 'text-slate-500']"
-            fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
-          >
-            <path stroke-linecap="round" stroke-linejoin="round" :d="item.icon" />
-          </svg>
-          <span v-show="!sidebarCollapsed">{{ item.name }}</span>
-        </router-link>
+      <nav class="flex-1 py-4 overflow-y-auto overflow-x-hidden">
+        <template v-for="(group, gIdx) in navigationGroups" :key="gIdx">
+          <div v-show="!sidebarCollapsed" class="px-4 mt-6 mb-2">
+            <h3 class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{{ group.title }}</h3>
+          </div>
+          <div v-show="sidebarCollapsed && gIdx > 0" class="my-4 border-t border-slate-700/50 mx-4"></div>
+          
+          <ul class="space-y-0.5">
+            <li v-for="item in group.items" :key="item.path">
+              <router-link
+                :to="item.path"
+                :class="[
+                  'flex items-center gap-3 py-2.5 transition-all duration-150',
+                  sidebarCollapsed ? 'justify-center px-0' : 'px-4',
+                  isActive(item.path)
+                    ? 'border-l-4 border-blue-500 bg-gradient-to-r from-blue-900/40 to-transparent text-white'
+                    : 'text-slate-400 hover:bg-slate-800/60 hover:text-white border-l-4 border-transparent'
+                ]"
+              >
+                <svg
+                  :class="['w-5 h-5 shrink-0', isActive(item.path) ? 'text-white' : 'text-slate-500']"
+                  fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" :d="item.icon" />
+                </svg>
+                <span v-show="!sidebarCollapsed" class="text-[13px] font-medium truncate">{{ item.name }}</span>
+              </router-link>
+            </li>
+          </ul>
+        </template>
       </nav>
 
-      <!-- Collapse -->
-      <div class="border-t border-slate-700/80 p-2">
-        <button
-          @click="toggleSidebar"
-          class="flex items-center w-full py-2 rounded-sm text-slate-500 hover:text-white hover:bg-slate-800/60 transition-colors duration-200"
-          :class="sidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3'"
-        >
-          <svg
-            v-if="!sidebarCollapsed"
-            class="w-[18px] h-[18px] shrink-0"
-            fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+      <!-- Collapse / Footer -->
+      <div class="border-t border-slate-700/80 p-3">
+        <div class="flex items-center justify-between">
+          <button
+            @click="toggleSidebar"
+            class="flex items-center py-2 text-slate-500 hover:text-white transition-colors duration-200"
+            :class="sidebarCollapsed ? 'justify-center w-full' : 'gap-3 px-1'"
           >
-            <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
-          <svg
-            v-else
-            class="w-[18px] h-[18px] shrink-0"
-            fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
-          >
-            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
-          </svg>
-          <span v-show="!sidebarCollapsed" class="text-[13px] font-medium">Contraer menú</span>
-        </button>
+            <svg
+              v-if="!sidebarCollapsed"
+              class="w-[18px] h-[18px] shrink-0"
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+            <svg
+              v-else
+              class="w-[18px] h-[18px] shrink-0"
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+            <span v-show="!sidebarCollapsed" class="text-[13px] font-medium">Contraer menú</span>
+          </button>
+          
+          <span v-show="!sidebarCollapsed" class="text-[10px] text-slate-600 font-mono">v2.4.1 - PROD</span>
+        </div>
       </div>
     </aside>
 
     <!-- Sidebar móvil -->
     <aside
       :class="[
-        'fixed inset-y-0 left-0 z-40 flex flex-col w-60 bg-slate-800 border-r border-slate-700 transition-transform duration-200 ease-in-out md:hidden shadow-2xl',
+        'fixed inset-y-0 left-0 z-40 flex flex-col w-56 bg-slate-800 border-r border-slate-700 transition-transform duration-200 ease-in-out md:hidden shadow-2xl',
         mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
       ]"
     >
-      <div class="flex items-center justify-between h-12 px-3 border-b border-slate-800">
-        <div class="flex items-center gap-2">
+      <div class="flex items-center justify-between h-12 px-4 border-b border-slate-800">
+        <div class="flex items-center gap-3">
           <img src="/logo.png" alt="Logo" class="w-7 h-7 object-contain shrink-0" />
-          <span class="text-[13px] font-semibold text-white tracking-wide">AdInfra F2</span>
+          <span class="text-sm font-semibold text-white tracking-wide">AdInfra F2</span>
         </div>
         <button @click="closeMobileMenu" class="p-1 text-slate-400 hover:text-white">
           <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -329,27 +366,34 @@ onUnmounted(() => {
         </button>
       </div>
 
-      <nav class="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
-        <router-link
-          v-for="item in navigationItems"
-          :key="item.path"
-          :to="item.path"
-          @click="closeMobileMenu"
-          :class="[
-            'flex items-center gap-3 px-3 py-2.5 rounded-sm text-[13px] font-medium transition-all duration-150',
-            isActive(item.path)
-              ? 'bg-slate-800 text-white shadow-sm border-l-[3px] border-blue-500'
-              : 'text-slate-400 hover:bg-slate-800/60 hover:text-white border-l-[3px] border-transparent'
-          ]"
-        >
-          <svg
-            :class="['w-[18px] h-[18px] shrink-0', isActive(item.path) ? 'text-blue-400' : 'text-slate-500']"
-            fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
-          >
-            <path stroke-linecap="round" stroke-linejoin="round" :d="item.icon" />
-          </svg>
-          <span>{{ item.name }}</span>
-        </router-link>
+      <nav class="flex-1 overflow-y-auto py-2">
+        <template v-for="(group, gIdx) in navigationGroups" :key="gIdx">
+          <div class="px-5 mt-5 mb-2">
+            <h3 class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{{ group.title }}</h3>
+          </div>
+          <ul class="space-y-1">
+            <li v-for="item in group.items" :key="item.path">
+              <router-link
+                :to="item.path"
+                @click="closeMobileMenu"
+                :class="[
+                  'flex items-center gap-3 px-5 py-2.5 transition-all duration-150',
+                  isActive(item.path)
+                    ? 'bg-gradient-to-r from-blue-900/40 to-transparent text-white border-l-4 border-blue-500'
+                    : 'text-slate-400 hover:bg-slate-800/60 hover:text-white border-l-4 border-transparent'
+                ]"
+              >
+                <svg
+                  :class="['w-5 h-5 shrink-0', isActive(item.path) ? 'text-white' : 'text-slate-500']"
+                  fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" :d="item.icon" />
+                </svg>
+                <span class="text-[13px] font-medium">{{ item.name }}</span>
+              </router-link>
+            </li>
+          </ul>
+        </template>
       </nav>
     </aside>
 
@@ -357,7 +401,7 @@ onUnmounted(() => {
     <div class="flex flex-col flex-1 overflow-hidden">
 
       <!-- Header (NIVEL 2) -->
-      <header class="flex items-center justify-between h-12 px-4 sm:px-6 bg-white border-b border-slate-200 shrink-0 z-10 relative">
+      <header class="flex items-center justify-between h-12 px-4 sm:px-6 bg-white border-b border-gray-200 shadow-sm shrink-0 z-10 relative">
         <div class="flex items-center gap-4">
           <!-- Hamburguesa móvil -->
           <button
@@ -368,23 +412,12 @@ onUnmounted(() => {
               <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-
-          <!-- System Status -->
-          <div class="flex items-center gap-2 px-2 py-1 rounded bg-slate-50 border border-slate-100">
-            <span class="relative flex h-2 w-2">
-              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-            <span class="text-[11px] font-semibold text-slate-700 uppercase tracking-wide">System Online</span>
-          </div>
         </div>
 
-        <!-- Buscador global Prominente -->
+        <!-- Buscador Estilo CLI (Command Palette) -->
         <div class="hidden sm:block flex-1 max-w-lg mx-8 relative">
-          <div class="relative group">
-            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-500 transition-colors pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
+          <div class="relative group flex items-center">
+            <span class="absolute left-3 text-slate-500 font-mono text-sm pointer-events-none">></span>
             <input
               type="text"
               v-model="searchQuery"
@@ -392,9 +425,9 @@ onUnmounted(() => {
               @blur="closeSearchDropdown"
               @keydown.enter="handleGlobalSearch"
               placeholder="Buscar nombre o sAMAccountName y presiona Enter..."
-              class="w-full pl-9 pr-12 py-1.5 text-[12px] bg-slate-50 border border-slate-200 rounded-md text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 focus:bg-white transition-all shadow-inner"
+              class="w-full pl-7 pr-14 py-1.5 font-mono text-sm bg-white shadow-sm border border-gray-300 rounded text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
             />
-            <div class="absolute right-2 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded border border-slate-200 bg-white text-[9px] font-mono text-slate-400 pointer-events-none">
+            <div class="absolute right-2 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded border border-gray-300 bg-white text-[10px] font-mono text-gray-500 pointer-events-none shadow-sm">
               Ctrl+K
             </div>
           </div>
@@ -408,7 +441,7 @@ onUnmounted(() => {
             <!-- Quick Action Card -->
             <div v-if="isSearchingUser" class="p-4 text-center">
               <div class="inline-block w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mb-2"></div>
-              <p class="text-[11px] text-slate-500">Buscando cuenta...</p>
+              <p class="text-[11px] text-slate-500 font-mono">Buscando cuenta...</p>
             </div>
             <div v-else-if="quickActionUser" class="p-4 bg-slate-50/50">
               <div class="flex justify-between items-start mb-3">
@@ -457,36 +490,51 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div class="flex items-center gap-4">
-          <!-- Time -->
-          <span class="text-[11px] text-slate-500 font-mono tabular-nums hidden sm:inline">{{ currentTime }}</span>
-          <div class="w-px h-5 bg-slate-200 hidden sm:block"></div>
+        <div class="flex items-center gap-3">
           
-          <div class="flex items-center gap-3">
-            <!-- Notifications (Mock) -->
-            <button class="relative p-1.5 text-slate-400 hover:text-slate-600 transition-colors rounded hover:bg-slate-50">
-              <span class="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
-              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
-            </button>
+          <!-- Environment Indicator -->
+          <div class="hidden md:flex items-center gap-1.5">
+            <span class="text-[10px] text-gray-500 font-mono uppercase tracking-wider">Connected to: DC-01</span>
+            <span class="animate-pulse bg-green-500 rounded-full w-2 h-2"></span>
+          </div>
 
-            <!-- Perfil de Usuario -->
-            <div class="flex items-center gap-2 pl-2 border-l border-slate-200">
-              <div class="hidden sm:flex flex-col justify-center text-right">
-                <p class="text-[11.5px] font-semibold text-slate-800 leading-none">{{ displayName }}</p>
-                <p class="text-[10px] font-medium text-slate-500 mt-0.5 uppercase tracking-wide">IT Admin</p>
-              </div>
-              <div class="w-8 h-8 rounded bg-slate-100 flex items-center justify-center text-slate-600 border border-slate-200 cursor-pointer hover:bg-slate-200 transition-colors" @click="handleLogout" title="Cerrar sesión">
-                <span class="text-[11px] font-bold">{{ userInitials }}</span>
-              </div>
+          <!-- Vertical separator -->
+          <div class="w-px h-5 bg-gray-200 hidden sm:block mx-1"></div>
+
+          <!-- Terminal PTY -->
+          <button @click="router.push('/terminal')" class="relative p-1 text-gray-400 hover:text-blue-600 transition-colors rounded hover:bg-gray-50" title="Consola PowerShell">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </button>
+
+          <!-- Notifications -->
+          <button class="relative p-1 text-gray-400 hover:text-gray-600 transition-colors rounded hover:bg-gray-50">
+            <span class="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+          </button>
+
+          <!-- Vertical separator -->
+          <div class="w-px h-5 bg-gray-200 hidden sm:block mx-1"></div>
+
+          <!-- Perfil de Usuario -->
+          <div class="flex items-center gap-2">
+            <div class="hidden sm:flex flex-col justify-center text-right">
+              <p class="text-[11px] font-semibold text-gray-800 leading-none">{{ displayName }}</p>
+              <p class="text-[9px] font-medium text-gray-400 mt-0.5 uppercase tracking-widest">IT Admin</p>
+            </div>
+            <div class="w-7 h-7 rounded bg-gray-100 flex items-center justify-center text-gray-600 border border-gray-200 cursor-pointer hover:bg-gray-200 transition-colors" @click="handleLogout" title="Cerrar sesión">
+              <span class="text-[10px] font-bold">{{ userInitials }}</span>
             </div>
           </div>
+          
         </div>
       </header>
 
       <!-- Área de contenido (NIVEL 3) -->
-      <main class="flex-1 overflow-y-auto p-4 sm:p-6 bg-gradient-to-br from-orange-50/40 via-slate-50 to-blue-50/40">
+      <main class="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-50/50">
         <router-view />
       </main>
     </div>

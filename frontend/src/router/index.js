@@ -12,6 +12,8 @@ import RdsView from '@/pages/RdsView.vue'
 import WifiView from '@/pages/WifiView.vue'
 import SettingsView from '@/pages/SettingsView.vue'
 import SecurityView from '@/pages/SecurityView.vue'
+import AuditoriaView from '@/pages/AuditoriaView.vue'
+import TerminalView from '@/pages/TerminalView.vue'
 
 const routes = [
   {
@@ -50,6 +52,16 @@ const routes = [
         path: 'seguridad',
         name: 'Seguridad',
         component: SecurityView,
+      },
+      {
+        path: 'auditoria',
+        name: 'Auditoria',
+        component: AuditoriaView,
+      },
+      {
+        path: 'terminal',
+        name: 'Terminal',
+        component: TerminalView,
       },
       {
         path: 'cuentas/usuario/:username',

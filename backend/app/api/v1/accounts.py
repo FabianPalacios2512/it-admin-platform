@@ -109,6 +109,71 @@ def api_get_user_profile(username: str):
         raise HTTPException(status_code=500, detail=f"Error consultando el AD: {str(e)}")
 
 
+@router.get("/diagnose/{username}")
+async def api_diagnose_user(username: str):
+    """Realiza un diagnóstico rápido (Triage) del usuario consultando AD y Entra ID."""
+    from app.services.graph_service import graph_service
+    import datetime
+
+    diagnosis = {
+        "ad_status": "unknown",
+        "ad_issues": [],
+        "entra_status": "unknown",
+        "entra_issues": [],
+        "licenses": []
+    }
+
+    # 1. Active Directory Local
+    try:
+        options = get_account_options(username)
+        if not options:
+            diagnosis["ad_status"] = "error"
+            diagnosis["ad_issues"].append("Usuario no encontrado en AD local.")
+        else:
+            issues = []
+            if options.get("account_locked"):
+                issues.append("Cuenta BLOQUEADA en AD.")
+            if options.get("account_disabled"):
+                issues.append("Cuenta DESHABILITADA en AD.")
+            if options.get("must_change_password"):
+                issues.append("Debe cambiar contraseña al iniciar sesión.")
+            
+            # Check expiration date if any
+            if not options.get("password_never_expires"):
+                # Approximate password expiration check could go here if we fetch pwdLastSet and domain policy
+                # For now just note it
+                pass
+            
+            diagnosis["ad_issues"] = issues
+            diagnosis["ad_status"] = "error" if issues else "ok"
+    except Exception as e:
+        diagnosis["ad_status"] = "error"
+        diagnosis["ad_issues"].append(f"Error consultando AD: {str(e)}")
+
+    # 2. Microsoft Entra ID (Graph API)
+    try:
+        user_id = await graph_service.resolve_user_id(username)
+        user_info = await graph_service.get_user_info_and_licenses(user_id)
+        
+        graph_issues = []
+        if not user_info.get("accountEnabled", True):
+            graph_issues.append("Cuenta DESHABILITADA en M365/Entra ID.")
+            
+        licenses = user_info.get("licenses", [])
+        diagnosis["licenses"] = [lic.get("skuId") for lic in licenses]
+        if not licenses:
+            graph_issues.append("No tiene licencias de M365 asignadas.")
+            
+        diagnosis["entra_issues"] = graph_issues
+        diagnosis["entra_status"] = "error" if graph_issues else "ok"
+    except Exception as e:
+        diagnosis["entra_status"] = "error"
+        diagnosis["entra_issues"].append(f"No se pudo consultar Entra ID (¿Sincronizado?): {str(e)}")
+
+    return diagnosis
+
+
+
 @router.get("/locked")
 def api_get_locked_accounts():
     """Obtiene todas las cuentas bloqueadas en tiempo real desde el AD."""
@@ -223,11 +288,10 @@ def api_manage_proxy_address(req: ProxyAddressRequest):
         raise HTTPException(status_code=500, detail=f"Error gestionando alias: {str(e)}")
 
 
-@router.post("/offboard")
-async def api_offboard_user(req: UnlockRequest):
+@router.post("/offboard/{username}")
+async def api_offboard_user(username: str):
     """Ejecuta la baja automática de 1-click."""
-    username = req.username
-    admin_user = req.admin_user or "Sistema"
+    admin_user = "Sistema"
     results = []
     
     # 1. Disable AD Account
@@ -244,16 +308,23 @@ async def api_offboard_user(req: UnlockRequest):
     # 2. Revoke Sessions
     try:
         from app.services.graph_service import graph_service
-        await graph_service.revoke_sessions(username)
+        await graph_service.revoke_user_sessions(username)
         results.append("Sesiones de Entra ID revocadas.")
     except Exception as e:
         results.append(f"Graph Error (Sesiones): {str(e)}")
-        
+            
     # 3. Remove Licenses
     try:
         from app.services.graph_service import graph_service
         lic_res = await graph_service.remove_all_licenses(username)
-        results.append(lic_res.get("message", "Licencias removidas."))
+        if lic_res.get("success"):
+            results.append("Licencias de Microsoft 365 removidas.")
+            # Bust the cache for license summary
+            from app.services.graph_service import _license_summary_cache
+            _license_summary_cache["data"] = {}
+            _license_summary_cache["time"] = 0
+        else:
+            results.append(f"M365 Info: {lic_res.get('message')}")
     except Exception as e:
         results.append(f"Graph Error (Licencias): {str(e)}")
         

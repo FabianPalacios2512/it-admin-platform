@@ -3,11 +3,13 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import CreateUserDrawer from '../components/CreateUserDrawer.vue'
 import BaseModal from '../components/common/BaseModal.vue'
+import DiagnoseModal from '../components/DiagnoseModal.vue'
 
 const router = useRouter()
 const route = useRoute()
 
 const showCreateDrawer = ref(false)
+const showDiagnoseModal = ref(false)
 const searchQuery = ref('')
 const users = ref([])
 const isLoading = ref(false)
@@ -282,7 +284,7 @@ async function executeOffboard() {
   actionResult.value = null
   try {
     const adminUser = JSON.parse(atob(localStorage.getItem('access_token').split('.')[1])).sub || 'admin'
-    const res = await authFetch(`${API_BASE}/graph/users/${actionTargetUser.value}/offboard`, {
+    const res = await authFetch(`${API_BASE}/accounts/offboard/${actionTargetUser.value}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ admin_user: adminUser })
@@ -322,7 +324,7 @@ async function bulkResetPassword() {
 }
 
 async function bulkDisable() {
-  if (!confirm(`Â¿Bloquear inicio de sesión para ${selectedUsers.value.size} usuario(s)?`)) return
+  if (!confirm(`¿Bloquear inicio de sesión para ${selectedUsers.value.size} usuario(s)?`)) return
   bulkLoading.value = true
   const adminUser = JSON.parse(atob(localStorage.getItem('access_token').split('.')[1])).sub || 'admin'
   let success = 0, fail = 0
@@ -346,7 +348,7 @@ async function bulkDisable() {
 function exportCsv() {
   const selected = users.value.filter(u => selectedUsers.value.has(u.username))
   const headers = ['Nombre,Usuario,Cargo,Departamento,Estado']
-  const rows = selected.map(u => `"${u.fullName}","${u.username}@code.local","${u.title || ''}","${u.department || ''}","${statusLabels[u.status] || u.status}"`)
+  const rows = selected.map(u => `"${u.fullName}","${u.userPrincipalName || u.username}","${u.title || ''}","${u.department || ''}","${statusLabels[u.status] || u.status}"`)
   const csv = [...headers, ...rows].join('\n')
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
   const link = document.createElement('a')
@@ -454,34 +456,39 @@ function setFilter(filter) {
     <!-- Command Bar (Global) -->
     <div v-if="!isMfaContext" class="flex flex-col md:flex-row md:items-center justify-between mb-4 border-b border-slate-200 pb-3 gap-3">
       <div class="flex items-center gap-1 flex-wrap">
-        <button @click="showCreateDrawer = true" class="text-[12px] font-medium text-slate-700 hover:text-blue-600 hover:bg-slate-50 px-3 py-1.5 rounded transition-colors flex items-center gap-2">
-          <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+        <button @click="showDiagnoseModal = true" class="text-sm font-medium text-gray-900 hover:bg-gray-100 px-2 py-1 rounded-md transition-colors flex items-center gap-2">
+          <svg class="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z"/></svg>
+          Diagnóstico Express
+        </button>
+        <div class="w-px h-4 bg-gray-300 mx-1"></div>
+        <button @click="showCreateDrawer = true" class="text-sm font-medium text-gray-900 hover:bg-gray-100 px-2 py-1 rounded-md transition-colors flex items-center gap-2">
+          <svg class="w-4 h-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
           Nuevo usuario
         </button>
-        <div class="w-px h-4 bg-slate-200 mx-1"></div>
-        <button @click="commandViewProfile" :disabled="!hasSingleSelection" class="text-[12px] font-medium text-slate-700 hover:text-blue-600 hover:bg-slate-50 px-3 py-1.5 rounded transition-colors flex items-center gap-2 disabled:opacity-30 disabled:hover:text-slate-700 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default">
-          <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+        <div class="w-px h-4 bg-gray-300 mx-1"></div>
+        <button @click="commandViewProfile" :disabled="!hasSingleSelection" class="text-sm font-medium text-gray-900 hover:bg-gray-100 px-2 py-1 rounded-md transition-colors flex items-center gap-2 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default">
+          <svg class="w-4 h-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
           Ver perfil
         </button>
-        <button @click="bulkResetPassword" :disabled="!hasSelection || bulkLoading" class="text-[12px] font-medium text-slate-700 hover:text-blue-600 hover:bg-slate-50 px-3 py-1.5 rounded transition-colors flex items-center gap-2 disabled:opacity-30 disabled:hover:text-slate-700 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default">
-          <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+        <button @click="bulkResetPassword" :disabled="!hasSelection || bulkLoading" class="text-sm font-medium text-gray-900 hover:bg-gray-100 px-2 py-1 rounded-md transition-colors flex items-center gap-2 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default">
+          <svg class="w-4 h-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
           Restablecer contraseña
         </button>
-        <button @click="enterMfaContext(singleSelectedUser)" :disabled="!isSingleCloudUser" :title="!isSingleCloudUser ? 'Solo disponible para usuarios en la nube (con licencia)' : ''" class="text-[12px] font-medium text-slate-700 hover:text-blue-600 hover:bg-slate-50 px-3 py-1.5 rounded transition-colors flex items-center gap-2 disabled:opacity-30 disabled:hover:text-slate-700 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default">
-          <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+        <button @click="enterMfaContext(singleSelectedUser)" :disabled="!isSingleCloudUser" :title="!isSingleCloudUser ? 'Solo disponible para usuarios en la nube (con licencia)' : ''" class="text-sm font-medium text-gray-900 hover:bg-gray-100 px-2 py-1 rounded-md transition-colors flex items-center gap-2 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default">
+          <svg class="w-4 h-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
           MFA por usuario
         </button>
-        <button @click="bulkDisable" :disabled="!hasSelection || bulkLoading" class="text-[12px] font-medium text-slate-700 hover:text-blue-600 hover:bg-slate-50 px-3 py-1.5 rounded transition-colors flex items-center gap-2 disabled:opacity-30 disabled:hover:text-slate-700 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default">
-          <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+        <button @click="bulkDisable" :disabled="!hasSelection || bulkLoading" class="text-sm font-medium text-gray-900 hover:bg-gray-100 px-2 py-1 rounded-md transition-colors flex items-center gap-2 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default">
+          <svg class="w-4 h-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
           Bloquear sesión
         </button>
-        <button @click="exportCsv" :disabled="!hasSelection" class="text-[12px] font-medium text-slate-700 hover:text-blue-600 hover:bg-slate-50 px-3 py-1.5 rounded transition-colors flex items-center gap-2 disabled:opacity-30 disabled:hover:text-slate-700 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default">
-          <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        <button @click="exportCsv" :disabled="!hasSelection" class="text-sm font-medium text-gray-900 hover:bg-gray-100 px-2 py-1 rounded-md transition-colors flex items-center gap-2 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default">
+          <svg class="w-4 h-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
           Exportar
         </button>
-        <div class="w-px h-4 bg-slate-200 mx-1"></div>
-        <button @click="commandOffboard" :disabled="!hasSingleSelection" class="text-[12px] font-medium text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded transition-colors flex items-center gap-2 disabled:opacity-30 disabled:hover:text-red-600 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default">
-          <svg class="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12h-6"/></svg>
+        <div class="w-px h-4 bg-gray-300 mx-1"></div>
+        <button @click="commandOffboard" :disabled="!hasSingleSelection" class="text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded-md transition-colors flex items-center gap-2 disabled:opacity-30 disabled:hover:text-red-600 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default">
+          <svg class="w-4 h-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12h-6"/></svg>
           Desvincular
         </button>
       </div>
@@ -525,17 +532,17 @@ function setFilter(filter) {
     <!-- Filters & Search (No card, just text buttons) -->
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
       <div class="flex items-center gap-1 overflow-x-auto hide-scrollbar">
-        <button @click="setFilter('todos')" :class="['px-3 py-1 rounded text-[12px] font-medium transition-colors whitespace-nowrap', activeFilter==='todos' ? 'text-slate-900 border-b-2 border-slate-800' : 'text-slate-500 hover:text-slate-700']">Todos</button>
-        <button @click="setFilter('activos')" :class="['px-3 py-1 rounded text-[12px] font-medium transition-colors whitespace-nowrap', activeFilter==='activos' ? 'text-slate-900 border-b-2 border-slate-800' : 'text-slate-500 hover:text-slate-700']">Activos</button>
-        <button @click="setFilter('deshabilitados')" :class="['px-3 py-1 rounded text-[12px] font-medium transition-colors whitespace-nowrap', activeFilter==='deshabilitados' ? 'text-slate-900 border-b-2 border-slate-800' : 'text-slate-500 hover:text-slate-700']">Deshabilitados</button>
-        <button @click="setFilter('bloqueados')" :class="['px-3 py-1 rounded text-[12px] font-medium transition-colors whitespace-nowrap', activeFilter==='bloqueados' ? 'text-slate-900 border-b-2 border-slate-800' : 'text-slate-500 hover:text-slate-700']">Bloqueados</button>
-        <div class="w-px h-4 bg-slate-200 mx-2"></div>
-        <button @click="setFilter('licenciados')" :class="['px-3 py-1 rounded text-[12px] font-medium transition-colors whitespace-nowrap', activeFilter==='licenciados' ? 'text-blue-700 border-b-2 border-blue-600' : 'text-slate-500 hover:text-slate-700']">Con Licencia</button>
-        <button @click="setFilter('sin_licencia')" :class="['px-3 py-1 rounded text-[12px] font-medium transition-colors whitespace-nowrap', activeFilter==='sin_licencia' ? 'text-blue-700 border-b-2 border-blue-600' : 'text-slate-500 hover:text-slate-700']">Sin Licencia</button>
+        <button @click="setFilter('todos')" :class="['px-3 py-1 text-sm transition-colors whitespace-nowrap', activeFilter==='todos' ? 'text-gray-900 border-b-2 border-gray-900 font-semibold' : 'text-gray-500 hover:text-gray-700']">Todos</button>
+        <button @click="setFilter('activos')" :class="['px-3 py-1 text-sm transition-colors whitespace-nowrap', activeFilter==='activos' ? 'text-gray-900 border-b-2 border-gray-900 font-semibold' : 'text-gray-500 hover:text-gray-700']">Activos</button>
+        <button @click="setFilter('deshabilitados')" :class="['px-3 py-1 text-sm transition-colors whitespace-nowrap', activeFilter==='deshabilitados' ? 'text-gray-900 border-b-2 border-gray-900 font-semibold' : 'text-gray-500 hover:text-gray-700']">Deshabilitados</button>
+        <button @click="setFilter('bloqueados')" :class="['px-3 py-1 text-sm transition-colors whitespace-nowrap', activeFilter==='bloqueados' ? 'text-gray-900 border-b-2 border-gray-900 font-semibold' : 'text-gray-500 hover:text-gray-700']">Bloqueados</button>
+        <div class="w-px h-4 bg-gray-200 mx-2"></div>
+        <button @click="setFilter('licenciados')" :class="['px-3 py-1 text-sm transition-colors whitespace-nowrap', activeFilter==='licenciados' ? 'text-gray-900 border-b-2 border-gray-900 font-semibold' : 'text-gray-500 hover:text-gray-700']">Con Licencia</button>
+        <button @click="setFilter('sin_licencia')" :class="['px-3 py-1 text-sm transition-colors whitespace-nowrap', activeFilter==='sin_licencia' ? 'text-gray-900 border-b-2 border-gray-900 font-semibold' : 'text-gray-500 hover:text-gray-700']">Sin Licencia</button>
       </div>
       <div class="relative w-full md:w-[280px]">
-        <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-        <input v-model="searchQuery" type="text" placeholder="Buscar usuarios..." class="w-full pl-8 pr-3 py-1.5 text-[12px] bg-transparent border-b border-slate-300 hover:border-slate-400 focus:border-blue-500 outline-none text-slate-800 placeholder-slate-400 transition-colors" />
+        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+        <input v-model="searchQuery" type="text" placeholder="Buscar usuarios..." class="w-full pl-9 pr-3 py-1.5 text-sm bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors" />
       </div>
     </div>
 
@@ -544,16 +551,16 @@ function setFilter(filter) {
       <div class="overflow-x-auto">
         <table class="w-full text-left min-w-[900px]">
           <thead>
-            <tr class="border-b border-slate-200">
+            <tr class="border-b border-gray-300 bg-gray-50/50">
               <th class="pl-2 py-3 w-10">
-                <input type="checkbox" v-model="selectAll" @change="toggleSelectAll" class="w-4 h-4 border-slate-300 rounded focus:ring-blue-500 cursor-pointer text-blue-600 transition-colors">
+                <input type="checkbox" v-model="selectAll" @change="toggleSelectAll" class="w-4 h-4 border-gray-300 rounded focus:ring-blue-500 cursor-pointer text-blue-600 transition-colors">
               </th>
-              <th class="w-1/4 px-3 py-3 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer transition-colors">Nombre para mostrar</th>
-              <th class="w-1/6 px-3 py-3 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer transition-colors">Nombre de usuario</th>
-              <th class="w-1/6 px-3 py-3 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer transition-colors">Cargo</th>
-              <th class="w-1/6 px-3 py-3 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer transition-colors">Departamento</th>
-              <th class="w-32 px-3 py-3 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer transition-colors text-center">Licencia M365</th>
-              <th class="w-24 px-3 py-3 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer transition-colors text-center">Estado</th>
+              <th class="w-1/4 px-3 py-3 text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer transition-colors">Nombre para mostrar</th>
+              <th class="w-1/6 px-3 py-3 text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer transition-colors">Nombre de usuario</th>
+              <th class="w-1/6 px-3 py-3 text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer transition-colors">Cargo</th>
+              <th class="w-1/6 px-3 py-3 text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer transition-colors">Departamento</th>
+              <th class="w-32 px-3 py-3 text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer transition-colors text-center">Licencia M365</th>
+              <th class="w-24 px-3 py-3 text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer transition-colors text-center">Estado</th>
             </tr>
           </thead>
           <tbody :class="{'opacity-50 pointer-events-none animate-pulse': isMfaContext && mfaLoading}">
@@ -573,39 +580,39 @@ function setFilter(filter) {
               v-for="user in paginatedUsers" 
               :key="user.username"
               @click="goToUserProfile(user.username)"
-              :class="['border-b border-slate-100 transition-colors duration-150 cursor-pointer group', selectedUsers.has(user.username) ? 'bg-slate-100/60' : 'hover:bg-slate-50']"
+              :class="['border-b border-gray-200 transition-colors duration-150 cursor-pointer group', selectedUsers.has(user.username) ? 'bg-blue-50' : 'hover:bg-gray-50']"
             >
               <td class="pl-2 py-2.5 w-10" @click.stop>
-                <input type="checkbox" :checked="selectedUsers.has(user.username)" @change="toggleUser(user.username)" class="w-4 h-4 border-slate-300 rounded focus:ring-blue-500 cursor-pointer text-blue-600 transition-colors">
+                <input type="checkbox" :checked="selectedUsers.has(user.username)" @change="toggleUser(user.username)" class="w-4 h-4 border-gray-300 rounded focus:ring-blue-500 cursor-pointer text-blue-600 transition-colors">
               </td>
               <td class="px-3 py-2.5">
                 <div class="flex items-center gap-3">
                   <div :class="['w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-white text-[10px] font-medium', getAvatarColor(user.fullName)]">
                     {{ getInitials(user.fullName) }}
                   </div>
-                  <span class="text-[13px] text-slate-800 group-hover:text-blue-600 transition-colors">{{ user.fullName }}</span>
+                  <span class="text-sm font-medium text-gray-900 group-hover:text-blue-600 transition-colors">{{ user.fullName }}</span>
                 </div>
               </td>
               <td class="px-3 py-2.5">
                 <div class="flex items-center gap-1.5 group/upn">
-                  <span class="text-[12px] text-slate-600">{{ user.username.split('@')[0] }}</span>
+                  <span class="text-sm text-gray-600">{{ user.username.split('@')[0] }}</span>
                   <button 
                     @click="copyUpn(user.username.split('@')[0], $event)" 
-                    class="text-slate-300 hover:text-slate-600 opacity-0 group-hover/upn:opacity-100 transition-all p-0.5 rounded hover:bg-slate-200 shrink-0 relative"
+                    class="text-gray-400 hover:text-gray-700 opacity-0 group-hover/upn:opacity-100 transition-all p-0.5 rounded hover:bg-gray-200 shrink-0 relative"
                   >
                     <svg v-if="copiedUpn === user.username.split('@')[0]" class="w-3.5 h-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
                     <svg v-else class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-                    <span v-if="copiedUpn === user.username.split('@')[0]" class="absolute -top-7 left-1/2 -translate-x-1/2 bg-white text-slate-800 text-[10px] font-medium px-2 py-1 rounded shadow border border-slate-100 whitespace-nowrap z-30">
+                    <span v-if="copiedUpn === user.username.split('@')[0]" class="absolute -top-7 left-1/2 -translate-x-1/2 bg-white text-gray-800 text-[10px] font-medium px-2 py-1 rounded shadow border border-gray-200 whitespace-nowrap z-30">
                       Copiado
                     </span>
                   </button>
                 </div>
               </td>
               <td class="px-3 py-2.5">
-                <div class="text-[12px] text-slate-600 truncate max-w-[150px] xl:max-w-[180px]" :title="user.title">{{ user.title || '—' }}</div>
+                <div class="text-sm text-gray-600 truncate max-w-[150px] xl:max-w-[180px]" :title="user.title">{{ user.title || '—' }}</div>
               </td>
               <td class="px-3 py-2.5">
-                <div class="text-[12px] text-slate-500 truncate max-w-[150px] xl:max-w-[180px]" :title="user.department">{{ user.department || '—' }}</div>
+                <div class="text-sm text-gray-600 truncate max-w-[150px] xl:max-w-[180px]" :title="user.department">{{ user.department || '—' }}</div>
               </td>
               <td class="px-3 py-2.5 text-center">
                 <span v-if="licensesSummary[user.username.toLowerCase()] === true" class="text-[11px] text-slate-700">
@@ -683,7 +690,7 @@ function setFilter(filter) {
         <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 flex items-start gap-3">
           <svg class="w-5 h-5 text-gray-500 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
           <div>
-            <p class="font-medium text-gray-900 mb-1">Â¿EstÃ¡ seguro?</p>
+            <p class="font-medium text-gray-900 mb-1">¿Está seguro?</p>
             <p class="text-gray-600 leading-relaxed">Esto eliminarÃ¡ todos los métodos de autenticaciÃ³n (Microsoft Authenticator, SMS, etc.) del usuario <span class="font-bold">{{ actionTargetUser }}</span>. DeberÃ¡ re-registrar su MFA en el prÃ³ximo inicio de sesión.</p>
           </div>
         </div>
@@ -744,6 +751,9 @@ function setFilter(filter) {
     </Teleport>
 
     <CreateUserDrawer :is-open="showCreateDrawer" @close="showCreateDrawer = false" @user-created="fetchUsers(); showCreateDrawer = false" />
+
+    <!-- Modal Diagnóstico Express -->
+    <DiagnoseModal v-if="showDiagnoseModal" @close="showDiagnoseModal = false" />
   </div>
 </template>
 

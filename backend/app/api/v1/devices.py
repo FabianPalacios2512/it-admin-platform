@@ -21,7 +21,7 @@ async def action_ping(req: ActionRequest):
         is_online = ping_device(req.hostname)
         return {"success": True, "online": is_online}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"success": False, "detail": str(e)}
 
 @router.post("/reboot")
 async def action_reboot(req: ActionRequest):
@@ -29,7 +29,7 @@ async def action_reboot(req: ActionRequest):
         reboot_device(req.hostname)
         return {"success": True, "message": f"Orden de reinicio enviada a {req.hostname}."}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"success": False, "detail": str(e)}
 
 @router.post("/bitlocker")
 async def action_bitlocker(req: ActionRequest):
@@ -37,4 +37,4 @@ async def action_bitlocker(req: ActionRequest):
         status = get_bitlocker_status(req.hostname)
         return {"success": True, "data": status}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"success": False, "detail": str(e)}

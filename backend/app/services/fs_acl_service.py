@@ -796,6 +796,16 @@ def get_user_effective_folders_debug(username: str):
                     }}
                 }}
             }}
+foreach ($access in $acl.Access) {{
+                    $results += @{{
+                        Path = $p
+                        Account = $access.IdentityReference.Value
+                        Access = $access.FileSystemRights.ToString()
+                        Type = $access.AccessControlType.ToString()
+                        Inherited = $access.IsInherited
+                    }}
+                }}
+            }}
         }} catch {{ }}
     }}
     $results | ConvertTo-Json -Compress
@@ -896,3 +906,86 @@ def audit_effective_access(share_name: str, subpath: str):
         return data.get("data", [])
     except json.JSONDecodeError:
         raise ValueError(f"Error ejecutando PowerShell: {result.stderr or result.stdout}")
+
+def calculate_permission_delta(source_user: str, target_user: str) -> dict:
+    from app.services.ad_service import get_user_profile
+    from app.services.fs_acl_service import get_user_effective_folders
+
+    # 1. Obtener grupos AD
+    source_profile = get_user_profile(source_user)
+    target_profile = get_user_profile(target_user)
+    
+    source_groups = {g["name"] for g in source_profile.get("groups", [])}
+    target_groups = {g["name"] for g in target_profile.get("groups", [])}
+    
+    groups_to_add = list(source_groups - target_groups)
+    
+    # 2. Obtener carpetas (solo las explícitas o que estén en origen y no en destino)
+    source_folders = get_user_effective_folders(source_user)
+    target_folders = get_user_effective_folders(target_user)
+    
+    # Mapear carpetas de destino por ruta para fácil búsqueda
+    target_access_map = {f["path"]: f["access"] for f in target_folders}
+    
+    folders_to_add = []
+    
+    for sf in source_folders:
+        if sf["access"] == "Sin Acceso" or sf["access"] == "Denegar Acceso":
+            continue
+            
+        target_access = target_access_map.get(sf["path"], "Sin Acceso")
+        
+        if target_access == "Sin Acceso":
+            folders_to_add.append({
+                "path": sf["path"],
+                "access": sf["access"]
+            })
+            
+    return {
+        "groups_to_add": groups_to_add,
+        "folders_to_add": folders_to_add
+    }
+
+def execute_clone_delta(target_user: str, delta: dict, admin_user: str = "Sistema") -> list:
+    from app.services.ad_service import add_user_to_group
+    from app.services.fs_acl_service import add_acl
+    import time
+    
+    results = []
+    
+    # 1. Agregar a Grupos
+    for group in delta.get("groups_to_add", []):
+        try:
+            add_user_to_group(target_user, group)
+            results.append(f"✅ Agregado al grupo AD: {group}")
+            time.sleep(0.5) # Dar tiempo al AD
+        except Exception as e:
+            results.append(f"❌ Error al agregar al grupo {group}: {str(e)}")
+            
+    # 2. Agregar a Carpetas
+    for folder in delta.get("folders_to_add", []):
+        path = folder["path"]
+        access = folder["access"]
+        
+        parts = path.split("/")
+        share_name = parts[0]
+        subpath = "\\".join(parts[1:])
+        
+        # Mapear 'Control Total', 'Modificar', etc. a permisos PowerShell
+        permission_map = {
+            'Control Total': 'FullControl', 
+            'Modificar': 'Modify', 
+            'Lectura y Ejecución': 'ReadAndExecute', 
+            'Lectura': 'Read', 
+            'Escritura': 'Write'
+        }
+        
+        mapped_perm = permission_map.get(access, 'ReadAndExecute')
+        
+        try:
+            add_acl(share_name, subpath, target_user, mapped_perm)
+            results.append(f"✅ Permiso {access} otorgado en {path}")
+        except Exception as e:
+            results.append(f"❌ Error al otorgar permiso en {path}: {str(e)}")
+            
+    return results

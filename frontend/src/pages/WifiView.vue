@@ -1,4 +1,4 @@
-﻿<script setup>
+<script setup>
 import { ref, onMounted, computed } from 'vue'
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1'
@@ -94,7 +94,7 @@ const toggleBlock = async (client) => {
 }
 
 const restartAp = async (ap) => {
-  if (!confirm(`Â¿EstÃ¡s seguro de reiniciar el Access Point: ${ap.name}?`)) return
+  if (!confirm(`¿Estás seguro de reiniciar el Access Point: ${ap.name}?`)) return
   processingMac.value = ap.mac
   try {
     const res = await authFetch(`${API_BASE}/wifi/aps/${ap.mac}/restart`, { method: 'POST' })

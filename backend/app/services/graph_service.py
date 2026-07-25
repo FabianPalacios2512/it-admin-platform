@@ -204,6 +204,26 @@ class MicrosoftGraphService:
         data = await self._request("GET", f"/users/{user_id}/licenseDetails")
         return data.get("value", [])
 
+    async def get_user_info_and_licenses(self, user_id: str):
+        """Obtiene info básica de la cuenta y sus licencias para el diagnóstico."""
+        # 1. Info básica
+        try:
+            user_data = await self._request("GET", f"/users/{user_id}?$select=accountEnabled,userPrincipalName")
+        except Exception as e:
+            user_data = {"accountEnabled": True} # Fallback
+            
+        # 2. Licencias
+        try:
+            lic_data = await self._request("GET", f"/users/{user_id}/licenseDetails")
+            licenses = lic_data.get("value", [])
+        except Exception as e:
+            licenses = []
+            
+        return {
+            "accountEnabled": user_data.get("accountEnabled", True),
+            "licenses": licenses
+        }
+
     async def get_all_users_license_summary(self):
         """Devuelve un diccionario {username_lower: bool} indicando si tienen licencias."""
         global _license_summary_cache
@@ -246,11 +266,11 @@ class MicrosoftGraphService:
         return await self._request("POST", endpoint)
 
     async def get_m365_groups(self):
-        """Devuelve todos los grupos de Microsoft 365 y de Seguridad."""
-        # Filtramos un poco para traer los que probablemente importan
-        endpoint = "/groups?$select=id,displayName,groupTypes,mailEnabled,securityEnabled&$top=999"
+        """Devuelve todos los grupos de Microsoft 365 y de Seguridad (solo cloud-native)."""
+        endpoint = "/groups?$select=id,displayName,groupTypes,mailEnabled,securityEnabled,onPremisesSyncEnabled&$top=999"
         data = await self._request("GET", endpoint)
-        return data.get("value", [])
+        groups = data.get("value", [])
+        return [g for g in groups if not g.get("onPremisesSyncEnabled")]
 
     async def add_user_to_m365_group(self, username: str, group_id: str):
         """Añade un usuario a un grupo M365 usando $ref."""
@@ -282,11 +302,12 @@ class MicrosoftGraphService:
             raise
 
     async def get_user_m365_groups(self, username: str):
-        """Devuelve los grupos a los que pertenece el usuario."""
+        """Devuelve los grupos a los que pertenece el usuario (solo cloud-native)."""
         user_id = await self.resolve_user_id(username)
-        endpoint = f"/users/{user_id}/memberOf?$select=id,displayName,groupTypes"
+        endpoint = f"/users/{user_id}/memberOf?$select=id,displayName,groupTypes,onPremisesSyncEnabled"
         data = await self._request("GET", endpoint)
-        return data.get("value", [])
+        groups = data.get("value", [])
+        return [g for g in groups if not g.get("onPremisesSyncEnabled")]
 
     async def get_user_devices(self, username: str):
         """Devuelve los dispositivos registrados del usuario (Entra ID)."""

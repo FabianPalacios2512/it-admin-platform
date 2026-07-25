@@ -9,3 +9,5 @@ wmi
 apscheduler
 httpx
 cryptography
+websockets
+pywinpty

@@ -5,6 +5,8 @@ from app.services.fs_acl_service import get_acl, add_acl, remove_acl
 from app.services.ad_service import search_users, search_ad_groups
 from app.core.config import get_primary_server
 from pydantic import BaseModel
+from app.core.database import SessionLocal
+from app.models.audit import AuditLog
 
 router = APIRouter()
 
@@ -12,15 +14,18 @@ class ACLRequest(BaseModel):
     account: str
     permission: str = "ReadAndExecute" # ReadAndExecute, Modify, FullControl
     subpath: str = ""
+    admin_user: str = "Sistema"
 
 class ACLRemoveRequest(BaseModel):
     account: str
     subpath: str = ""
+    admin_user: str = "Sistema"
 
 class CreateFolderRequest(BaseModel):
     folder_name: str
     base_path: str = ""
     inherit_permissions: bool = True
+    admin_user: str = "Sistema"
 
 class CloudShareRequest(BaseModel):
     path: str = ""
@@ -60,6 +65,16 @@ def add_share_acl(share_name: str, req: ACLRequest):
     """Agrega o modifica un permiso en una ruta."""
     try:
         add_acl(share_name, req.subpath, req.account, req.permission)
+        db = SessionLocal()
+        db.add(AuditLog(
+            username=req.admin_user,
+            action=f"Asignó permiso ({req.permission})",
+            target=f"{share_name}\\{req.subpath} -> {req.account}",
+            status="Completado",
+            source="Web"
+        ))
+        db.commit()
+        db.close()
         return {"success": True, "message": "Permiso agregado correctamente."}
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
@@ -71,6 +86,16 @@ def remove_share_acl(share_name: str, req: ACLRemoveRequest):
     """Elimina todos los permisos de una cuenta en una ruta."""
     try:
         remove_acl(share_name, req.subpath, req.account)
+        db = SessionLocal()
+        db.add(AuditLog(
+            username=req.admin_user,
+            action="Removió permisos",
+            target=f"{share_name}\\{req.subpath} -> {req.account}",
+            status="Completado",
+            source="Web"
+        ))
+        db.commit()
+        db.close()
         return {"success": True, "message": "Permiso eliminado correctamente."}
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
@@ -79,6 +104,7 @@ def remove_share_acl(share_name: str, req: ACLRemoveRequest):
 
 class BreakInheritanceRequest(BaseModel):
     subpath: str = ""
+    admin_user: str = "Sistema"
 
 @router.post("/shares/{share_name}/acl/break-inheritance")
 def break_share_inheritance(share_name: str, req: BreakInheritanceRequest):
@@ -86,6 +112,16 @@ def break_share_inheritance(share_name: str, req: BreakInheritanceRequest):
     from app.services.fs_acl_service import disable_inheritance_and_copy
     try:
         disable_inheritance_and_copy(share_name, req.subpath)
+        db = SessionLocal()
+        db.add(AuditLog(
+            username=req.admin_user,
+            action="Rompió herencia de carpeta",
+            target=f"{share_name}\\{req.subpath}",
+            status="Completado",
+            source="Web"
+        ))
+        db.commit()
+        db.close()
         return {"success": True, "message": "Herencia deshabilitada correctamente."}
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
@@ -98,6 +134,16 @@ def create_folder(share_name: str, req: CreateFolderRequest):
     from app.services.fs_acl_service import create_folder as fs_create_folder
     try:
         fs_create_folder(share_name, req.base_path, req.folder_name, req.inherit_permissions)
+        db = SessionLocal()
+        db.add(AuditLog(
+            username=req.admin_user,
+            action="Creó carpeta",
+            target=f"{share_name}\\{req.base_path}\\{req.folder_name}",
+            status="Completado",
+            source="Web"
+        ))
+        db.commit()
+        db.close()
         return {"success": True, "message": f"Carpeta '{req.folder_name}' creada."}
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
@@ -177,5 +223,35 @@ def search_ad_for_acl(q: str = "", limit: int = 15):
             print(f"⚠️ [FS Search] Error buscando usuarios: {e}")
 
         return results[:limit]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class ClonePreviewRequest(BaseModel):
+    source_user: str
+    target_user: str
+
+@router.post("/clone-preview")
+def preview_clone_permissions(req: ClonePreviewRequest):
+    """Devuelve el delta de permisos (qué ganará el destino)."""
+    from app.services.fs_acl_service import calculate_permission_delta
+    try:
+        delta = calculate_permission_delta(req.source_user, req.target_user)
+        return {"success": True, "delta": delta}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class CloneExecuteRequest(BaseModel):
+    source_user: str
+    target_user: str
+    delta: dict
+    admin_user: str = "Sistema"
+
+@router.post("/clone-execute")
+def execute_clone_permissions(req: CloneExecuteRequest):
+    """Ejecuta la clonación de permisos usando el delta."""
+    from app.services.fs_acl_service import execute_clone_delta
+    try:
+        result = execute_clone_delta(req.target_user, req.delta, req.admin_user)
+        return {"success": True, "results": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
