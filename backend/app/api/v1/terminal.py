@@ -21,8 +21,8 @@ async def terminal_websocket(websocket: WebSocket):
     loop = asyncio.get_running_loop()
 
     try:
-        # Spawn a native Windows PTY running powershell
-        process = PtyProcess.spawn("powershell.exe", dimensions=(120, 30))
+        # Spawn a native Windows PTY running powershell (rows, cols)
+        process = PtyProcess.spawn("powershell.exe", dimensions=(30, 120))
     except Exception as e:
         await websocket.send_text(f"\r\n\x1b[31mError starting PTY: {e}\x1b[0m\r\n")
         await websocket.close()
@@ -64,9 +64,10 @@ async def terminal_websocket(websocket: WebSocket):
                     import json
                     msg = json.loads(data)
                     if process.isalive():
-                        process.set_size(msg["cols"], msg["rows"])
-                except Exception:
-                    pass
+                        # pywinpty expects (rows, cols)
+                        process.set_size(msg["rows"], msg["cols"])
+                except Exception as e:
+                    print(f"Error resizing: {e}")
                 continue
 
             if process.isalive():

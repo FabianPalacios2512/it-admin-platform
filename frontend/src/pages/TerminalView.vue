@@ -27,12 +27,13 @@ function initTerminal() {
   term.loadAddon(fitAddon)
   
   if (terminalContainer.value) {
+    // Retrasar fit() para asegurar que el DOM (y transiciones) terminaron
     term.open(terminalContainer.value)
-    fitAddon.fit()
-    // Limpiar terminal antes de conectar (PTY enviará su propia info)
-    term.clear()
-    
-    connectWebSocket()
+    setTimeout(() => {
+      fitAddon.fit()
+      term.clear()
+      connectWebSocket()
+    }, 100)
   }
 
   // Con PTY real, enviamos la tecla instantáneamente (el servidor hace echo)
