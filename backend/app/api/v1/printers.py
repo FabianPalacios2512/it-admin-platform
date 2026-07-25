@@ -27,6 +27,7 @@ class PrinterCreate(BaseModel):
 class PrinterUpdate(BaseModel):
     new_name: str
     new_ip: str
+    new_driver: Optional[str] = None
     shared: bool = False
     share_name: Optional[str] = ""
 
@@ -67,9 +68,9 @@ def create_printer(req: PrinterCreate):
 
 @router.put("/{name}")
 def update_printer(name: str, req: PrinterUpdate):
-    """Edita la impresora (reenruta IP o cambia nombre)."""
+    """Edita la impresora (reenruta IP, cambia nombre o driver)."""
     try:
-        update_printer_ip(name, req.new_name, req.new_ip, req.shared, req.share_name)
+        update_printer_ip(name, req.new_name, req.new_ip, req.new_driver, req.shared, req.share_name)
         return {"success": True, "message": f"Impresora actualizada a {req.new_ip}."}
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
@@ -157,5 +158,20 @@ def api_get_printer_history(name: str):
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{name}/ping")
+def api_ping_printer(name: str, ip: str):
+    """Realiza un ping a la IP de la impresora (o advierte si es WSD/Local)."""
+    if not ip or ip.startswith("WSD-") or ip.startswith("PORTPROMPT:") or ip.startswith("SHRFAX:"):
+        return {"success": False, "message": "No soportado (WSD/Local)"}
+    
+    import subprocess
+    # En Windows ping -n 2 -w 1000
+    res = subprocess.run(["ping", "-n", "2", "-w", "1000", ip], capture_output=True, text=True)
+    if res.returncode == 0:
+        return {"success": True, "message": "Responde al Ping"}
+    else:
+        return {"success": False, "message": "Offline (No responde)"}
 
 

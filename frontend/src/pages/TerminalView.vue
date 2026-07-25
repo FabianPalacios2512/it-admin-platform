@@ -1,16 +1,18 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue'
-import { Terminal } from 'xterm'
-import { FitAddon } from 'xterm-addon-fit'
-import 'xterm/css/xterm.css'
+// Código de terminal comentado por seguridad durante pruebas
+// import { Terminal } from 'xterm'
+// import { FitAddon } from 'xterm-addon-fit'
+// import 'xterm/css/xterm.css'
 
 const terminalContainer = ref(null)
-const connectionStatus = ref('Desconectado')
+const connectionStatus = ref('Deshabilitado temporalmente')
 let term = null
 let fitAddon = null
 let ws = null
 
 function initTerminal() {
+  /*
   term = new Terminal({
     cursorBlink: true,
     fontFamily: '"Fira Code", monospace, courier-new, courier',
@@ -41,9 +43,11 @@ function initTerminal() {
       ws.send(data)
     }
   })
+  */
 }
 
 function connectWebSocket() {
+  /*
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   // Asegurar apuntar al backend que suele estar en puerto 8000 en dev
   const wsUrl = `${protocol}//${window.location.hostname}:8000/api/v1/terminal/ws`
@@ -70,21 +74,26 @@ function connectWebSocket() {
   ws.onerror = (err) => {
     console.error('WS Error:', err)
   }
+  */
 }
 
 onMounted(() => {
-  initTerminal()
+  // initTerminal()
+  /*
   window.addEventListener('resize', () => {
     if (fitAddon && term && ws && ws.readyState === WebSocket.OPEN) {
       fitAddon.fit()
       ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }))
     }
   })
+  */
 })
 
 onBeforeUnmount(() => {
+  /*
   if (ws) ws.close()
   if (term) term.dispose()
+  */
 })
 </script>
 

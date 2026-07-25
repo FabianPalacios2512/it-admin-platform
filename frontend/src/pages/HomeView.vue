@@ -19,22 +19,13 @@ const securityRadar = ref([])
 const recentEvents = ref([])
 let pollInterval = null
 
-// Mock data for new requirements
-const printerStatus = ref({
-  jammed: 0,
-  spoolerOk: true
+const lockedAccountsList = ref([])
+const wifiStats = ref({
+  totalAps: 0,
+  offlineAps: 0,
+  totalClients: 0,
+  avgExperience: 0
 })
-
-const lockedAccountsList = ref([
-  { username: 'jdoe', displayName: 'John Doe', reason: 'Failed: Bad Password (x5)', ip: '192.168.20.45', time: '08:15 AM' },
-  { username: 'msmith', displayName: 'Maria Smith', reason: 'Failed: Account Lockout Policy', ip: '10.0.1.12', time: '09:30 AM' }
-])
-
-const coreServers = ref([
-  { name: 'DC-01', ip: '192.168.20.100', online: true, cpu: 25, disk: 45 },
-  { name: 'FS-01', ip: '192.168.20.110', online: true, cpu: 15, disk: 82 },
-  { name: 'PRN-01', ip: '192.168.20.120', online: false, cpu: 0, disk: 0 }
-])
 
 onMounted(async () => {
   const fetchEvents = async () => {
@@ -87,8 +78,51 @@ onMounted(async () => {
     } catch (e) {}
   }
   
-  await Promise.all([fetchEvents(), fetchHealthStats(), fetchGraphData()])
-  pollInterval = setInterval(() => { fetchEvents(); fetchHealthStats(); fetchGraphData(); }, 10000)
+  const fetchLockedAccounts = async () => {
+    try {
+      const token = localStorage.getItem('access_token')
+      const res = await fetch('/api/v1/accounts/locked', { headers: { 'Authorization': `Bearer ${token}` } })
+      if (res.ok) {
+        lockedAccountsList.value = await res.json()
+      }
+    } catch (e) {}
+  }
+
+  const fetchWifiStats = async () => {
+    try {
+      const token = localStorage.getItem('access_token')
+      const res = await fetch('/api/v1/wifi/aps?site=default', { headers: { 'Authorization': `Bearer ${token}` } })
+      if (res.ok) {
+        const result = await res.json()
+        const aps = result.data || []
+        
+        let clients = 0
+        let totalExp = 0
+        let expCount = 0
+        let offline = 0
+        
+        aps.forEach(ap => {
+          clients += ap.clients_count || 0
+          if (ap.status !== 'online') {
+            offline++
+          } else if (ap.clients_count > 0) {
+            totalExp += ap.satisfaction || 0
+            expCount++
+          }
+        })
+        
+        wifiStats.value = {
+          totalAps: aps.length,
+          offlineAps: offline,
+          totalClients: clients,
+          avgExperience: expCount > 0 ? Math.round(totalExp / expCount) : 0
+        }
+      }
+    } catch (e) {}
+  }
+  
+  await Promise.all([fetchEvents(), fetchHealthStats(), fetchGraphData(), fetchLockedAccounts(), fetchWifiStats()])
+  pollInterval = setInterval(() => { fetchEvents(); fetchHealthStats(); fetchGraphData(); fetchLockedAccounts(); fetchWifiStats(); }, 10000)
 })
 
 onUnmounted(() => { if (pollInterval) clearInterval(pollInterval) })
@@ -138,9 +172,24 @@ const getInitials = (name) => {
   return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
 }
 
-const handleUnlock = (username) => {
-  // Placeholder — en producción esto llamaría al endpoint de desbloqueo
-  alert(`⚠️ Acción de desbloqueo para "${username}" pendiente de integración con el backend.`)
+const handleUnlock = async (username) => {
+  if (!confirm(`¿Estás seguro de desbloquear la cuenta de ${username}?`)) return
+  try {
+    const token = localStorage.getItem('access_token')
+    const res = await fetch('/api/v1/accounts/unlock', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username })
+    })
+    if (res.ok) {
+      lockedAccountsList.value = lockedAccountsList.value.filter(u => u.username !== username)
+      healthStats.value.locked_users = Math.max(0, healthStats.value.locked_users - 1)
+    } else {
+      alert("Error al desbloquear la cuenta.")
+    }
+  } catch (e) {
+    alert("Error de red al intentar desbloquear.")
+  }
 }
 </script>
 
@@ -195,36 +244,45 @@ const handleUnlock = (username) => {
     <!-- Middle Section: Grid 2 Columnas -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       
-      <!-- Salud Servidores Core -->
+      <!-- Salud de Red Wi-Fi -->
       <div class="bg-white rounded-xl border border-gray-200/75 shadow-sm flex flex-col">
-        <div class="px-4 py-3 border-b border-gray-200 bg-gray-50 rounded-t-xl">
-          <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Salud de Servidores Core</h2>
+        <div class="px-4 py-3 border-b border-gray-200 bg-gray-50 flex justify-between items-center rounded-t-xl">
+          <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Estado de Red Wi-Fi</h2>
+          <button class="text-xs font-medium text-blue-600 hover:underline" @click="router.push('/wifi')">Ir al Dashboard</button>
         </div>
-        <div class="p-4 flex flex-col gap-3">
-          <div v-for="srv in coreServers" :key="srv.name" class="flex items-center justify-between border-b border-gray-100 pb-3 last:border-0 last:pb-0">
-            <div class="w-28 flex flex-col">
-              <span class="text-sm font-semibold text-gray-900">{{ srv.name }}</span>
-              <span class="text-xs text-gray-500">{{ srv.ip }}</span>
+        <div class="p-5 flex flex-col justify-center gap-6 flex-1">
+          <div class="grid grid-cols-2 gap-4">
+            <div class="bg-gray-50 rounded-lg p-3 text-center border border-gray-100">
+              <span class="block text-3xl font-extrabold text-gray-900">{{ wifiStats.totalAps }}</span>
+              <span class="block text-[11px] font-semibold text-gray-500 uppercase tracking-wider mt-1">Access Points</span>
+            </div>
+            <div class="bg-gray-50 rounded-lg p-3 text-center border border-gray-100">
+              <span class="block text-3xl font-extrabold text-blue-600">{{ wifiStats.totalClients }}</span>
+              <span class="block text-[11px] font-semibold text-gray-500 uppercase tracking-wider mt-1">Disp. Conectados</span>
+            </div>
+          </div>
+          
+          <div class="space-y-4 px-2">
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="text-sm font-medium text-gray-700 flex items-center gap-2">
+                  <span class="h-2 w-2 rounded-full" :class="wifiStats.offlineAps > 0 ? 'bg-red-500' : 'bg-green-500'"></span>
+                  APs Offline
+                </span>
+                <span class="text-sm font-bold" :class="wifiStats.offlineAps > 0 ? 'text-red-600' : 'text-gray-900'">{{ wifiStats.offlineAps }}</span>
+              </div>
             </div>
             
-            <div class="flex-1 max-w-[200px] grid grid-cols-2 gap-4">
-              <div class="flex flex-col gap-1">
-                <div class="flex justify-between text-[11px] text-gray-400 font-medium"><span>CPU</span><span>{{srv.cpu}}%</span></div>
-                <div class="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                  <div :class="['h-full rounded-full transition-all duration-500', getBarColor(srv.cpu)]" :style="{width: srv.cpu + '%'}"></div>
-                </div>
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="text-sm font-medium text-gray-700">Experiencia Promedio</span>
+                <span class="text-sm font-bold text-gray-900">{{ wifiStats.avgExperience }}%</span>
               </div>
-              <div class="flex flex-col gap-1">
-                <div class="flex justify-between text-[11px] text-gray-400 font-medium"><span>DSK</span><span>{{srv.disk}}%</span></div>
-                <div class="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                  <div :class="['h-full rounded-full transition-all duration-500', getBarColor(srv.disk)]" :style="{width: srv.disk + '%'}"></div>
-                </div>
+              <div class="w-full bg-gray-200 rounded-full h-2">
+                <div class="h-2 rounded-full transition-all duration-1000" 
+                     :class="wifiStats.avgExperience >= 80 ? 'bg-green-500' : (wifiStats.avgExperience >= 50 ? 'bg-yellow-500' : 'bg-red-500')"
+                     :style="{width: wifiStats.avgExperience + '%'}"></div>
               </div>
-            </div>
-            
-            <div class="w-20 text-right">
-               <span v-if="srv.online" class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-100 text-green-700">ONLINE</span>
-               <span v-else class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-100 text-red-700">OFFLINE</span>
             </div>
           </div>
         </div>
@@ -250,12 +308,11 @@ const handleUnlock = (username) => {
                     <span class="absolute -bottom-0.5 -right-0.5 block h-3 w-3 rounded-full bg-red-500 border-2 border-white"></span>
                   </div>
                   <div class="flex flex-col min-w-0">
-                    <span class="text-sm font-semibold text-gray-900 truncate">{{ acc.username }}</span>
-                    <span class="text-xs text-gray-500 truncate">{{ acc.reason }} · {{ acc.ip }}</span>
+                    <span class="text-sm font-semibold text-gray-900 truncate">{{ acc.fullName || acc.username }}</span>
+                    <span class="text-xs text-gray-500 truncate">Bloqueado en AD: {{ acc.lockoutTime }}</span>
                   </div>
                 </div>
                 <div class="flex items-center gap-3 shrink-0 ml-3">
-                  <span class="text-xs text-gray-400">{{ acc.time }}</span>
                   <button @click.stop="handleUnlock(acc.username)" 
                           class="text-blue-600 hover:bg-blue-50 px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap">
                     Desbloquear

@@ -12,131 +12,39 @@ def invalidate_printers_cache():
     global _printers_cache
     _printers_cache["time"] = 0
 
-def _execute_remote_ps(script: str) -> str:
-    """Ejecuta un bloque de script PowerShell en el servidor de impresoras remotamente."""
+def _run_invoke_command(script_block: str, return_json: bool = False):
     try:
         cfg = get_primary_server("printers")
-    except Exception as e:
-        raise ValueError(str(e))
-    
+    except Exception:
+        raise ValueError("Servidor de impresoras no configurado.")
     ip = cfg["ip"]
-    domain = cfg.get("domain", "")
     admin_user = cfg["admin_user"]
     admin_pass = cfg["admin_pass"]
-
-    # Asegurar el formato de dominio
+    domain = cfg.get("domain", "")
     if domain and "\\" not in admin_user and "@" not in admin_user:
         admin_user = f"{domain}\\{admin_user}"
-
-    # Escapar comillas en la contraseña para evitar inyección
     safe_pass = admin_pass.replace("'", "''")
-
-    guid = str(uuid.uuid4())
-    remote_path = f"C:\\Windows\\Temp\\{guid}.json"
-    remote_ps1 = f"C:\\Windows\\Temp\\{guid}.ps1"
     
-    wrapped_script = f"""
+    json_cmd = " | ConvertTo-Json -Compress" if return_json else ""
+    
+    ps_script = f"""
     $ErrorActionPreference = 'Stop'
-    try {{
-        $result = & {{
-            {script}
-        }}
-        if ($null -eq $result) {{
-            [System.IO.File]::WriteAllText('{remote_path}', 'SUCCESS')
-        }} elseif ($result -is [array] -or $result -is [PSCustomObject] -or $result -is [System.Management.Automation.PSCustomObject]) {{
-            $json = $result | ConvertTo-Json -Compress
-            [System.IO.File]::WriteAllText('{remote_path}', $json)
-        }} else {{
-            [System.IO.File]::WriteAllText('{remote_path}', [string]$result)
-        }}
-    }} catch {{
-        [System.IO.File]::WriteAllText('{remote_path}', "ERROR: " + $_.Exception.Message)
-    }}
-    """
-    
-    # Write the script to the remote server via SMB
-    unc_ps1_path = f"\\\\{ip}\\C$\\Windows\\Temp\\{guid}.ps1"
-    # Wait, we need to connect to SMB first before we can write the file!
-
-
-    # Mount SMB First to write the file
-    target_smb = f"\\\\{ip}\\IPC$"
-    target_c = f"\\\\{ip}\\C$"
-    subprocess.run(["net", "use", target_smb, "/delete", "/y"], capture_output=True)
-    subprocess.run(["net", "use", target_c, "/delete", "/y"], capture_output=True)
-    smb_conn = subprocess.run(["net", "use", target_smb, admin_pass, f"/user:{admin_user}"], capture_output=True, text=True)
-    c_conn = subprocess.run(["net", "use", target_c, admin_pass, f"/user:{admin_user}"], capture_output=True, text=True)
-    if smb_conn.returncode != 0 and c_conn.returncode != 0:
-        error_msg = smb_conn.stderr.replace(admin_pass, "********")
-        raise Exception(f"Failed to connect to SMB: {error_msg}")
-
-    # Write .ps1 to remote Temp dir
-    try:
-        with open(unc_ps1_path, "w", encoding="utf-8-sig") as f:
-            f.write(wrapped_script)
-    except Exception as e:
-        raise Exception(f"Failed to write PS1 script to {unc_ps1_path}: {e}")
-
-    cmd = f"powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File {remote_ps1}"
-    
-    wmi_script = f"""
     $password = ConvertTo-SecureString '{safe_pass}' -AsPlainText -Force
     $cred = New-Object System.Management.Automation.PSCredential ('{admin_user}', $password)
-    $res = Invoke-WmiMethod -Class Win32_Process -Name Create -ArgumentList '{cmd}' -ComputerName '{ip}' -Credential $cred
-    if ($res.ReturnValue -ne 0) {{
-        throw "WMI Error: ReturnValue $($res.ReturnValue)"
-    }}
+    
+    Invoke-Command -ComputerName '{ip}' -Credential $cred -ScriptBlock {{
+        {script_block}
+    }}{json_cmd}
     """
-
-    wmi_res = subprocess.run(
-        [r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", "-NoProfile", "-NonInteractive", "-Command", wmi_script],
-        capture_output=True,
-        text=True,
-        encoding='utf-8',
-        errors='replace',
-        shell=True
+    import subprocess
+    res = subprocess.run(
+        [r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps_script],
+        capture_output=True, text=True, encoding='utf-8', errors='replace'
     )
-
-    if wmi_res.returncode != 0:
-        error_msg = wmi_res.stderr.strip() if wmi_res.stderr else wmi_res.stdout.strip()
-        error_msg = error_msg.replace(safe_pass, "********").replace(admin_pass, "********")
-        raise Exception(f"Error de WMI: {error_msg}")
-
-    import os
-    unc_file_path = f"\\\\{ip}\\C$\\Windows\\Temp\\{guid}.json"
-    output = ""
-    for _ in range(60):
-        time.sleep(0.5)
-        if os.path.exists(unc_file_path):
-            try:
-                with open(unc_file_path, "r", encoding="utf-8-sig", errors="replace") as f:
-                    content = f.read().strip()
-                if content:
-                    output = content
-                    try:
-                        os.remove(unc_file_path)
-                    except Exception:
-                        pass
-                    break
-            except Exception:
-                pass
-
-    try:
-        if os.path.exists(unc_ps1_path):
-            os.remove(unc_ps1_path)
-    except Exception:
-        pass
-
-    if not output:
-        raise Exception("Timeout esperando respuesta del script remoto (WMI).")
-
-    if output.startswith("ERROR: "):
-        raise Exception(f"PowerShell Error: {output[7:]}")
-
-    if output == "SUCCESS":
-        return ""
-
-    return output
+    if res.returncode != 0:
+        error_msg = res.stderr.strip() if res.stderr else res.stdout.strip()
+        raise Exception(f"PowerShell Error: {error_msg}")
+    return res.stdout.strip()
 
 def get_printers():
     """Obtiene la lista de impresoras usando RPC nativo (win32print) evitando WMI."""
@@ -176,10 +84,15 @@ def get_printers():
             # PRINTER_ATTRIBUTE_SHARED = 8
             shared = (p.get('Attributes', 0) & 8) != 0
             
+            port_name = p.get('pPortName', '')
+            ip_address = port_name
+            if ip_address.startswith("IP_"):
+                ip_address = ip_address[3:]
+            
             resultList.append({
                 "Name": name,
-                "PortName": p.get('pPortName', ''),
-                "IPAddress": p.get('pPortName', ''),
+                "PortName": port_name,
+                "IPAddress": ip_address,
                 "Shared": shared,
                 "ShareName": p.get('pShareName', ''),
                 "DriverName": p.get('pDriverName', '')
@@ -195,17 +108,21 @@ def get_printers():
 def get_drivers():
     """Obtiene los controladores instalados."""
     script = """
-    Get-PrinterDriver | Select-Object Name
+    Get-PrinterDriver | Select-Object -ExpandProperty Name
     """
-    output = _execute_remote_ps(script)
-    if not output:
-        return []
     try:
+        output = _run_invoke_command(script, return_json=True)
+        if not output:
+            return []
+        import json
         data = json.loads(output)
-        if isinstance(data, dict):
-            return [data["Name"]]
-        return [d["Name"] for d in data if "Name" in d]
-    except Exception:
+        if isinstance(data, list):
+            return [d.get("value") for d in data if isinstance(d, dict) and "value" in d]
+        elif isinstance(data, dict):
+            return [data.get("value")]
+        return []
+    except Exception as e:
+        print(f"Error cargando drivers: {e}")
         return []
 
 def add_printer(name: str, ip: str, driver: str, shared: bool, share_name: str):
@@ -215,69 +132,146 @@ def add_printer(name: str, ip: str, driver: str, shared: bool, share_name: str):
     share_name_arg = f"-ShareName '{share_name}'" if shared and share_name else ""
     
     script = f"""
-    # 1. Crear puerto si no existe
+    # 1. Crear nuevo puerto TCP/IP si no existe (usamos WMI para evitar el bloqueo de 2 minutos y desactivar SNMP)
     $portExists = Get-PrinterPort -Name '{port_name}' -ErrorAction SilentlyContinue
     if (-not $portExists) {{
-        Add-PrinterPort -Name '{port_name}' -PrinterHostAddress '{ip}'
+        Set-WmiInstance -Class Win32_TCPIPPrinterPort -Arguments @{{ Name="{port_name}"; HostAddress="{ip}"; PortNumber=9100; Protocol=1; SNMPEnabled=0 }} | Out-Null
     }}
     
     # 2. Crear Impresora
     Add-Printer -Name '{name}' -DriverName '{driver}' -PortName '{port_name}' -Shared:{shared_str} {share_name_arg}
     """
-    _execute_remote_ps(script)
+    _run_invoke_command(script)
     invalidate_printers_cache()
 
-def update_printer_ip(old_name: str, new_name: str, new_ip: str, shared: bool, share_name: str):
-    """Re-enruta la IP (crea puerto nuevo y lo asigna) y renombra."""
+def update_printer_ip(old_name: str, new_name: str, new_ip: str, new_driver: str, shared: bool, share_name: str):
+    """Re-enruta la IP (crea puerto nuevo y lo asigna), cambia nombre y driver sin script dropping."""
+    try:
+        cfg = get_primary_server("printers")
+    except Exception:
+        raise ValueError("Servidor no configurado.")
+
     port_name = f"IP_{new_ip}"
     shared_str = "$true" if shared else "$false"
     share_name_arg = f"-ShareName '{share_name}'" if shared and share_name else ""
+    driver_arg = f"-DriverName '{new_driver}'" if new_driver else ""
     
     script = f"""
-    # 1. Crear nuevo puerto si no existe
+    # 1. Crear nuevo puerto TCP/IP si no existe (usamos WMI para evitar timeout y desactivar SNMP)
     $portExists = Get-PrinterPort -Name '{port_name}' -ErrorAction SilentlyContinue
     if (-not $portExists) {{
-        Add-PrinterPort -Name '{port_name}' -PrinterHostAddress '{new_ip}'
+        Set-WmiInstance -Class Win32_TCPIPPrinterPort -Arguments @{{ Name="{port_name}"; HostAddress="{new_ip}"; PortNumber=9100; Protocol=1; SNMPEnabled=0 }} | Out-Null
     }}
     
-    # 2. Actualizar el puerto y la configuracion de red de la impresora actual
-    Set-Printer -Name '{old_name}' -PortName '{port_name}' -Shared:{shared_str} {share_name_arg}
-    
-    # 3. Renombrar si hubo cambio
+    # 2. Renombrar si es distinto
     if ('{old_name}' -ne '{new_name}') {{
         Rename-Printer -Name '{old_name}' -NewName '{new_name}'
     }}
+    
+    # 3. Asignar nuevo puerto y driver
+    Set-Printer -Name '{new_name}' -PortName '{port_name}' {driver_arg} -Shared:{shared_str} {share_name_arg}
     """
-    _execute_remote_ps(script)
+    _run_invoke_command(script)
     invalidate_printers_cache()
 
 def clear_spooler(name: str):
     """Limpia los trabajos de impresión atascados para esta impresora."""
-    script = f"Get-PrintJob -PrinterName '{name}' | Remove-PrintJob"
-    _execute_remote_ps(script)
+    try:
+        cfg = get_primary_server("printers")
+    except Exception:
+        raise ValueError("Servidor de impresoras no configurado.")
+        
+    ip = cfg["ip"]
+    admin_user = cfg["admin_user"]
+    admin_pass = cfg["admin_pass"]
+    domain = cfg.get("domain", "")
+    
+    if domain and "\\" not in admin_user and "@" not in admin_user:
+        admin_user = f"{domain}\\{admin_user}"
+
+    import subprocess
+    import win32print
+    
+    target_smb = f"\\\\{ip}\\IPC$"
+    subprocess.run(["net", "use", target_smb, "/delete", "/y"], capture_output=True)
+    subprocess.run(["net", "use", target_smb, admin_pass, f"/user:{admin_user}"], capture_output=True)
+
+    try:
+        printer_path = f"\\\\{ip}\\{name}"
+        # Se requieren permisos completos para purgar
+        defaults = {"DesiredAccess": win32print.PRINTER_ALL_ACCESS}
+        hprinter = win32print.OpenPrinter(printer_path, defaults)
+        
+        # Purgar todos los trabajos (PRINTER_CONTROL_PURGE = 3)
+        win32print.SetPrinter(hprinter, 0, None, 3)
+        win32print.ClosePrinter(hprinter)
+    except Exception as e:
+        raise ValueError(f"Error nativo limpiando cola de {name}: {e}")
 
 def print_test_page(name: str):
-    """Imprime una página de prueba de Windows."""
-    script = f"""
-    $printer = Get-CimInstance Win32_Printer -Filter "Name='{name}'"
-    if ($printer) {{
-        Invoke-CimMethod -InputObject $printer -MethodName PrintTestPage
-    }} else {{
-        throw "Impresora no encontrada"
+    """Imprime una página de prueba de Windows evitando dropping de archivos para evadir BitDefender."""
+    try:
+        cfg = get_primary_server("printers")
+    except Exception:
+        raise ValueError("Servidor de impresoras no configurado.")
+        
+    ip = cfg["ip"]
+    admin_user = cfg["admin_user"]
+    admin_pass = cfg["admin_pass"]
+    domain = cfg.get("domain", "")
+    
+    if domain and "\\" not in admin_user and "@" not in admin_user:
+        admin_user = f"{domain}\\{admin_user}"
+
+    safe_pass = admin_pass.replace("'", "''")
+
+    # Script ejecutado localmente, enviando el comando WMI directo por red (CIM)
+    ps_script = f"""
+    $ErrorActionPreference = 'Stop'
+    $password = ConvertTo-SecureString '{safe_pass}' -AsPlainText -Force
+    $cred = New-Object System.Management.Automation.PSCredential ('{admin_user}', $password)
+    
+    $session = New-CimSession -ComputerName '{ip}' -Credential $cred
+    try {{
+        $printer = Get-CimInstance Win32_Printer -CimSession $session -Filter "Name='{name}'"
+        if ($printer) {{
+            Invoke-CimMethod -InputObject $printer -MethodName PrintTestPage | Out-Null
+        }} else {{
+            throw "Impresora '{name}' no encontrada en el servidor remoto."
+        }}
+    }} finally {{
+        Remove-CimSession $session
     }}
     """
-    _execute_remote_ps(script)
+    
+    import subprocess
+    res = subprocess.run(
+        [r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps_script],
+        capture_output=True,
+        text=True,
+        encoding='utf-8',
+        errors='replace'
+    )
+    
+    if res.returncode != 0:
+        error_msg = res.stderr.strip() if res.stderr else res.stdout.strip()
+        raise ValueError(f"Error imprimiendo página de prueba (CIM): {error_msg}")
 
 def delete_printer(name: str):
-    """Elimina la impresora de forma segura."""
-    script = f"Remove-Printer -Name '{name}'"
-    _execute_remote_ps(script)
+    """Elimina la impresora de forma segura e instantánea usando WMI."""
+    script = f"""
+    $printer = Get-CimInstance Win32_Printer -Filter "Name='{name}'" -ErrorAction SilentlyContinue
+    if ($printer) {{
+        Remove-CimInstance -InputObject $printer -ErrorAction SilentlyContinue
+    }}
+    """
+    _run_invoke_command(script)
     invalidate_printers_cache()
 
 def restart_spooler():
     """Reinicia el servicio Print Spooler en el servidor remoto."""
     script = "Restart-Service -Name Spooler -Force"
-    _execute_remote_ps(script)
+    _run_invoke_command(script)
 
 def generate_mapping_script(name: str) -> str:
     """Genera un script de PowerShell para mapear la impresora compartida."""
@@ -383,28 +377,40 @@ def get_printer_history(name: str, limit: int = 50):
         raise ValueError("Servidor de impresoras no configurado.")
         
     ip = cfg["ip"]
+    admin_user = cfg["admin_user"]
+    admin_pass = cfg["admin_pass"]
+    domain = cfg.get("domain", "")
+    
+    if domain and "\\" not in admin_user and "@" not in admin_user:
+        admin_user = f"{domain}\\{admin_user}"
+
+    safe_pass = admin_pass.replace("'", "''")
     
     ps_script = f"""
     $ErrorActionPreference = 'SilentlyContinue'
-    $events = Get-WinEvent -ComputerName "{ip}" -FilterHashtable @{{LogName='Microsoft-Windows-PrintService/Operational'; Id=307}} -MaxEvents 1000
-    if (-not $events) {{
-        Write-Output "[]"
-        exit
-    }}
-    $result = @()
-    foreach ($e in $events) {{
-        # Param 4 (index 3) is Printer Name
-        if ($e.Properties[3].Value -match "{name}") {{
-            $result += [PSCustomObject]@{{
-                Time = $e.TimeCreated.ToString('yyyy-MM-dd HH:mm:ss')
-                User = $e.Properties[2].Value
-                Document = $e.Properties[1].Value
-                Pages = $e.Properties[6].Value
-                Size = $e.Properties[5].Value
+    $password = ConvertTo-SecureString '{safe_pass}' -AsPlainText -Force
+    $cred = New-Object System.Management.Automation.PSCredential ('{admin_user}', $password)
+    
+    Invoke-Command -ComputerName '{ip}' -Credential $cred -ScriptBlock {{
+        $events = Get-WinEvent -FilterHashtable @{{LogName='Microsoft-Windows-PrintService/Operational'; Id=307}} -MaxEvents 1000 -ErrorAction SilentlyContinue
+        if (-not $events) {{
+            Write-Output "[]"
+            return
+        }}
+        $result = @()
+        foreach ($e in $events) {{
+            if ($e.Properties[3].Value -match '{name}') {{
+                $result += [PSCustomObject]@{{
+                    Time = $e.TimeCreated.ToString('yyyy-MM-dd HH:mm:ss')
+                    User = $e.Properties[2].Value
+                    Document = $e.Properties[1].Value
+                    Pages = $e.Properties[6].Value
+                    Size = $e.Properties[5].Value
+                }}
             }}
         }}
+        $result | Select-Object -First {limit} | ConvertTo-Json -Compress
     }}
-    $result | Select-Object -First {limit} | ConvertTo-Json -Compress
     """
     
     import subprocess
