@@ -4,64 +4,101 @@ import ssl
 
 class UniFiService:
     def __init__(self):
-        self.host = env_settings.UNIFI_HOST
-        self.port = env_settings.UNIFI_PORT
+        # La URL base fue indicada explícitamente en el requerimiento
+        self.base_url = "https://glossa.hogarymoda.local:8443"
         self.user = env_settings.UNIFI_USER
         self.password = env_settings.UNIFI_PASS
-        self.site = env_settings.UNIFI_SITE
-        self.base_url = f"https://{self.host}:{self.port}"
-        self.client = httpx.AsyncClient(verify=False)
+        # Aquí guardaremos las cookies después del login
+        self.cookies = {}
+
+    def _get_client(self):
+        # trust_env=False asegura que no usemos proxies configurados a nivel del SO
+        # que a veces bloquean conexiones locales. verify=False es el "-k" de curl.
+        return httpx.AsyncClient(verify=False, trust_env=False)
 
     async def login(self):
         url = f"{self.base_url}/api/login"
         payload = {"username": self.user, "password": self.password}
-        res = await self.client.post(url, json=payload)
-        if res.status_code != 200:
-            raise Exception("No se pudo iniciar sesión en el controlador UniFi.")
-        return True
+        
+        async with self._get_client() as client:
+            try:
+                # El "json=payload" agrega automáticamente Content-Type: application/json
+                res = await client.post(url, json=payload)
+                if res.status_code != 200:
+                    raise Exception(f"No se pudo iniciar sesión. Status: {res.status_code}")
+                
+                # Extraemos la cookie generada y la guardamos manualmente
+                self.cookies = dict(res.cookies)
+                return True
+            except Exception as e:
+                print(f"🔥 DEBUG UNIFI LOGIN ERROR: {str(e)}")
+                raise Exception(f"No se pudo iniciar sesión en el controlador UniFi: {str(e)}")
 
-    async def get_devices(self):
+    async def get_sites(self):
         await self.login()
-        url = f"{self.base_url}/api/s/{self.site}/stat/device"
-        res = await self.client.get(url)
-        res.raise_for_status()
-        data = res.json()
-        return data.get("data", [])
+        url = f"{self.base_url}/api/self/sites"
+        async with self._get_client() as client:
+            res = await client.get(url, cookies=self.cookies)
+            res.raise_for_status()
+            data = res.json().get("data", [])
+            return [{"desc": site.get("desc"), "name": site.get("name")} for site in data]
 
-    async def restart_ap(self, mac: str):
+    async def get_devices(self, site_name: str):
         await self.login()
-        url = f"{self.base_url}/api/s/{self.site}/cmd/devmgr"
+        url = f"{self.base_url}/api/s/{site_name}/stat/device"
+        async with self._get_client() as client:
+            res = await client.get(url, cookies=self.cookies)
+            res.raise_for_status()
+            data = res.json()
+            return data.get("data", [])
+
+    async def get_clients(self, site_name: str):
+        await self.login()
+        url = f"{self.base_url}/api/s/{site_name}/stat/sta"
+        async with self._get_client() as client:
+            res = await client.get(url, cookies=self.cookies)
+            res.raise_for_status()
+            data = res.json()
+            return data.get("data", [])
+
+    async def get_all_clients(self, site_name: str):
+        await self.login()
+        url = f"{self.base_url}/api/s/{site_name}/stat/alluser"
+        async with self._get_client() as client:
+            res = await client.get(url, cookies=self.cookies)
+            res.raise_for_status()
+            data = res.json()
+            return data.get("data", [])
+
+    async def restart_ap(self, mac: str, site_name: str = "default"):
+        await self.login()
+        url = f"{self.base_url}/api/s/{site_name}/cmd/devmgr"
         payload = {"cmd": "restart", "mac": mac}
-        res = await self.client.post(url, json=payload)
-        res.raise_for_status()
-        return res.json()
+        async with self._get_client() as client:
+            res = await client.post(url, json=payload, cookies=self.cookies)
+            res.raise_for_status()
+            return res.json()
 
-    async def get_all_users(self):
+    async def block_client(self, mac: str, site_name: str = "default"):
         await self.login()
-        url = f"{self.base_url}/api/s/{self.site}/stat/alluser"
-        res = await self.client.get(url)
-        res.raise_for_status()
-        data = res.json()
-        return data.get("data", [])
-
-    async def block_client(self, mac: str):
-        await self.login()
-        url = f"{self.base_url}/api/s/{self.site}/cmd/sitemgr"
+        url = f"{self.base_url}/api/s/{site_name}/cmd/sitemgr"
         payload = {"cmd": "block-sta", "mac": mac}
-        res = await self.client.post(url, json=payload)
-        res.raise_for_status()
-        return res.json()
+        async with self._get_client() as client:
+            res = await client.post(url, json=payload, cookies=self.cookies)
+            res.raise_for_status()
+            return res.json()
 
-    async def unblock_client(self, mac: str):
+    async def unblock_client(self, mac: str, site_name: str = "default"):
         await self.login()
-        url = f"{self.base_url}/api/s/{self.site}/cmd/sitemgr"
+        url = f"{self.base_url}/api/s/{site_name}/cmd/sitemgr"
         payload = {"cmd": "unblock-sta", "mac": mac}
-        res = await self.client.post(url, json=payload)
-        res.raise_for_status()
-        return res.json()
+        async with self._get_client() as client:
+            res = await client.post(url, json=payload, cookies=self.cookies)
+            res.raise_for_status()
+            return res.json()
 
     async def close(self):
-        await self.client.aclose()
+        pass # Ya no necesitamos close manual
 
-# Instancia singleton para reutilizar la cookie
+# Instancia singleton
 unifi_service = UniFiService()

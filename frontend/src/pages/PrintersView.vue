@@ -17,6 +17,17 @@ const showDetailsDrawer = ref(false)
 const activeTab = ref('jobs')
 const submitting = ref(false)
 
+const toastMessage = ref('')
+const toastType = ref('success')
+
+const showToast = (msg, type = 'success') => {
+  toastMessage.value = msg
+  toastType.value = type
+  setTimeout(() => {
+    toastMessage.value = ''
+  }, 4000)
+}
+
 const selectedPrinter = ref(null)
 
 const printerJobs = ref([])
@@ -37,6 +48,7 @@ const editPrinter = ref({
   old_name: '',
   new_name: '',
   new_ip: '',
+  new_driver: '',
   shared: false,
   share_name: ''
 })
@@ -80,15 +92,20 @@ const openEditModal = (printer) => {
     old_name: printer.Name,
     new_name: printer.Name,
     new_ip: printer.IPAddress || printer.PortName,
+    new_driver: printer.DriverName || '',
     shared: printer.Shared,
     share_name: printer.ShareName || ''
   }
-  showEditModal.value = true
+  showDetailsDrawer.value = false // Cerrar el panel de detalles para evitar sobreposición
+  if (drivers.value.length === 0) fetchDrivers()
+  setTimeout(() => {
+    showEditModal.value = true
+  }, 150)
 }
 
 const submitAddPrinter = async () => {
   if (!newPrinter.value.name || !newPrinter.value.ip || !newPrinter.value.driver) {
-    alert("Nombre, IP y Driver son obligatorios.")
+    showToast("Nombre, IP y Driver son obligatorios.", "error")
     return
   }
   submitting.value = true
@@ -103,9 +120,10 @@ const submitAddPrinter = async () => {
       throw new Error(errData.detail || 'Error al crear impresora')
     }
     showAddModal.value = false
+    showToast(`Impresora agregada exitosamente.`)
     await fetchPrinters()
   } catch (err) {
-    alert(err.message)
+    showToast(err.message, 'error')
   } finally {
     submitting.value = false
   }
@@ -113,7 +131,7 @@ const submitAddPrinter = async () => {
 
 const submitEditPrinter = async () => {
   if (!editPrinter.value.new_name || !editPrinter.value.new_ip) {
-    alert("Nombre e IP son obligatorios.")
+    showToast("Nombre e IP son obligatorios.", "error")
     return
   }
   submitting.value = true
@@ -128,9 +146,10 @@ const submitEditPrinter = async () => {
       throw new Error(errData.detail || 'Error al editar impresora')
     }
     showEditModal.value = false
+    showToast('Impresora actualizada exitosamente.')
     await fetchPrinters()
   } catch (err) {
-    alert(err.message)
+    showToast(err.message, 'error')
   } finally {
     submitting.value = false
   }
@@ -177,9 +196,10 @@ const clearSpooler = async (printer) => {
           const err = await res.json()
           throw new Error(err.detail || 'Error al limpiar cola')
         }
-        alert(`Cola de impresión de ${printer.Name} limpiada exitosamente.`)
+        showToast(`Cola de impresión de ${printer.Name} limpiada.`)
+        if (activeTab.value === 'jobs') loadJobs()
       } catch (err) {
-        alert(err.message)
+        showToast(err.message, 'error')
       }
     }
   )
@@ -188,7 +208,7 @@ const clearSpooler = async (printer) => {
 const restartSpooler = async () => {
   openConfirmModal(
     'Reiniciar Spooler',
-    '¿Estás seguro de reiniciar el servicio de Print Spooler en el servidor? Esto interrumpirÃ¡ temporalmente todas las impresiones en curso.',
+    '¿Estás seguro de reiniciar el servicio de Print Spooler en el servidor? Esto interrumpirá temporalmente todas las impresiones en curso.',
     'Sí, reiniciar',
     async () => {
       try {
@@ -199,10 +219,10 @@ const restartSpooler = async () => {
           const err = await res.json()
           throw new Error(err.detail || 'Error al reiniciar Spooler')
         }
-        alert('Spooler reiniciado exitosamente.')
+        showToast('Spooler reiniciado exitosamente.')
         await fetchPrinters()
       } catch (err) {
-        alert(err.message)
+        showToast(err.message, 'error')
       }
     }
   )
@@ -219,7 +239,7 @@ const generateMappingScript = async (printer) => {
     const data = await res.json()
     prompt("Script de mapeo generado. Cópielo (Ctrl+C):", data.script)
   } catch (err) {
-    alert(err.message)
+    showToast(err.message, 'error')
   }
 }
 
@@ -233,9 +253,33 @@ const testPage = async (printer) => {
       const err = await res.json()
       throw new Error(err.detail || 'Error enviando página de prueba')
     }
-    alert(`PÃ¡gina de prueba enviada a ${printer.Name}.`)
+    showToast(`Página de prueba enviada a ${printer.Name}.`)
   } catch (err) {
-    alert(err.message)
+    showToast(err.message, 'error')
+  }
+}
+
+const pingPrinter = async (printer, event) => {
+  if (event) event.stopPropagation()
+  if (!printer) return
+  
+  const ip = printer.IPAddress || printer.PortName
+  if (ip.startsWith('WSD-') || ip.startsWith('PORT')) {
+    showToast('Los puertos WSD o Locales no responden a Ping directo.', 'error')
+    return
+  }
+
+  showToast(`Haciendo ping a ${ip}...`)
+  try {
+    const res = await fetch(`${API_BASE}/printers/${encodeURIComponent(printer.Name)}/ping?ip=${encodeURIComponent(ip)}`)
+    const data = await res.json()
+    if (data.success) {
+      showToast(data.message, 'success')
+    } else {
+      showToast(data.message, 'error')
+    }
+  } catch (err) {
+    showToast('Error de red haciendo ping', 'error')
   }
 }
 
@@ -256,9 +300,10 @@ const deletePrinter = async (printer) => {
         }
         showDetailsDrawer.value = false
         selectedPrinter.value = null
+        showToast('Impresora eliminada exitosamente.')
         await fetchPrinters()
       } catch (err) {
-        alert(err.message)
+        showToast(err.message, 'error')
       }
     }
   )
@@ -393,8 +438,13 @@ onMounted(() => {
                   </div>
                 </div>
               </td>
-              <td class="px-4 py-2.5 whitespace-nowrap text-[12px] font-mono text-gray-600">
-                {{ p.IPAddress || p.PortName }}
+              <td class="px-4 py-2.5 whitespace-nowrap">
+                <div class="flex items-center gap-2">
+                  <span class="text-[12px] font-mono text-gray-600">{{ p.IPAddress || p.PortName }}</span>
+                  <button @click="pingPrinter(p, $event)" title="Probar conexión (Ping)" class="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-gray-700 transition-colors">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                  </button>
+                </div>
               </td>
               <td class="px-4 py-2.5 whitespace-nowrap text-[12px] text-gray-600 truncate max-w-[200px]" :title="p.DriverName">
                 {{ p.DriverName }}
@@ -467,7 +517,7 @@ onMounted(() => {
       <template #body>
         <div class="space-y-4">
           <div class="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/30 rounded-lg text-sm text-blue-800 dark:text-blue-300">
-            Al cambiar la IP, el sistema crearÃ¡ un nuevo puerto TCP/IP y lo reasignarÃ¡ de forma transparente.
+            Al cambiar la IP, el sistema creará un nuevo puerto TCP/IP y lo reasignará de forma transparente.
           </div>
           <div>
             <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nombre de Impresora</label>
@@ -476,6 +526,13 @@ onMounted(() => {
           <div>
             <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Dirección IP (Puerto)</label>
             <input v-model="editPrinter.new_ip" type="text" class="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:text-white font-mono">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Controlador (Driver)</label>
+            <select v-model="editPrinter.new_driver" class="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:text-white">
+              <option disabled value="">Seleccione un driver instalado</option>
+              <option v-for="drv in drivers" :key="drv" :value="drv">{{ drv }}</option>
+            </select>
           </div>
           
           <div class="pt-2 border-t border-slate-100 dark:border-slate-700">
@@ -508,6 +565,19 @@ onMounted(() => {
     <BaseDrawer :show="showDetailsDrawer" :title="selectedPrinter?.Name || 'Detalles'" width="w-[600px]" @close="showDetailsDrawer = false">
       <template #body>
         <div class="flex flex-col h-full space-y-4">
+          
+          <!-- Acciones Rápidas -->
+          <div class="flex items-center justify-end gap-2 -mt-2">
+            <button @click="openEditModal(selectedPrinter)" class="text-[12px] text-blue-600 font-medium hover:text-blue-800 px-2.5 py-1.5 rounded hover:bg-blue-50 transition-colors flex items-center gap-1">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+              Editar Impresora
+            </button>
+            <button @click="deletePrinter(selectedPrinter)" class="text-[12px] text-red-600 font-medium hover:text-red-800 px-2.5 py-1.5 rounded hover:bg-red-50 transition-colors flex items-center gap-1">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+              Eliminar
+            </button>
+          </div>
+
           <!-- Info básica -->
           <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
             <div class="grid grid-cols-2 gap-4">
@@ -546,13 +616,21 @@ onMounted(() => {
           </div>
 
           <!-- Tab: Jobs -->
-          <div v-if="activeTab === 'jobs'" class="flex-1 overflow-y-auto min-h-[250px] border border-slate-100 rounded-lg">
+          <div v-if="activeTab === 'jobs'" class="flex-1 overflow-y-auto min-h-[250px] border border-slate-100 rounded-lg relative">
+            <div class="bg-slate-50 border-b border-slate-100 px-3 py-2 flex justify-between items-center sticky top-0">
+              <span class="text-[11px] font-semibold text-slate-500 uppercase">Documentos en cola</span>
+              <button @click="loadJobs" class="text-[11px] font-semibold text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1 bg-blue-50 px-2 py-1 rounded">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                Actualizar
+              </button>
+            </div>
+            
             <div v-if="loadingJobs" class="flex flex-col items-center justify-center py-10">
               <div class="w-6 h-6 border-2 border-slate-300 border-t-blue-600 rounded-full animate-spin mb-2"></div>
               <span class="text-xs text-slate-500">Cargando cola...</span>
             </div>
             <table v-else class="w-full text-left">
-              <thead class="bg-slate-50 border-b border-slate-100">
+              <thead class="bg-white border-b border-slate-100">
                 <tr>
                   <th class="px-3 py-2 text-[11px] font-semibold text-slate-500">Doc / Usuario</th>
                   <th class="px-3 py-2 text-[11px] font-semibold text-slate-500 text-right">Págs</th>
@@ -655,15 +733,6 @@ onMounted(() => {
                 <span class="text-slate-400">&rarr;</span>
               </button>
             </div>
-            
-            <div class="mt-6 pt-4 border-t border-slate-200 flex items-center justify-between">
-              <button @click="openEditModal(selectedPrinter)" class="text-[13px] text-slate-600 font-medium hover:text-slate-900 px-3 py-1.5 rounded hover:bg-slate-100 transition-colors">
-                Editar/Re-enrutar
-              </button>
-              <button @click="deletePrinter(selectedPrinter)" class="text-[13px] text-red-600 font-medium hover:text-red-800 px-3 py-1.5 rounded hover:bg-red-50 transition-colors">
-                Eliminar Impresora
-              </button>
-            </div>
           </div>
         </div>
       </template>
@@ -679,6 +748,19 @@ onMounted(() => {
       @close="confirmModal.show = false"
       @confirm="handleConfirm"
     />
+
+    <!-- Elegant Toast Notification -->
+    <div v-if="toastMessage" 
+         class="fixed bottom-6 right-6 z-[60] animate-fade-in flex items-center gap-3 px-5 py-3.5 rounded-xl shadow-xl transition-all" 
+         :class="toastType === 'error' ? 'bg-red-600 text-white shadow-red-900/20' : 'bg-slate-800 text-white shadow-slate-900/20'">
+      <svg v-if="toastType === 'success'" class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+      </svg>
+      <svg v-if="toastType === 'error'" class="w-5 h-5 text-red-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <span class="text-[13px] font-medium tracking-wide">{{ toastMessage }}</span>
+    </div>
 
   </div>
 </template>
