@@ -14,6 +14,8 @@ import SettingsView from '@/pages/SettingsView.vue'
 import SecurityView from '@/pages/SecurityView.vue'
 import AuditoriaView from '@/pages/AuditoriaView.vue'
 import TerminalView from '@/pages/TerminalView.vue'
+import CuarentenaView from '@/pages/CuarentenaView.vue'
+import LicenciasInactivasView from '@/pages/LicenciasInactivasView.vue'
 
 const routes = [
   {
@@ -37,6 +39,11 @@ const routes = [
         path: '',
         name: 'Home',
         component: HomeView,
+      },
+      {
+        path: 'delegation',
+        name: 'DelegationHub',
+        component: () => import('@/pages/DelegationHubView.vue')
       },
       {
         path: 'cuentas',
@@ -97,6 +104,16 @@ const routes = [
         path: 'wifi',
         name: 'Wifi',
         component: WifiView,
+      },
+      {
+        path: 'cuarentena',
+        name: 'Cuarentena',
+        component: CuarentenaView,
+      },
+      {
+        path: 'licencias-inactivas',
+        name: 'LicenciasInactivas',
+        component: LicenciasInactivasView,
       }
     ],
   },

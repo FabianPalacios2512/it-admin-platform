@@ -27,6 +27,11 @@ const wifiStats = ref({
   avgExperience: 0
 })
 
+const printerStatus = ref({
+  spoolerOk: true,
+  jammed: 0
+})
+
 onMounted(async () => {
   const fetchEvents = async () => {
     try {

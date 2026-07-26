@@ -15,7 +15,7 @@ const users = ref([])
 const isLoading = ref(false)
 let searchTimeout = null
 
-const activeFilter = ref('todos') // todos, activos, deshabilitados, bloqueados
+const activeFilter = ref('activos') // todos, activos, deshabilitados, bloqueados
 
 const API_BASE = '/api/v1'
 
@@ -465,10 +465,9 @@ function setFilter(filter) {
           <svg class="w-4 h-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
           Nuevo usuario
         </button>
-        <div class="w-px h-4 bg-gray-300 mx-1"></div>
-        <button @click="commandViewProfile" :disabled="!hasSingleSelection" class="text-sm font-medium text-gray-900 hover:bg-gray-100 px-2 py-1 rounded-md transition-colors flex items-center gap-2 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default">
-          <svg class="w-4 h-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-          Ver perfil
+        <button @click="fetchUsers" class="text-sm font-medium text-gray-900 hover:bg-gray-100 px-2 py-1 rounded-md transition-colors flex items-center gap-2">
+          <svg class="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+          Actualizar
         </button>
         <button @click="bulkResetPassword" :disabled="!hasSelection || bulkLoading" class="text-sm font-medium text-gray-900 hover:bg-gray-100 px-2 py-1 rounded-md transition-colors flex items-center gap-2 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default">
           <svg class="w-4 h-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
@@ -485,11 +484,6 @@ function setFilter(filter) {
         <button @click="exportCsv" :disabled="!hasSelection" class="text-sm font-medium text-gray-900 hover:bg-gray-100 px-2 py-1 rounded-md transition-colors flex items-center gap-2 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default">
           <svg class="w-4 h-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
           Exportar
-        </button>
-        <div class="w-px h-4 bg-gray-300 mx-1"></div>
-        <button @click="commandOffboard" :disabled="!hasSingleSelection" class="text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded-md transition-colors flex items-center gap-2 disabled:opacity-30 disabled:hover:text-red-600 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default">
-          <svg class="w-4 h-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12h-6"/></svg>
-          Desvincular
         </button>
       </div>
       <!-- SelecciÃ³n -->
@@ -548,30 +542,31 @@ function setFilter(filter) {
 
     <!-- Data Table (Borderless) -->
     <div class="flex flex-col">
-      <div class="overflow-x-auto">
-        <table class="w-full text-left min-w-[900px]">
+      <div class="overflow-x-auto hide-scrollbar">
+        <table class="w-full text-left min-w-[1000px]">
           <thead>
             <tr class="border-b border-gray-300 bg-gray-50/50">
-              <th class="pl-2 py-3 w-10">
-                <input type="checkbox" v-model="selectAll" @change="toggleSelectAll" class="w-4 h-4 border-gray-300 rounded focus:ring-blue-500 cursor-pointer text-blue-600 transition-colors">
+              <th class="pl-2 py-2 w-10">
+                <input type="checkbox" v-model="selectAll" @change="toggleSelectAll" class="w-3.5 h-3.5 border-gray-300 rounded focus:ring-blue-500 cursor-pointer text-blue-600 transition-colors">
               </th>
-              <th class="w-1/4 px-3 py-3 text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer transition-colors">Nombre para mostrar</th>
-              <th class="w-1/6 px-3 py-3 text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer transition-colors">Nombre de usuario</th>
-              <th class="w-1/6 px-3 py-3 text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer transition-colors">Cargo</th>
-              <th class="w-1/6 px-3 py-3 text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer transition-colors">Departamento</th>
-              <th class="w-32 px-3 py-3 text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer transition-colors text-center">Licencia M365</th>
-              <th class="w-24 px-3 py-3 text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer transition-colors text-center">Estado</th>
+              <th class="w-1/4 px-3 py-2 text-[11px] font-bold text-gray-700 uppercase tracking-wider cursor-pointer transition-colors">Nombre para mostrar</th>
+              <th class="w-1/6 px-3 py-2 text-[11px] font-bold text-gray-700 uppercase tracking-wider cursor-pointer transition-colors">Nombre de usuario</th>
+              <th class="w-1/6 px-3 py-2 text-[11px] font-bold text-gray-700 uppercase tracking-wider cursor-pointer transition-colors">Cargo</th>
+              <th class="w-1/6 px-3 py-2 text-[11px] font-bold text-gray-700 uppercase tracking-wider cursor-pointer transition-colors">Departamento</th>
+              <th class="w-24 px-3 py-2 text-[11px] font-bold text-gray-700 uppercase tracking-wider cursor-pointer transition-colors text-center">Sincronización</th>
+              <th class="w-32 px-3 py-2 text-[11px] font-bold text-gray-700 uppercase tracking-wider cursor-pointer transition-colors text-center">Licencia M365</th>
+              <th class="w-24 px-3 py-2 text-[11px] font-bold text-gray-700 uppercase tracking-wider cursor-pointer transition-colors text-center">Estado</th>
             </tr>
           </thead>
           <tbody :class="{'opacity-50 pointer-events-none animate-pulse': isMfaContext && mfaLoading}">
             <tr v-if="isLoading">
-              <td colspan="8" class="px-2 py-16 text-center">
+              <td colspan="9" class="px-2 py-16 text-center">
                 <div class="inline-block w-6 h-6 border-2 border-slate-300 border-t-blue-600 rounded-full animate-spin mb-3"></div>
                 <p class="text-[13px] text-slate-500">Cargando directorio...</p>
               </td>
             </tr>
             <tr v-else-if="filteredUsers.length === 0">
-              <td colspan="8" class="px-2 py-16 text-center">
+              <td colspan="9" class="px-2 py-16 text-center">
                 <p class="text-[13px] text-slate-500">No se encontraron usuarios que coincidan con la búsqueda o el filtro.</p>
               </td>
             </tr>
@@ -582,20 +577,20 @@ function setFilter(filter) {
               @click="goToUserProfile(user.username)"
               :class="['border-b border-gray-200 transition-colors duration-150 cursor-pointer group', selectedUsers.has(user.username) ? 'bg-blue-50' : 'hover:bg-gray-50']"
             >
-              <td class="pl-2 py-2.5 w-10" @click.stop>
-                <input type="checkbox" :checked="selectedUsers.has(user.username)" @change="toggleUser(user.username)" class="w-4 h-4 border-gray-300 rounded focus:ring-blue-500 cursor-pointer text-blue-600 transition-colors">
+              <td class="pl-2 py-1.5 w-10" @click.stop>
+                <input type="checkbox" :checked="selectedUsers.has(user.username)" @change="toggleUser(user.username)" class="w-3.5 h-3.5 border-gray-300 rounded focus:ring-blue-500 cursor-pointer text-blue-600 transition-colors">
               </td>
-              <td class="px-3 py-2.5">
-                <div class="flex items-center gap-3">
-                  <div :class="['w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-white text-[10px] font-medium', getAvatarColor(user.fullName)]">
+              <td class="px-3 py-1.5">
+                <div class="flex items-center gap-2.5">
+                  <div :class="['w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-white text-[9px] font-medium', getAvatarColor(user.fullName)]">
                     {{ getInitials(user.fullName) }}
                   </div>
-                  <span class="text-sm font-medium text-gray-900 group-hover:text-blue-600 transition-colors">{{ user.fullName }}</span>
+                  <span class="text-[13px] font-medium text-gray-900 group-hover:text-blue-600 transition-colors">{{ user.fullName }}</span>
                 </div>
               </td>
-              <td class="px-3 py-2.5">
+              <td class="px-3 py-1.5">
                 <div class="flex items-center gap-1.5 group/upn">
-                  <span class="text-sm text-gray-600">{{ user.username.split('@')[0] }}</span>
+                  <span class="text-[13px] text-gray-600">{{ user.username.split('@')[0] }}</span>
                   <button 
                     @click="copyUpn(user.username.split('@')[0], $event)" 
                     class="text-gray-400 hover:text-gray-700 opacity-0 group-hover/upn:opacity-100 transition-all p-0.5 rounded hover:bg-gray-200 shrink-0 relative"
@@ -608,19 +603,22 @@ function setFilter(filter) {
                   </button>
                 </div>
               </td>
-              <td class="px-3 py-2.5">
-                <div class="text-sm text-gray-600 truncate max-w-[150px] xl:max-w-[180px]" :title="user.title">{{ user.title || '—' }}</div>
+              <td class="px-3 py-1.5">
+                <div class="text-[13px] text-gray-600 truncate max-w-[150px] xl:max-w-[180px]" :title="user.title">{{ user.title || '—' }}</div>
               </td>
-              <td class="px-3 py-2.5">
-                <div class="text-sm text-gray-600 truncate max-w-[150px] xl:max-w-[180px]" :title="user.department">{{ user.department || '—' }}</div>
+              <td class="px-3 py-1.5">
+                <div class="text-[13px] text-gray-600 truncate max-w-[150px] xl:max-w-[180px]" :title="user.department">{{ user.department || '—' }}</div>
               </td>
-              <td class="px-3 py-2.5 text-center">
+              <td class="px-3 py-1.5 text-center">
+                <span class="text-[11px] text-slate-700">{{ user.ou === 'Nube' ? 'No' : 'Sí' }}</span>
+              </td>
+              <td class="px-3 py-1.5 text-center">
                 <span v-if="licensesSummary[user.username.toLowerCase()] === true" class="text-[11px] text-slate-700">
                   Sí
                 </span>
                 <span v-else-if="licensesSummary[user.username.toLowerCase()] === false" class="text-[11px] text-slate-400">No</span>
               </td>
-              <td class="px-3 py-2.5 text-center">
+              <td class="px-3 py-1.5 text-center">
                 <span class="inline-flex items-center gap-1.5 text-[11px] text-slate-700">
                   <span :class="['w-1.5 h-1.5 rounded-full', user.status === 'active' ? 'bg-emerald-500' : user.status === 'locked' ? 'bg-red-500' : 'bg-slate-300']"></span>
                   {{ statusLabels[user.status] || user.status }}

@@ -1,4 +1,4 @@
-﻿<script setup>
+<script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 
 const props = defineProps({
@@ -14,6 +14,7 @@ const submitStatusText = ref('')
 
 // Datos del formulario
 const formData = ref({
+  accountType: 'onpremise', // 'onpremise' o 'cloud'
   ou: '',
   ouName: '',
   firstName: '',
@@ -269,9 +270,9 @@ function selectOU(node) {
   formData.value.ouName = node.name
 }
 
-// LÃ³gica del Wizard
+// Lógica del Wizard
 function nextStep() {
-  if (currentStep.value === 1 && !formData.value.ou) {
+  if (currentStep.value === 1 && !formData.value.ou && formData.value.accountType !== 'cloud') {
     alert("Debes seleccionar una Unidad Organizativa para continuar.")
     return
   }
@@ -283,7 +284,7 @@ function nextStep() {
   }
   if (currentStep.value === 3) {
     if (!formData.value.password) {
-      alert("Debes establecer una contraseÃ±a inicial.")
+      alert("Debes establecer una contraseña inicial.")
       return
     }
   }
@@ -321,8 +322,9 @@ function generatePassword() {
 function resetForm() {
   currentStep.value = 1
   formData.value = {
-    ou: '', ouName: '', firstName: '', lastName: '', initials: '', fullName: '', upnPrefix: '', samAccountName: '',
-    password: '', mustChangePassword: true, cannotChangePassword: false, passwordNeverExpires: false, accountDisabled: false
+    accountType: 'onpremise', ou: '', ouName: '', firstName: '', lastName: '', initials: '', fullName: '', upnPrefix: '', samAccountName: '',
+    password: '', mustChangePassword: true, cannotChangePassword: false, passwordNeverExpires: false, accountDisabled: false,
+    sharedFolders: [], proxyAddresses: [], userParameters: ''
   }
   expandedNodes.value = new Set([ouTree.value[0]?.dn])
 }
@@ -343,6 +345,7 @@ async function submitUser() {
     fullName: formData.value.fullName,
     upn: `${formData.value.upnPrefix}${upnSuffix.value}`,
     samAccountName: formData.value.samAccountName,
+    accountType: formData.value.accountType,
     ou: formData.value.ou,
     password: formData.value.password,
     mustChangePassword: formData.value.mustChangePassword,
@@ -426,9 +429,17 @@ async function submitUser() {
   }
 }
 
+watch(() => formData.value.accountType, (newType) => {
+  if (newType === 'cloud' && currentStep.value === 1) {
+    // Si cambia a cloud y está en el paso 1, puede que quiera avanzar o ignorar
+  }
+})
+
 watch(() => props.isOpen, (val) => {
   if (val) {
     fetchOUs()
+    formData.value.accountType = 'onpremise'
+    currentStep.value = 1
   }
 })
 </script>
@@ -452,8 +463,8 @@ watch(() => props.isOpen, (val) => {
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
             </div>
             <div>
-              <h2 class="text-sm font-bold text-slate-800" id="slide-over-title">Nuevo Objeto - Usuario</h2>
-              <p class="text-[11px] text-slate-500 font-medium">Asistente de aprovisionamiento de AD</p>
+              <h2 class="text-sm font-bold text-slate-800" id="slide-over-title">Asistente de aprovisionamiento de AD/Cloud</h2>
+              <p class="text-[11px] text-slate-500 font-medium">Creación de usuario</p>
             </div>
           </div>
           <button @click="handleClose" class="rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 p-1.5 transition-colors">
@@ -465,7 +476,7 @@ watch(() => props.isOpen, (val) => {
         <!-- Progress Steps (Microsoft Style Tabs) -->
         <div v-show="!activeSubView" class="px-6 pt-4 border-b border-slate-200 bg-white shrink-0 flex gap-8">
           <button class="pb-3 text-[13px] font-medium transition-colors relative cursor-default" :class="currentStep === 1 ? 'text-slate-900' : 'text-slate-500'">
-            UbicaciÃ³n
+            Ubicación
             <div v-if="currentStep === 1" class="absolute bottom-0 left-0 right-0 h-[2px] bg-blue-600"></div>
           </button>
           <button class="pb-3 text-[13px] font-medium transition-colors relative cursor-default" :class="currentStep === 2 ? 'text-slate-900' : 'text-slate-500'">
@@ -486,26 +497,49 @@ watch(() => props.isOpen, (val) => {
         <div class="flex-1 overflow-y-auto p-6">
           
           <div v-show="!activeSubView">
-            <!-- STEP 1: UBICACIÃ“N -->
+            
+            <!-- Account Type Toggle (Siempre visible al principio del paso 1) -->
+            <div v-show="currentStep === 1" class="mb-8 p-4 bg-slate-50 border border-slate-200 rounded-lg">
+              <label class="text-[12px] font-semibold text-slate-700 block mb-3 uppercase tracking-wider">Tipo de Cuenta a Crear</label>
+              <div class="flex gap-4">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" v-model="formData.accountType" value="onpremise" class="text-blue-600 focus:ring-blue-600">
+                  <span class="text-[13px] font-medium text-slate-800">Sincronizada (Active Directory Local)</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" v-model="formData.accountType" value="cloud" class="text-blue-600 focus:ring-blue-600">
+                  <span class="text-[13px] font-medium text-slate-800">Solo Nube (Microsoft 365 / Entra ID)</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- STEP 1: UBICACIÓN -->
           <div v-show="currentStep === 1" class="space-y-4">
-            <div>
+            
+            <div v-if="formData.accountType === 'cloud'" class="flex flex-col items-center justify-center py-12 text-center bg-blue-50/50 rounded-lg border border-blue-100">
+              <svg class="w-12 h-12 text-blue-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" /></svg>
+              <h3 class="text-[14px] font-semibold text-blue-900 mb-1">Entorno de Nube Seleccionado</h3>
+              <p class="text-[12px] text-blue-700 max-w-sm">Las cuentas "Solo Nube" se crean directamente en Microsoft Entra ID. No utilizan Unidades Organizativas (OU) locales. Puedes avanzar al siguiente paso.</p>
+            </div>
+            
+            <div v-else>
               <h3 class="text-base font-semibold text-slate-900 mb-1">Destino del objeto</h3>
-              <p class="text-[13px] text-slate-600 mb-6">Selecciona la Unidad Organizativa o Contenedor donde se crearÃ¡ el nuevo usuario.</p>
+              <p class="text-[13px] text-slate-600 mb-6">Selecciona la Unidad Organizativa o Contenedor donde se creará el nuevo usuario.</p>
             </div>
             
-            <div v-if="loadingOus" class="flex flex-col items-center justify-center py-12">
+            <div v-if="loadingOus && formData.accountType !== 'cloud'" class="flex flex-col items-center justify-center py-12">
               <div class="w-6 h-6 border-2 border-slate-200 border-t-blue-600 rounded-full animate-spin mb-3"></div>
-              <span class="text-[11px] font-medium text-slate-500">Cargando Ã¡rbol de AD...</span>
+              <span class="text-[11px] font-medium text-slate-500">Cargando árbol de AD...</span>
             </div>
             
-            <div v-else class="border border-slate-200 rounded-md bg-white shadow-sm overflow-hidden flex flex-col h-[400px]">
-              <!-- Ãrbol Header -->
+            <div v-else-if="formData.accountType !== 'cloud'" class="border border-slate-200 rounded-md bg-white shadow-sm overflow-hidden flex flex-col h-[400px]">
+              <!-- Árbol Header -->
               <div class="bg-slate-50 border-b border-slate-200 px-4 py-2 flex items-center gap-2 shrink-0">
                 <svg class="w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
                 <span class="text-[11px] font-bold text-slate-600">Usuarios y equipos de Active Directory</span>
               </div>
               
-              <!-- Ãrbol Body -->
+              <!-- Árbol Body -->
               <div class="flex-1 overflow-auto p-2">
                 <!-- Recursive Tree Component Inline (Since it's simple enough) -->
                 <div class="text-[12px] font-medium text-slate-700">
@@ -515,9 +549,9 @@ watch(() => props.isOpen, (val) => {
                 </div>
               </div>
 
-              <!-- SelecciÃ³n Actual -->
+              <!-- Selección Actual -->
               <div class="bg-slate-50 border-t border-slate-200 p-3 shrink-0">
-                <p class="text-[11px] font-semibold text-slate-700 mb-1">UbicaciÃ³n seleccionada</p>
+                <p class="text-[11px] font-semibold text-slate-700 mb-1">Ubicación seleccionada</p>
                 <div class="text-[12px] font-mono text-slate-600 break-all leading-relaxed">
                   {{ formData.ou || 'Ninguna seleccionada' }}
                 </div>
@@ -529,7 +563,7 @@ watch(() => props.isOpen, (val) => {
           <div v-show="currentStep === 2" class="space-y-8 px-2">
             <div>
               <h3 class="text-base font-semibold text-slate-900 mb-1">Identidad del usuario</h3>
-              <p class="text-[13px] text-slate-600 mb-6">Ingresa los datos personales y de inicio de sesiÃ³n.</p>
+              <p class="text-[13px] text-slate-600 mb-6">Ingresa los datos personales y de inicio de sesión.</p>
             </div>
 
             <div class="grid grid-cols-6 gap-x-6 gap-y-8">
@@ -543,7 +577,7 @@ watch(() => props.isOpen, (val) => {
               </div>
               <div class="col-span-6 sm:col-span-3">
                 <label class="block text-[12px] font-medium text-slate-700 mb-1">Apellidos</label>
-                <input v-model="formData.lastName" type="text" class="w-full text-[13px] border-0 border-b border-slate-300 bg-transparent px-0 py-1.5 focus:ring-0 focus:border-blue-600 transition-colors" placeholder="Ej. PÃ©rez">
+                <input v-model="formData.lastName" type="text" class="w-full text-[13px] border-0 border-b border-slate-300 bg-transparent px-0 py-1.5 focus:ring-0 focus:border-blue-600 transition-colors" placeholder="Ej. Pérez">
               </div>
 
               <!-- Nombre completo a media pantalla para que no sea tan grande -->
@@ -557,18 +591,19 @@ watch(() => props.isOpen, (val) => {
 
             <div class="grid grid-cols-6 gap-x-6 gap-y-8">
               <div class="col-span-6 sm:col-span-3">
-                <label class="block text-[12px] font-medium text-slate-700 mb-1">Nombre de inicio de sesiÃ³n (UPN)</label>
+                <label class="block text-[12px] font-medium text-slate-700 mb-1">Nombre de inicio de sesión (UPN)</label>
                 <div class="flex items-center border-b border-slate-300 focus-within:border-blue-600 transition-colors">
                   <input v-model="formData.upnPrefix" type="text" class="w-full text-[13px] border-0 bg-transparent px-0 py-1.5 focus:ring-0 transition-colors font-mono">
                   <select v-model="upnSuffix" class="text-slate-500 text-[13px] font-mono border-0 bg-transparent py-1.5 pl-2 pr-6 focus:ring-0 cursor-pointer">
-                    <option value="@local.code">@local.code</option>
+                    <option value="@local.code" v-if="formData.accountType !== 'cloud'">@local.code</option>
+                    <option value="@hogarymoda.com.co">@hogarymoda.com.co</option>
                     <option value="@105code.cloud">@105code.cloud</option>
                   </select>
                 </div>
               </div>
 
-              <div class="col-span-6 sm:col-span-3">
-                <label class="block text-[12px] font-medium text-slate-700 mb-1">Nombre inicio de sesiÃ³n (antiguo)</label>
+              <div class="col-span-6 sm:col-span-3" v-if="formData.accountType !== 'cloud'">
+                <label class="block text-[12px] font-medium text-slate-700 mb-1">Nombre inicio de sesión (antiguo)</label>
                 <div class="flex items-center border-b border-slate-300 focus-within:border-blue-600 transition-colors">
                   <span class="text-slate-500 text-[13px] font-mono pr-2 select-none">
                     {{ preWin2000 }}
@@ -583,45 +618,47 @@ watch(() => props.isOpen, (val) => {
           <div v-show="currentStep === 3" class="space-y-8 px-2">
             <div>
               <h3 class="text-base font-semibold text-slate-900 mb-1">Seguridad de la cuenta</h3>
-              <p class="text-[13px] text-slate-600 mb-6">Establece la contraseÃ±a inicial y las polÃ­ticas de la cuenta.</p>
+              <p class="text-[13px] text-slate-600 mb-6">Establece la contraseña inicial y las políticas de la cuenta.</p>
             </div>
 
             <div class="max-w-md">
               <div class="flex items-center justify-between mb-1">
-                <label class="block text-[12px] font-medium text-slate-700">ContraseÃ±a temporal</label>
-                <button @click="generatePassword" class="text-[12px] font-medium text-blue-600 hover:text-blue-800 transition-colors">Generar contraseÃ±a</button>
+                <label class="block text-[12px] font-medium text-slate-700">Contraseña temporal</label>
+                <button @click="generatePassword" class="text-[12px] font-medium text-blue-600 hover:text-blue-800 transition-colors">Generar contraseña</button>
               </div>
-              <input v-model="formData.password" type="text" class="w-full text-[13px] border-0 border-b border-slate-300 bg-transparent px-0 py-1.5 focus:ring-0 focus:border-blue-600 transition-colors font-mono" placeholder="Ingresa una contraseÃ±a...">
+              <input v-model="formData.password" type="text" class="w-full text-[13px] border-0 border-b border-slate-300 bg-transparent px-0 py-1.5 focus:ring-0 focus:border-blue-600 transition-colors font-mono" placeholder="Ingresa una contraseña...">
             </div>
 
             <div class="space-y-4 max-w-md pt-2">
               <label class="flex items-start gap-3 cursor-pointer group">
                 <input v-model="formData.mustChangePassword" type="checkbox" class="mt-0.5 rounded-none text-blue-600 focus:ring-0 focus:ring-offset-0 border-slate-300 cursor-pointer">
-                <span class="text-[13px] text-slate-700 font-medium group-hover:text-blue-700 transition-colors">El usuario debe cambiar la contraseÃ±a en el siguiente inicio de sesiÃ³n</span>
+                <span class="text-[13px] text-slate-700 font-medium group-hover:text-blue-700 transition-colors">El usuario debe cambiar la contraseña en el siguiente inicio de sesión</span>
               </label>
               
               <label class="flex items-start gap-3 cursor-pointer group">
                 <input v-model="formData.cannotChangePassword" :disabled="formData.mustChangePassword" type="checkbox" class="mt-0.5 rounded-none text-blue-600 focus:ring-0 focus:ring-offset-0 border-slate-300 disabled:opacity-50 cursor-pointer">
-                <span class="text-[13px] text-slate-700 font-medium group-hover:text-blue-700 transition-colors" :class="{'opacity-50': formData.mustChangePassword}">El usuario no puede cambiar la contraseÃ±a</span>
+                <span class="text-[13px] text-slate-700 font-medium group-hover:text-blue-700 transition-colors" :class="{'opacity-50': formData.mustChangePassword}">El usuario no puede cambiar la contraseña</span>
               </label>
               
               <label class="flex items-start gap-3 cursor-pointer group">
                 <input v-model="formData.passwordNeverExpires" :disabled="formData.mustChangePassword" type="checkbox" class="mt-0.5 rounded-none text-blue-600 focus:ring-0 focus:ring-offset-0 border-slate-300 disabled:opacity-50 cursor-pointer">
-                <span class="text-[13px] text-slate-700 font-medium group-hover:text-blue-700 transition-colors" :class="{'opacity-50': formData.mustChangePassword}">La contraseÃ±a nunca expira</span>
+                <span class="text-[13px] text-slate-700 font-medium group-hover:text-blue-700 transition-colors" :class="{'opacity-50': formData.mustChangePassword}">La contraseña nunca expira</span>
               </label>
               
               <div class="pt-2 border-t border-slate-200">
                 <label class="flex items-start gap-3 cursor-pointer group">
                   <input v-model="formData.accountDisabled" type="checkbox" class="mt-0.5 rounded-none text-red-600 focus:ring-0 focus:ring-offset-0 border-slate-300 cursor-pointer">
-                  <span class="text-[13px] text-slate-700 font-medium group-hover:text-red-700 transition-colors">La cuenta estÃ¡ deshabilitada</span>
+                  <span class="text-[13px] text-slate-700 font-medium group-hover:text-red-700 transition-colors">La cuenta está deshabilitada</span>
                 </label>
               </div>
             </div>
             
-            <p v-if="formData.mustChangePassword" class="text-[11px] text-blue-700 bg-blue-50/50 p-3 rounded-none border border-blue-200 flex items-start gap-2 max-w-md">
-              <svg class="w-4 h-4 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-              Al obligar al cambio de contraseÃ±a, las polÃ­ticas restrictivas de contraseÃ±a se desactivan automÃ¡ticamente en el servidor.
-            </p>
+            <div class="mt-4 p-3 bg-blue-50/50 border border-blue-100 flex items-start gap-3 rounded-md" v-if="formData.mustChangePassword">
+              <svg class="w-4 h-4 text-blue-500 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              <p class="text-[11px] text-blue-700 leading-relaxed">
+                Al obligar al cambio de contraseña, las políticas restrictivas de contraseña se desactivan automáticamente en el servidor.
+              </p>
+            </div>
           </div>
 
           <!-- STEP 4: RESUMEN -->
@@ -667,7 +704,7 @@ watch(() => props.isOpen, (val) => {
                 <li>
                   <a @click="openSubView('folders')" class="text-[13px] font-medium text-blue-600 hover:text-blue-800 hover:underline cursor-pointer flex items-center gap-2 transition-colors">
                     <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>
-                    AÃ±adir carpetas compartidas
+                    Añadir carpetas compartidas
                     <span v-if="formData.sharedFolders.length" class="ml-auto bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[11px] font-bold">{{ formData.sharedFolders.length }} agregadas</span>
                   </a>
                 </li>
@@ -707,11 +744,11 @@ watch(() => props.isOpen, (val) => {
                       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                     </button>
                   </div>
-                  <p v-if="formData.sharedFolders.length === 0" class="text-[13px] text-slate-500 italic py-4 text-center border border-dashed border-slate-300">No hay carpetas en cola de asignaciÃ³n.</p>
+                  <p v-if="formData.sharedFolders.length === 0" class="text-[13px] text-slate-500 italic py-4 text-center border border-dashed border-slate-300">No hay carpetas en cola de asignación.</p>
                 </div>
                 
                 <div class="bg-white border border-slate-200 p-4 shadow-sm flex flex-col gap-4">
-                  <h4 class="text-[12px] font-semibold text-slate-800">AÃ±adir nueva asignaciÃ³n</h4>
+                  <h4 class="text-[12px] font-semibold text-slate-800">Añadir nueva asignación</h4>
                   <div class="flex flex-col sm:flex-row gap-3">
                     <input 
                       v-model="newFolderPath" 
@@ -731,7 +768,7 @@ watch(() => props.isOpen, (val) => {
                         <option value="Modificar">Modificar</option>
                         <option value="Control Total">Control Total</option>
                       </select>
-                      <button @click="addSharedFolder" class="px-4 py-1.5 bg-slate-800 text-white text-[12px] font-semibold hover:bg-slate-900 transition-colors">AÃ±adir</button>
+                      <button @click="addSharedFolder" class="px-4 py-1.5 bg-slate-800 text-white text-[12px] font-semibold hover:bg-slate-900 transition-colors">Añadir</button>
                     </div>
                   </div>
                 </div>
@@ -751,7 +788,7 @@ watch(() => props.isOpen, (val) => {
               </button>
               <div>
                 <h3 class="text-base font-semibold text-slate-900 mb-0.5">Atributos Avanzados</h3>
-                <p class="text-[12px] text-slate-500">Configura direcciones proxy y parÃ¡metros adicionales.</p>
+                <p class="text-[12px] text-slate-500">Configura direcciones proxy y parámetros adicionales.</p>
               </div>
             </div>
 
@@ -770,7 +807,7 @@ watch(() => props.isOpen, (val) => {
                 </div>
                 
                 <div class="bg-white border border-slate-200 p-4 shadow-sm flex flex-col gap-4">
-                  <h4 class="text-[12px] font-semibold text-slate-800">AÃ±adir direcciÃ³n</h4>
+                  <h4 class="text-[12px] font-semibold text-slate-800">Añadir dirección</h4>
                   <div class="flex flex-col sm:flex-row gap-3">
                     <select v-model="newProxyType" class="text-[13px] border border-slate-300 bg-white px-2 py-1.5 focus:ring-0 focus:border-blue-600 outline-none w-32 font-mono">
                       <option value="SMTP">SMTP</option>
@@ -779,7 +816,7 @@ watch(() => props.isOpen, (val) => {
                     </select>
                     <div class="flex-1 flex gap-2">
                       <input v-model="newProxyValue" type="text" placeholder="usuario@dominio.com" class="flex-1 text-[13px] border-0 border-b border-slate-300 bg-transparent px-1 py-1.5 focus:ring-0 focus:border-blue-600 outline-none font-mono">
-                      <button @click="addProxyAddress" class="px-4 py-1.5 bg-slate-800 text-white text-[12px] font-semibold hover:bg-slate-900 transition-colors">AÃ±adir</button>
+                      <button @click="addProxyAddress" class="px-4 py-1.5 bg-slate-800 text-white text-[12px] font-semibold hover:bg-slate-900 transition-colors">Añadir</button>
                     </div>
                   </div>
                 </div>
@@ -788,7 +825,7 @@ watch(() => props.isOpen, (val) => {
               <!-- UserParameters -->
               <div class="pt-6 border-t border-slate-100">
                 <h4 class="text-[13px] font-semibold text-slate-800 mb-2">UserParameters</h4>
-                <p class="text-[12px] text-slate-500 mb-4">Usado comÃºnmente para parÃ¡metros de Terminal Services u otros metadatos.</p>
+                <p class="text-[12px] text-slate-500 mb-4">Usado comúnmente para parámetros de Terminal Services u otros metadatos.</p>
                 <textarea v-model="formData.userParameters" rows="3" placeholder="CtxCfgPresent..." class="w-full text-[13px] border border-slate-300 bg-white px-3 py-2 shadow-sm focus:ring-0 focus:border-blue-600 outline-none resize-y font-mono"></textarea>
               </div>
             </div>

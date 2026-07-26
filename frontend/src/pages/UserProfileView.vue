@@ -58,6 +58,13 @@ const tabs = [
   { id: 'entra',     name: 'Nube (Entra ID)',                  icon: 'M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z' }
 ]
 
+const filteredTabs = computed(() => {
+  if (userProfile.value?.isCloudOnly) {
+    return tabs.filter(t => ['general', 'account', 'licenses', 'entra'].includes(t.id))
+  }
+  return tabs
+})
+
 import { getFriendlyLicenseName } from '@/utils/licenses'
 
 // --- Licencias ---
@@ -112,8 +119,9 @@ async function assignLicense() {
     })
     const data = await res.json()
     if (res.ok && data.success) {
-      const skuName = getLicenseName(selectedSku.value, '')
-      alert(`Licencia ${skuName} asignada correctamente al usuario ${username} en Entra ID.`)
+      const selectedObj = availableLicenses.value.find(l => l.skuId === selectedSku.value)
+      const skuName = getLicenseName(selectedSku.value, selectedObj ? selectedObj.skuPartNumber : '')
+      alert(`Licencia asignada: ${skuName}`)
       selectedSku.value = ''
       fetchLicenses()
     } else {
@@ -406,7 +414,10 @@ onMounted(async () => {
     // 2. Desbloquear la vista inmediatamente para que el usuario pueda interactuar
     isLoading.value = false
 
-    // No cargamos Entra ni Dispositivos aquí para no bloquear el sistema.
+    // Carga asíncrona del estado de Entra para mostrar en General (AD Connect)
+    loadUserEntraStatus(username)
+
+    // No cargamos Dispositivos aquí para no bloquear el sistema.
     // Se cargarán "Lazy" (perezosamente) cuando el usuario haga clic en sus pestañas.
 
   } catch (err) {
@@ -414,6 +425,32 @@ onMounted(async () => {
     isLoading.value = false
   }
 })
+
+async function loadUserEntraStatus(username) {
+  if (userEntraStatus.value) return
+  userEntraStatus.value = { loading: true }
+  
+  try {
+    const res = await authFetch(`${API_BASE}/graph/users/${username}/entra-status`)
+    if (res.ok) {
+      const e = await res.json()
+      if (e.success) userEntraStatus.value = e.data
+      else userEntraStatus.value = { error: e.error || 'No encontrado en Entra ID' }
+    } else if (res.status === 404) {
+      userEntraStatus.value = { notSynced: true }
+    } else {
+      try {
+        const err = await res.json()
+        userEntraStatus.value = { error: err.detail || 'Error en Graph API' }
+      } catch {
+        userEntraStatus.value = { error: `Error HTTP ${res.status}` }
+      }
+    }
+  } catch (err) {
+    console.error("Error cargando estado de Entra:", err)
+    userEntraStatus.value = { notSynced: true }
+  }
+}
 
 // Carga perezosa de atributos y carpetas y Entra ID
 watch(activeTab, async (tab) => {
@@ -423,29 +460,8 @@ watch(activeTab, async (tab) => {
     if (res.ok) allAttributes.value = await res.json()
   }
 
-  if (tab === 'entra' && !userEntraStatus.value) {
-    userEntraStatus.value = { loading: true }
-    authFetch(`${API_BASE}/graph/users/${username}/entra-status`)
-      .then(async (res) => {
-        if (res.ok) {
-          const e = await res.json()
-          if (e.success) userEntraStatus.value = e.data
-          else userEntraStatus.value = { error: e.error || 'No encontrado en Entra ID' }
-        } else if (res.status === 404) {
-          userEntraStatus.value = { notSynced: true }
-        } else {
-          try {
-            const err = await res.json()
-            userEntraStatus.value = { error: err.detail || 'Error en Graph API' }
-          } catch {
-            userEntraStatus.value = { error: `Error HTTP ${res.status}` }
-          }
-        }
-      }).catch(err => {
-        console.error("Error cargando estado de Entra:", err)
-        userEntraStatus.value = { notSynced: true }
-      })
-
+  if (tab === 'entra') {
+    // mailbox y devices se cargan lazy en la pestaña entra
     authFetch(`${API_BASE}/graph/users/${username}/mailbox`)
       .then(async (res) => {
         if (res.ok) {
@@ -828,7 +844,7 @@ const statusConfig = computed(() => {
         <h2 class="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Administrar</h2>
       </div>
       <nav class="flex flex-col gap-1 px-3 pb-6">
-        <button v-for="tab in tabs" :key="tab.id" @click="activeTab = tab.id"
+        <button v-for="tab in filteredTabs" :key="tab.id" @click="activeTab = tab.id"
           :class="['flex items-center gap-3 px-3 py-2 text-sm transition-all text-left w-full rounded-md', activeTab === tab.id ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-600 hover:bg-gray-100']">
           <svg :class="['w-4 h-4 shrink-0', activeTab === tab.id ? 'text-blue-700' : 'text-gray-400']" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" :d="tab.icon"/></svg>
           <span class="truncate">{{ tab.name }}</span>
@@ -999,7 +1015,7 @@ const statusConfig = computed(() => {
                   <!-- Información Personal -->
                   <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Información personal</h3>
                   <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
-                    <template v-for="[label, val] in [['Nombre', userProfile.firstName], ['Apellido', userProfile.lastName], ['Nombre mostrado', userProfile.fullName], ['Descripción', userProfile.description], ['Correo electrónico', userProfile.email], ['Teléfono', userProfile.phone], ['Celular', userProfile.mobile]]" :key="label">
+                    <template v-for="[label, val] in [['Nombre', userProfile.firstName], ['Apellido', userProfile.lastName], ['Nombre mostrado', userProfile.fullName], ['Descripción', userProfile.description], ['Correo electrónico', userProfile.email], ['Teléfono', userProfile.phone], ['Celular', userProfile.mobile], ['Último inicio de sesión', userProfile.lastLogon]]" :key="label">
                       <div class="flex flex-col">
                         <dt class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">{{ label }}</dt>
                         <dd :class="['text-sm font-medium', val ? 'text-gray-900' : 'text-gray-400 italic']">{{ val || '—' }}</dd>
@@ -1266,6 +1282,35 @@ const statusConfig = computed(() => {
                       </div>
                     </div>
                   </div>
+                </div>
+              </div>
+            </div>
+            
+            <div v-if="userEntraStatus && userEntraStatus.onPremisesSyncEnabled" class="bg-white rounded-lg border border-gray-200 shadow-sm mt-5 p-6">
+              <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                <svg class="w-4 h-4 text-emerald-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                Propiedades Locales (AD Connect)
+              </h3>
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-4 gap-x-8">
+                <div class="flex flex-col lg:col-span-3">
+                  <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Nombre distintivo (DN) local</span>
+                  <span class="text-sm font-medium text-gray-900 break-all">{{ userEntraStatus.onPremisesDistinguishedName || '--' }}</span>
+                </div>
+                <div class="flex flex-col">
+                  <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Identificador inmutable local</span>
+                  <span class="text-sm font-medium text-gray-900">{{ userEntraStatus.onPremisesImmutableId || '--' }}</span>
+                </div>
+                <div class="flex flex-col">
+                  <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Nombre de cuenta SAM local</span>
+                  <span class="text-sm font-medium text-gray-900">{{ userEntraStatus.onPremisesSamAccountName || '--' }}</span>
+                </div>
+                <div class="flex flex-col">
+                  <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Nombre de dominio local</span>
+                  <span class="text-sm font-medium text-gray-900">{{ userEntraStatus.onPremisesDomainName || '--' }}</span>
+                </div>
+                <div class="flex flex-col lg:col-span-3">
+                  <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Identificador de seguridad (SID) local</span>
+                  <span class="text-sm font-medium text-gray-900 break-all">{{ userEntraStatus.onPremisesSecurityIdentifier || '--' }}</span>
                 </div>
               </div>
             </div>

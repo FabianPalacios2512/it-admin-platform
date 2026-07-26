@@ -18,7 +18,7 @@ watch(
   { immediate: true }
 )
 
-const navigationGroups = [
+const navigationGroups = ref([
   {
     title: 'MONITORING',
     items: [
@@ -35,60 +35,56 @@ const navigationGroups = [
     ]
   },
   {
-    title: 'ACTIVE DIRECTORY',
+    title: 'MANAGEMENT',
     items: [
       {
-        name: 'Equipos',
-        path: '/devices',
-        icon: 'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
+        name: 'Usuarios',
+        icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z',
+        expanded: false,
+        subItems: [
+          { name: 'Cuentas AD', path: '/cuentas' },
+          { name: 'Equipos', path: '/devices' },
+          { name: 'Seguridad', path: '/seguridad' },
+          { name: 'Auditoría IT', path: '/auditoria' },
+          { name: 'Licencias Inactivas', path: '/licencias-inactivas' }
+        ]
       },
       {
-        name: 'Cuentas AD',
-        path: '/cuentas',
-        icon: 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z',
-      },
-      {
-        name: 'Seguridad',
-        path: '/seguridad',
-        icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
-      },
-      {
-        name: 'Auditoría IT',
-        path: '/auditoria',
-        icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4',
-      }
-    ]
-  },
-  {
-    title: 'CORE SERVICES',
-    items: [
-      {
-        name: 'Servidor Archivos',
-        path: '/fileserver',
-        icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z',
-      },
-      {
-        name: 'Servidor Impresión',
-        path: '/printers',
-        icon: 'M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z',
-      },
-      {
-        name: 'Gestor RDS',
-        path: '/rds',
+        name: 'Servidores',
         icon: 'M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2',
+        expanded: false,
+        subItems: [
+          { name: 'Servidor Archivos', path: '/fileserver' },
+          { name: 'Servidor Impresión', path: '/printers' },
+          { name: 'Gestor RDS', path: '/rds' },
+          { name: 'Gestión Wi-Fi', path: '/wifi' }
+        ]
       },
       {
-        name: 'Gestión Wi-Fi',
-        path: '/wifi',
-        icon: 'M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0',
+        name: 'Exchange',
+        icon: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
+        expanded: false,
+        subItems: [
+          { name: 'Cuarentena', path: '/cuarentena' }, { name: 'Hub de Delegación', path: '/delegation' }
+        ]
       }
     ]
   }
-]
+])
 
 // Mantener compatibilidad con mobile (si la lista es plana)
 const navigationItems = computed(() => {
-  return navigationGroups.flatMap(group => group.items)
+  const items = []
+  for (const group of navigationGroups.value) {
+    for (const item of group.items) {
+      if (item.subItems) {
+        items.push(...item.subItems)
+      } else {
+        items.push(item)
+      }
+    }
+  }
+  return items
 })
 
 const currentTime = ref('')
@@ -109,8 +105,17 @@ function closeMobileMenu() {
   mobileMenuOpen.value = false
 }
 
-function isActive(path) {
-  return route.path === path || route.path.startsWith(path + '/')
+function isActive(item) {
+  if (typeof item === 'string') {
+    return route.path === item || route.path.startsWith(item + '/')
+  }
+  if (item.path) {
+    return route.path === item.path || route.path.startsWith(item.path + '/')
+  }
+  if (item.subItems) {
+    return item.subItems.some(sub => route.path === sub.path || route.path.startsWith(sub.path + '/'))
+  }
+  return false
 }
 
 const sidebarWidth = computed(() => sidebarCollapsed.value ? 'w-16' : 'w-56')
@@ -248,6 +253,8 @@ onMounted(() => {
   window.addEventListener('click', resetInactivityTimer)
   
   resetInactivityTimer()
+  // Auto expand folder if active
+  navigationGroups.value.forEach(g => g.items.forEach(i => { if(i.subItems && isActive(i)) i.expanded = true }))
 })
 
 onUnmounted(() => {
@@ -293,25 +300,71 @@ onUnmounted(() => {
           <div v-show="sidebarCollapsed && gIdx > 0" class="my-4 border-t border-slate-700/50 mx-4"></div>
           
           <ul class="space-y-0.5">
-            <li v-for="item in group.items" :key="item.path">
-              <router-link
-                :to="item.path"
-                :class="[
-                  'flex items-center gap-3 py-2.5 transition-all duration-150',
-                  sidebarCollapsed ? 'justify-center px-0' : 'px-4',
-                  isActive(item.path)
-                    ? 'border-l-4 border-blue-500 bg-gradient-to-r from-blue-900/40 to-transparent text-white'
-                    : 'text-slate-400 hover:bg-slate-800/60 hover:text-white border-l-4 border-transparent'
-                ]"
-              >
-                <svg
-                  :class="['w-5 h-5 shrink-0', isActive(item.path) ? 'text-white' : 'text-slate-500']"
-                  fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+            <li v-for="item in group.items" :key="item.name">
+              <template v-if="!item.subItems">
+                <router-link
+                  :to="item.path"
+                  :class="[
+                    'flex items-center gap-3 py-2.5 transition-all duration-150 cursor-pointer',
+                    sidebarCollapsed ? 'justify-center px-0' : 'px-4',
+                    isActive(item)
+                      ? 'border-l-4 border-blue-500 bg-gradient-to-r from-blue-900/40 to-transparent text-white'
+                      : 'text-slate-400 hover:bg-slate-800/60 hover:text-white border-l-4 border-transparent'
+                  ]"
                 >
-                  <path stroke-linecap="round" stroke-linejoin="round" :d="item.icon" />
-                </svg>
-                <span v-show="!sidebarCollapsed" class="text-[13px] font-medium truncate">{{ item.name }}</span>
-              </router-link>
+                  <svg
+                    :class="['w-5 h-5 shrink-0', isActive(item) ? 'text-white' : 'text-slate-500']"
+                    fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+                  >
+                    <path stroke-linecap="round" stroke-linejoin="round" :d="item.icon" />
+                  </svg>
+                  <span v-show="!sidebarCollapsed" class="text-[13px] font-medium truncate">{{ item.name }}</span>
+                </router-link>
+              </template>
+              
+              <template v-else>
+                <div
+                  @click="item.expanded = !item.expanded; if(sidebarCollapsed) sidebarCollapsed = false"
+                  :class="[
+                    'flex items-center justify-between py-2.5 transition-all duration-150 cursor-pointer group',
+                    sidebarCollapsed ? 'justify-center px-0' : 'px-4',
+                    isActive(item)
+                      ? 'border-l-4 border-transparent text-white bg-slate-800/40'
+                      : 'text-slate-400 hover:bg-slate-800/60 hover:text-white border-l-4 border-transparent'
+                  ]"
+                >
+                  <div class="flex items-center gap-3">
+                    <svg
+                      :class="['w-5 h-5 shrink-0', isActive(item) ? 'text-white' : 'text-slate-500 group-hover:text-white']"
+                      fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+                    >
+                      <path stroke-linecap="round" stroke-linejoin="round" :d="item.icon" />
+                    </svg>
+                    <span v-show="!sidebarCollapsed" class="text-[13px] font-medium truncate">{{ item.name }}</span>
+                  </div>
+                  <svg v-show="!sidebarCollapsed" :class="['w-4 h-4 transition-transform duration-200', item.expanded ? 'rotate-180' : '']" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+                
+                <ul v-show="item.expanded && !sidebarCollapsed" class="mt-1 space-y-0.5 relative before:content-[''] before:absolute before:left-[23px] before:top-2 before:bottom-2 before:w-px before:bg-slate-700">
+                  <li v-for="subItem in item.subItems" :key="subItem.path">
+                    <router-link
+                      :to="subItem.path"
+                      :class="[
+                        'flex items-center py-2 pl-[42px] pr-4 transition-all duration-150 relative text-[12.5px]',
+                        isActive(subItem)
+                          ? 'text-blue-400 font-medium'
+                          : 'text-slate-400 hover:text-slate-200'
+                      ]"
+                    >
+                      <span v-if="isActive(subItem)" class="absolute left-[21.5px] w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                      <span v-else class="absolute left-[21.5px] w-1.5 h-1.5 rounded-full bg-slate-600 transition-colors"></span>
+                      {{ subItem.name }}
+                    </router-link>
+                  </li>
+                </ul>
+              </template>
             </li>
           </ul>
         </template>
@@ -372,25 +425,70 @@ onUnmounted(() => {
             <h3 class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{{ group.title }}</h3>
           </div>
           <ul class="space-y-1">
-            <li v-for="item in group.items" :key="item.path">
-              <router-link
-                :to="item.path"
-                @click="closeMobileMenu"
-                :class="[
-                  'flex items-center gap-3 px-5 py-2.5 transition-all duration-150',
-                  isActive(item.path)
-                    ? 'bg-gradient-to-r from-blue-900/40 to-transparent text-white border-l-4 border-blue-500'
-                    : 'text-slate-400 hover:bg-slate-800/60 hover:text-white border-l-4 border-transparent'
-                ]"
-              >
-                <svg
-                  :class="['w-5 h-5 shrink-0', isActive(item.path) ? 'text-white' : 'text-slate-500']"
-                  fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+            <li v-for="item in group.items" :key="item.name">
+              <template v-if="!item.subItems">
+                <router-link
+                  :to="item.path"
+                  @click="closeMobileMenu"
+                  :class="[
+                    'flex items-center gap-3 px-5 py-2.5 transition-all duration-150',
+                    isActive(item)
+                      ? 'bg-gradient-to-r from-blue-900/40 to-transparent text-white border-l-4 border-blue-500'
+                      : 'text-slate-400 hover:bg-slate-800/60 hover:text-white border-l-4 border-transparent'
+                  ]"
                 >
-                  <path stroke-linecap="round" stroke-linejoin="round" :d="item.icon" />
-                </svg>
-                <span class="text-[13px] font-medium">{{ item.name }}</span>
-              </router-link>
+                  <svg
+                    :class="['w-5 h-5 shrink-0', isActive(item) ? 'text-white' : 'text-slate-500']"
+                    fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+                  >
+                    <path stroke-linecap="round" stroke-linejoin="round" :d="item.icon" />
+                  </svg>
+                  <span class="text-[13px] font-medium">{{ item.name }}</span>
+                </router-link>
+              </template>
+              <template v-else>
+                <div
+                  @click="item.expanded = !item.expanded"
+                  :class="[
+                    'flex items-center justify-between px-5 py-2.5 transition-all duration-150 cursor-pointer group',
+                    isActive(item)
+                      ? 'border-l-4 border-transparent text-white bg-slate-800/40'
+                      : 'text-slate-400 hover:bg-slate-800/60 hover:text-white border-l-4 border-transparent'
+                  ]"
+                >
+                  <div class="flex items-center gap-3">
+                    <svg
+                      :class="['w-5 h-5 shrink-0', isActive(item) ? 'text-white' : 'text-slate-500']"
+                      fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+                    >
+                      <path stroke-linecap="round" stroke-linejoin="round" :d="item.icon" />
+                    </svg>
+                    <span class="text-[13px] font-medium truncate">{{ item.name }}</span>
+                  </div>
+                  <svg :class="['w-4 h-4 transition-transform duration-200', item.expanded ? 'rotate-180' : '']" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+                
+                <ul v-show="item.expanded" class="mt-1 space-y-0.5 relative before:content-[''] before:absolute before:left-[27px] before:top-2 before:bottom-2 before:w-px before:bg-slate-700">
+                  <li v-for="subItem in item.subItems" :key="subItem.path">
+                    <router-link
+                      :to="subItem.path"
+                      @click="closeMobileMenu"
+                      :class="[
+                        'flex items-center py-2 pl-[46px] pr-5 transition-all duration-150 relative text-[12.5px]',
+                        isActive(subItem)
+                          ? 'text-blue-400 font-medium'
+                          : 'text-slate-400 hover:text-slate-200'
+                      ]"
+                    >
+                      <span v-if="isActive(subItem)" class="absolute left-[25.5px] w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                      <span v-else class="absolute left-[25.5px] w-1.5 h-1.5 rounded-full bg-slate-600 transition-colors"></span>
+                      {{ subItem.name }}
+                    </router-link>
+                  </li>
+                </ul>
+              </template>
             </li>
           </ul>
         </template>

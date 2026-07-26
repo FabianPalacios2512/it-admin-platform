@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 import jwt
@@ -11,6 +12,8 @@ SECRET_KEY = "key_corporativa_super_secreta"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
+
 class LoginRequest(BaseModel):
     username: str
     password: str
@@ -19,6 +22,16 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str
     display_name: str
+
+def get_current_user(token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        return {"userPrincipalName": username, "displayName": username}
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
 @router.post("/login", response_model=TokenResponse)
 async def login(credentials: LoginRequest):

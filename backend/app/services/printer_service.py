@@ -47,62 +47,46 @@ def _run_invoke_command(script_block: str, return_json: bool = False):
     return res.stdout.strip()
 
 def get_printers():
-    """Obtiene la lista de impresoras usando RPC nativo (win32print) evitando WMI."""
+    """Obtiene la lista de impresoras usando PowerShell Get-Printer."""
     global _printers_cache
     if time.time() - _printers_cache["time"] < _PRINTERS_CACHE_TTL and _printers_cache["data"] is not None:
         return _printers_cache["data"]
         
+    script = """
+    Get-Printer | Select-Object Name, PortName, Shared, ShareName, DriverName
+    """
     try:
-        cfg = get_primary_server("printers")
-    except Exception:
-        return []
-        
-    ip = cfg["ip"]
-    admin_user = cfg["admin_user"]
-    admin_pass = cfg["admin_pass"]
-    domain = cfg.get("domain", "")
-    
-    if domain and "\\" not in admin_user and "@" not in admin_user:
-        admin_user = f"{domain}\\{admin_user}"
-
-    # Autenticar vía SMB/RPC
-    target_smb = f"\\\\{ip}\\IPC$"
-    subprocess.run(["net", "use", target_smb, "/delete", "/y"], capture_output=True)
-    subprocess.run(["net", "use", target_smb, admin_pass, f"/user:{admin_user}"], capture_output=True)
-
-    try:
-        import win32print
-        # Nivel 2 trae Name, PortName, DriverName, ShareName, Attributes
-        printers = win32print.EnumPrinters(win32print.PRINTER_ENUM_NAME, f"\\\\{ip}", 2)
-        
-        resultList = []
-        for p in printers:
-            name = p.get('pPrinterName', '')
-            if '\\' in name:
-                name = name.split('\\')[-1]
-                
-            # PRINTER_ATTRIBUTE_SHARED = 8
-            shared = (p.get('Attributes', 0) & 8) != 0
+        output = _run_invoke_command(script, return_json=True)
+        if not output:
+            return []
+        import json
+        data = json.loads(output)
+        if not isinstance(data, list):
+            data = [data]
             
-            port_name = p.get('pPortName', '')
-            ip_address = port_name
-            if ip_address.startswith("IP_"):
-                ip_address = ip_address[3:]
-            
-            resultList.append({
+        result = []
+        for p in data:
+            if not isinstance(p, dict):
+                continue
+            name = p.get("Name", "")
+            port = p.get("PortName", "")
+            ip = port
+            if ip.startswith("IP_"):
+                ip = ip[3:]
+            result.append({
                 "Name": name,
-                "PortName": port_name,
-                "IPAddress": ip_address,
-                "Shared": shared,
-                "ShareName": p.get('pShareName', ''),
-                "DriverName": p.get('pDriverName', '')
+                "PortName": port,
+                "IPAddress": ip,
+                "Shared": bool(p.get("Shared")),
+                "ShareName": p.get("ShareName") or "",
+                "DriverName": p.get("DriverName", "")
             })
             
-        _printers_cache["data"] = resultList
+        _printers_cache["data"] = result
         _printers_cache["time"] = time.time()
-        return resultList
+        return result
     except Exception as e:
-        print(f"Error nativo leyendo impresoras de {ip}: {e}")
+        print(f"Error cargando impresoras: {e}")
         return []
 
 def get_drivers():

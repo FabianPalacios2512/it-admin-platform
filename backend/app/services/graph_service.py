@@ -124,8 +124,8 @@ class MicrosoftGraphService:
             raise ValueError(str(e))
 
     async def resolve_user_id(self, username: str) -> str:
-        """Encuentra el ID del usuario en Entra ID utilizando su username local."""
-        username_lower = username.lower()
+        """Encuentra el ID del usuario en Entra ID utilizando su username local o UPN."""
+        username_lower = username.lower().strip()
         if username_lower in _user_id_cache:
             if time.time() - _user_id_cache[username_lower]["time"] < _USER_CACHE_TTL:
                 cached_id = _user_id_cache[username_lower]["id"]
@@ -133,10 +133,20 @@ class MicrosoftGraphService:
                     raise ValueError(f"No se encontró el usuario '{username}' en Microsoft Entra ID. Verifica la sincronización.")
                 return cached_id
                 
+        # 1. Intentar acceso directo por UPN (la forma más rápida y segura para UPNs reales)
+        if "@" in username_lower:
+            try:
+                data = await self._request("GET", f"/users/{username_lower}?$select=id,userPrincipalName")
+                if data and "id" in data:
+                    _user_id_cache[username_lower] = {"id": data["id"], "time": time.time()}
+                    return data["id"]
+            except Exception:
+                pass
+                
         headers = {"ConsistencyLevel": "eventual"}
         
-        # Intentamos primero por onPremisesSamAccountName (si hay AD Connect)
-        data = await self._request("GET", f"/users?$filter=onPremisesSamAccountName eq '{username}'&$select=id,userPrincipalName&$count=true", headers=headers)
+        # 2. Intentamos buscar por varios campos (por si enviaron el SAMAccountName o un alias)
+        data = await self._request("GET", f"/users?$filter=onPremisesSamAccountName eq '{username_lower}' or userPrincipalName eq '{username_lower}' or mail eq '{username_lower}'&$select=id,userPrincipalName&$count=true", headers=headers)
         if data.get("value"):
             _user_id_cache[username_lower] = {"id": data["value"][0]["id"], "time": time.time()}
             return data["value"][0]["id"]
@@ -155,6 +165,38 @@ class MicrosoftGraphService:
 
         _user_id_cache[username_lower] = {"id": None, "time": time.time()}
         raise ValueError(f"No se encontró el usuario '{username}' en Microsoft Entra ID. Verifica la sincronización.")
+
+    async def search_cloud_users(self, query: str = "*", limit: int = 50) -> list:
+        """Busca usuarios en Entra ID por nombre, apellido, correo o userPrincipalName."""
+        # Graph API no permite un $top mayor a 999
+        if limit > 999:
+            limit = 999
+            
+        if query == "*":
+            endpoint = f"/users?$top={limit}&$select=id,displayName,userPrincipalName,mail,jobTitle,department,accountEnabled"
+        else:
+            q = query.replace("'", "''")
+            endpoint = f"/users?$filter=startswith(displayName,'{q}') or startswith(userPrincipalName,'{q}') or startswith(mail,'{q}') or startswith(surname,'{q}') or startswith(givenName,'{q}')&$top={limit}&$select=id,displayName,userPrincipalName,mail,jobTitle,department,accountEnabled"
+            
+        try:
+            headers = {"ConsistencyLevel": "eventual"}
+            data = await self._request("GET", endpoint, headers=headers)
+            results = []
+            for user in data.get("value", []):
+                results.append({
+                    "id": user["id"],
+                    "displayName": user.get("displayName", ""),
+                    "userPrincipalName": user.get("userPrincipalName", ""),
+                    "email": user.get("mail", "") or user.get("userPrincipalName", ""),
+                    "jobTitle": user.get("jobTitle", ""),
+                    "department": user.get("department", ""),
+                    "enabled": user.get("accountEnabled", False),
+                    "source": "Entra ID"
+                })
+            return results
+        except Exception as e:
+            print(f"[GraphService] Error buscando usuarios en la nube: {e}")
+            return []
 
     async def assign_license(self, username: str, sku_id: str):
         """Asigna una licencia de Microsoft 365 a un usuario."""
@@ -521,4 +563,314 @@ class MicrosoftGraphService:
         except Exception as e:
             raise ValueError(f"Error modificando el estado MFA: {e}")
 
+    async def get_inactive_licensed_users(self, days_threshold: int = 90) -> list:
+        """Encuentra usuarios con licencias que no han iniciado sesión en N días."""
+        import datetime
+        cutoff_date = (datetime.datetime.utcnow() - datetime.timedelta(days=days_threshold)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        
+        endpoint = f"/users?$select=id,displayName,userPrincipalName,assignedLicenses,signInActivity&$top=999"
+        
+        try:
+            data = await self._request("GET", endpoint)
+            
+            inactive_users = []
+            for user in data.get("value", []):
+                licenses = user.get("assignedLicenses", [])
+                if not licenses:
+                    continue
+                    
+                last_sign_in = None
+                if "signInActivity" in user and user["signInActivity"]:
+                    last_sign_in = user["signInActivity"].get("lastSignInDateTime")
+                
+                is_inactive = False
+                if not last_sign_in:
+                    is_inactive = True
+                elif last_sign_in < cutoff_date:
+                    is_inactive = True
+                    
+                if is_inactive:
+                    inactive_users.append({
+                        "id": user["id"],
+                        "displayName": user.get("displayName", ""),
+                        "userPrincipalName": user.get("userPrincipalName", ""),
+                        "lastSignInDateTime": last_sign_in,
+                        "licensesCount": len(licenses)
+                    })
+            
+            return inactive_users
+        except Exception as e:
+            print(f"[GraphService] Error buscando licencias inactivas: {e}")
+            raise ValueError(f"Error consultando Microsoft Graph: {str(e)}")
+
+    async def transfer_onedrive(self, source_username: str, target_email: str):
+        """Transfiere el control del OneDrive usando el endpoint de invite."""
+        try:
+            source_id = await self.resolve_user_id(source_username)
+            endpoint = f"/users/{source_id}/drive/root/invite"
+            payload = {
+                "recipients": [{"email": target_email}],
+                "requireSignIn": True,
+                "sendSignInPromo": False,
+                "roles": ["write"],
+                "message": "Tienes acceso al OneDrive de este usuario offboarded."
+            }
+            # Esto devuelve los permisos creados
+            result = await self._request("POST", endpoint, json=payload)
+            return {"success": True, "data": result}
+        except Exception as e:
+            raise ValueError(f"Error transfiriendo OneDrive: {e}")
+
+    async def generate_onedrive_master_link(self, source_username: str):
+        """Genera un link mágico para el OneDrive."""
+        try:
+            source_id = await self.resolve_user_id(source_username)
+            endpoint = f"/users/{source_id}/drive/root/createLink"
+            payload = {
+                "type": "edit",
+                "scope": "organization"
+            }
+            result = await self._request("POST", endpoint, json=payload)
+            link = result.get("link", {}).get("webUrl", "")
+            return {"success": True, "link": link}
+        except Exception as e:
+            raise ValueError(f"Error generando link de OneDrive: {e}")
+
 graph_service = MicrosoftGraphService()
+
+import subprocess
+import json
+import tempfile
+import os
+import asyncio
+
+async def check_exchange_setup():
+    """Verifica si el entorno está listo para Exchange Online (Módulo y Certificado)."""
+    ps_file_path = None
+    try:
+        ps_script = '''
+        $ErrorActionPreference = "Stop"
+        $module = Get-Module -ListAvailable -Name ExchangeOnlineManagement
+        $cert = Get-ChildItem -Path Cert:\\CurrentUser\\My | Where-Object Subject -match "AdminDA-ExchangeOnline" | Select-Object -First 1
+        
+        $result = @{
+            module_installed = [bool]$module
+            cert_installed = [bool]$cert
+            thumbprint = if ($cert) { $cert.Thumbprint } else { $null }
+        }
+        $result | ConvertTo-Json -Compress
+        '''
+        fd, ps_file_path = tempfile.mkstemp(suffix=".ps1")
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            f.write(ps_script)
+            
+        def run_ps():
+            return subprocess.run(
+                ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ps_file_path],
+                capture_output=True,
+                text=True
+            )
+            
+        process = await asyncio.to_thread(run_ps)
+        data = json.loads(process.stdout.strip())
+        return data
+    except Exception as e:
+        import traceback
+        with open("debug.txt", "a") as f:
+            f.write(f"check_exchange_setup ERROR:\n{traceback.format_exc()}\n")
+        return {"module_installed": False, "cert_installed": False, "thumbprint": None, "error": str(e)}
+    finally:
+        if ps_file_path and os.path.exists(ps_file_path):
+            try:
+                os.remove(ps_file_path)
+            except:
+                pass
+
+async def setup_exchange():
+    """Ejecuta la instalación del módulo y crea el certificado Self-Signed."""
+    ps_file_path = None
+    try:
+        ps_script = '''
+        $ErrorActionPreference = "Stop"
+        # 1. Instalar el Módulo (Aceptando dependencias y sin confirmación)
+        Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -ErrorAction SilentlyContinue | Out-Null
+        Set-PSRepository -Name "PSGallery" -InstallationPolicy Trusted -ErrorAction SilentlyContinue | Out-Null
+        Install-Module -Name ExchangeOnlineManagement -Force -AllowClobber -Scope CurrentUser
+
+        # 2. Crear Certificado
+        $cert = Get-ChildItem -Path Cert:\\CurrentUser\\My | Where-Object Subject -match "AdminDA-ExchangeOnline" | Select-Object -First 1
+        if (-not $cert) {
+            $cert = New-SelfSignedCertificate -Subject "CN=AdminDA-ExchangeOnline" `
+                                              -CertStoreLocation "Cert:\\CurrentUser\\My" `
+                                              -KeyExportPolicy Exportable `
+                                              -KeySpec Signature `
+                                              -KeyAlgorithm RSA `
+                                              -KeyLength 2048 `
+                                              -NotAfter (Get-Date).AddYears(2)
+        }
+
+        # 3. Exportar Certificado
+        $desktopPath = [Environment]::GetFolderPath("Desktop")
+        if (-not $desktopPath) { $desktopPath = "C:\\" }
+        $cerPath = "$desktopPath\\AdminDA_Exchange.cer"
+        Export-Certificate -Cert $cert -FilePath $cerPath -Force | Out-Null
+
+        $result = @{
+            success = $true
+            thumbprint = $cert.Thumbprint
+            cer_path = $cerPath
+        }
+        $result | ConvertTo-Json -Compress
+        '''
+        fd, ps_file_path = tempfile.mkstemp(suffix=".ps1")
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            f.write(ps_script)
+            
+        def run_ps():
+            return subprocess.run(
+                ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ps_file_path],
+                capture_output=True,
+                text=True
+            )
+            
+        process = await asyncio.to_thread(run_ps)
+        
+        if process.returncode != 0:
+            err_msg = process.stderr.strip()
+            if not err_msg:
+                err_msg = process.stdout.strip()
+            raise ValueError(f"Error en Setup de Exchange: {err_msg}")
+            
+        out_str = process.stdout.strip()
+        if not out_str:
+            raise ValueError("El script no devolvió ningún resultado (stdout vacío).")
+        return json.loads(out_str)
+    except Exception as e:
+        import traceback
+        with open("debug.txt", "a") as f:
+            f.write(f"setup_exchange ERROR:\n{traceback.format_exc()}\n")
+        raise ValueError(f"{str(e)}")
+    finally:
+        if ps_file_path and os.path.exists(ps_file_path):
+            try:
+                os.remove(ps_file_path)
+            except:
+                pass
+
+async def get_quarantined_emails_ps(
+    recipient: str = None, 
+    sender: str = None, 
+    subject: str = None, 
+    quarantine_type: str = None
+):
+    """Consulta correos en cuarentena usando Exchange Online PS con filtros dinámicos."""
+    setup_status = await check_exchange_setup()
+    thumbprint = setup_status.get("thumbprint")
+    
+    connect_cmd = ""
+    if thumbprint:
+        from app.core.config import env_settings
+        client_id = env_settings.ENTRA_CLIENT_ID
+        tenant_domain = "105code.cloud"
+        connect_cmd = f'Connect-ExchangeOnline -CertificateThumbprint "{thumbprint}" -AppId "{client_id}" -Organization "{tenant_domain}" -ShowProgress $false -ErrorAction Stop'
+        
+    params = ["-PageSize 100"] 
+    if recipient:
+        params.append(f'-RecipientAddress "{recipient}"')
+    if sender:
+        params.append(f'-SenderAddress "{sender}"')
+    if subject:
+        params.append(f'-Subject "{subject}"')
+    if quarantine_type and quarantine_type.lower() != "all":
+        params.append(f'-QuarantineType {quarantine_type}')
+        
+    params_str = " ".join(params)
+        
+    ps_script = f'''
+    try {{
+        {connect_cmd}
+        $messages = Get-QuarantineMessage {params_str} -ErrorAction Stop
+        if (-not $messages) {{
+            Write-Output "[]"
+            exit 0
+        }}
+        $result = @()
+        foreach ($msg in $messages) {{
+            $result += [PSCustomObject]@{{
+                Identity = $msg.Identity
+                ReceivedTime = $msg.ReceivedTime.ToString("yyyy-MM-ddTHH:mm:ss")
+                SenderAddress = $msg.SenderAddress
+                RecipientAddress = ($msg.RecipientAddress -join ", ")
+                Subject = $msg.Subject
+                QuarantineTypes = ($msg.QuarantineTypes -join ", ")
+                Expires = $msg.Expires.ToString("yyyy-MM-ddTHH:mm:ss")
+            }}
+        }}
+        $result | ConvertTo-Json -Compress
+    }} catch {{
+        Write-Error $_.Exception.Message
+        exit 1
+    }}
+    '''
+    def run_ps():
+        return subprocess.run(
+            ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', ps_script],
+            capture_output=True,
+            text=True
+        )
+        
+    process = await asyncio.to_thread(run_ps)
+    
+    if process.returncode != 0:
+        raise ValueError(f"Error PowerShell Exchange: {process.stderr.strip()}")
+        
+    out_str = process.stdout.strip()
+    if not out_str or out_str == "[]":
+        return []
+        
+    try:
+        data = json.loads(out_str)
+        if isinstance(data, dict):
+            return [data]
+        return data
+    except json.JSONDecodeError:
+        return []
+
+async def release_quarantined_email_ps(message_identity: str):
+    """Libera un correo de la cuarentena."""
+    setup_status = await check_exchange_setup()
+    thumbprint = setup_status.get("thumbprint")
+    
+    connect_cmd = ""
+    if thumbprint:
+        from app.core.config import env_settings
+        client_id = env_settings.ENTRA_CLIENT_ID
+        tenant_domain = "105code.cloud"
+        connect_cmd = f'Connect-ExchangeOnline -CertificateThumbprint "{thumbprint}" -AppId "{client_id}" -Organization "{tenant_domain}" -ShowProgress $false -ErrorAction Stop'
+        
+    ps_script = f'''
+    try {{
+        {connect_cmd}
+        Release-QuarantineMessage -Identity "{message_identity}" -ReleaseToAll -ErrorAction Stop
+        Write-Output '{{"success": true}}'
+    }} catch {{
+        Write-Error $_.Exception.Message
+        exit 1
+    }}
+    '''
+    def run_ps():
+        return subprocess.run(
+            ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', ps_script],
+            capture_output=True,
+            text=True
+        )
+        
+    process = await asyncio.to_thread(run_ps)
+    
+    if process.returncode != 0:
+        raise ValueError(f"Error al liberar correo: {process.stderr.strip()}")
+        
+    try:
+        return json.loads(process.stdout.strip())
+    except Exception as e:
+        raise ValueError(f"Error procesando resultado: {str(e)}")

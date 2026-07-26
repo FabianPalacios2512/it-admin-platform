@@ -6,10 +6,11 @@ if sys.platform == "win32":
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.v1 import auth, audit, accounts, servers, fileserver, graph, groups, printers, rds, devices, monitoring, wifi, system, terminal
+from app.api.v1 import auth, audit, accounts, servers, fileserver, graph, groups, printers, rds, devices, monitoring, wifi, system, terminal, quarantine, licenses
 from app.core.database import Base, engine
 from app.models.server import ServerConfig
 from app.models.rds import RdsConfig  # Ensure table is created
+from app.models.delegation import TemporaryDelegation
 from apscheduler.schedulers.background import BackgroundScheduler
 from app.services.ad_event_sync import sync_ad_events
 from app.services.monitoring_service import sync_monitoring_stats
@@ -33,6 +34,8 @@ async def lifespan(app: FastAPI):
     app.state.scheduler = scheduler
     scheduler.add_job(sync_ad_events, 'interval', minutes=3)
     scheduler.add_job(sync_monitoring_stats, 'interval', minutes=1)
+    from app.services.exchange_service import revoke_expired_delegations
+    scheduler.add_job(revoke_expired_delegations, 'cron', hour=2, minute=0)
     scheduler.start()
     
     # Ejecutar una vez al inicio en el background (no bloqueante)
@@ -67,6 +70,10 @@ app.include_router(monitoring.router, prefix="/api/v1/monitoring", tags=["monito
 app.include_router(wifi.router, prefix="/api/v1/wifi", tags=["wifi"])
 app.include_router(system.router, prefix="/api/v1/system", tags=["system"])
 app.include_router(terminal.router, prefix="/api/v1/terminal", tags=["terminal"])
+app.include_router(quarantine.router, prefix="/api/v1/quarantine", tags=["quarantine"])
+app.include_router(licenses.router, prefix="/api/v1/licenses", tags=["licenses"])
+from app.api.v1 import delegation
+app.include_router(delegation.router, prefix="/api/v1/delegation", tags=["delegation"])
 
 # ---------------------------------------------------------
 # Integración: Servir Frontend Estático (Vue SPA)

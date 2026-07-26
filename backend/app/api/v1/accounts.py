@@ -63,7 +63,8 @@ class CreateUserRequest(BaseModel):
     fullName: str
     upn: str
     samAccountName: str
-    ou: str
+    accountType: Optional[str] = "onpremise"
+    ou: Optional[str] = ""
     password: str
     mustChangePassword: bool = True
     cannotChangePassword: bool = False
@@ -82,31 +83,63 @@ class GroupMembershipRequest(BaseModel):
 # ══════════════════════════════════════════════════════════════
 
 @router.get("/search")
-def api_search_users(q: str = "", limit: int = 50):
-    """Busca usuarios en el Directorio Activo por nombre, usuario o correo."""
+async def api_search_users(q: str = "", limit: int = 50):
+    """Busca usuarios en el Directorio Activo y Entra ID por nombre, usuario o correo."""
+    from fastapi.concurrency import run_in_threadpool
+    from app.services.graph_service import graph_service
+    
     try:
-        # Si la consulta está vacía, buscamos con comodín general para traer los primeros N
         search_q = q if q else "*"
-        results = search_users(search_q, limit)
-        return results
+        
+        # 1. Buscar en AD local (Síncrono, se corre en threadpool)
+        ad_results = await run_in_threadpool(search_users, search_q, limit)
+        
+        # 2. Buscar en Microsoft Entra ID (Nube)
+        cloud_results = await graph_service.search_cloud_users(search_q, limit)
+        
+        # 3. Fusionar evitando duplicados (priorizando AD Local si ya existe)
+        ad_usernames = {u.get("username", "").lower() for u in ad_results if u.get("username")}
+        ad_upns = {u.get("userPrincipalName", "").lower() for u in ad_results if u.get("userPrincipalName")}
+        
+        merged_results = list(ad_results)
+        
+        for cu in cloud_results:
+            cu_uname = cu.get("username", "").lower()
+            cu_upn = cu.get("userPrincipalName", "").lower()
+            
+            # Si el usuario NO está en AD local, lo añadimos
+            if cu_uname and cu_uname not in ad_usernames and cu_upn not in ad_upns:
+                merged_results.append(cu)
+                
+        # Opcional: ordenar alfabéticamente
+        merged_results.sort(key=lambda x: x.get("fullName", "").lower())
+        
+        return merged_results[:limit] if len(merged_results) > limit else merged_results
     except Exception as e:
-        print(f"❌ [AD] Error en búsqueda: {e}")
-        raise HTTPException(status_code=500, detail=f"Error consultando el AD: {str(e)}")
+        print(f"[ERROR] [BÚSQUEDA] Error unificado: {e}")
+        raise HTTPException(status_code=500, detail=f"Error consultando usuarios: {str(e)}")
 
 
 @router.get("/profile/{username}")
-def api_get_user_profile(username: str):
-    """Obtiene el perfil completo 360 de un usuario desde el AD."""
+async def api_get_user_profile(username: str):
+    """Obtiene el perfil completo 360 de un usuario desde el AD o Entra ID si es solo nube."""
+    from fastapi.concurrency import run_in_threadpool
+    from app.services.graph_service import graph_service
+    
     try:
-        profile = get_user_profile(username)
+        profile = await run_in_threadpool(get_user_profile, username)
         if profile is None:
-            raise HTTPException(status_code=404, detail=f"Usuario '{username}' no encontrado en el Directorio Activo.")
+            # Fallback a Graph (Usuario Solo Nube)
+            profile = await graph_service.get_cloud_user_profile(username)
+            if not profile:
+                raise HTTPException(status_code=404, detail=f"Usuario '{username}' no encontrado en el Directorio Activo ni en la Nube.")
+            
         return profile
     except HTTPException:
         raise
     except Exception as e:
         print(f"❌ [AD] Error obteniendo perfil: {e}")
-        raise HTTPException(status_code=500, detail=f"Error consultando el AD: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error consultando perfil: {str(e)}")
 
 
 @router.get("/diagnose/{username}")
@@ -408,16 +441,21 @@ def api_get_ous():
 
 @router.post("/create")
 def api_create_user(req: CreateUserRequest):
-    """Crea un nuevo usuario en el Directorio Activo."""
+    """Crea un nuevo usuario en el Directorio Activo o en Entra ID (Nube)."""
     try:
         data = req.dict()
-        result = create_ad_user(data)
+        if req.accountType == "cloud":
+            from app.services.graph_service import create_cloud_user
+            result = create_cloud_user(data)
+        else:
+            result = create_ad_user(data)
+            
         if result.get("success"):
             # Registrar en auditoría
             db = SessionLocal()
             audit = AuditLog(
                 username=req.admin_user,
-                action="Creación de usuario",
+                action=f"Creación de usuario ({req.accountType})",
                 target=req.samAccountName,
                 status="Completado",
                 source="Web",
@@ -427,7 +465,7 @@ def api_create_user(req: CreateUserRequest):
             db.close()
         return result
     except Exception as e:
-        print(f"❌ [AD] Error creando usuario: {e}")
+        print(f"❌ [CREACIÓN] Error creando usuario: {e}")
         raise HTTPException(status_code=500, detail=f"Error creando usuario: {str(e)}")
 
 
