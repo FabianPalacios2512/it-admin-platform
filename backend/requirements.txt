@@ -11,3 +11,4 @@ httpx
 cryptography
 websockets
 pywinpty
+google-genai

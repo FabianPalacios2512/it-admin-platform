@@ -74,6 +74,8 @@ app.include_router(quarantine.router, prefix="/api/v1/quarantine", tags=["quaran
 app.include_router(licenses.router, prefix="/api/v1/licenses", tags=["licenses"])
 from app.api.v1 import delegation
 app.include_router(delegation.router, prefix="/api/v1/delegation", tags=["delegation"])
+from app.api.v1 import diagnostics
+app.include_router(diagnostics.router, prefix="/api/v1/diagnostics", tags=["diagnostics"])
 
 # ---------------------------------------------------------
 # Integración: Servir Frontend Estático (Vue SPA)

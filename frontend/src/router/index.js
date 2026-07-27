@@ -114,6 +114,11 @@ const routes = [
         path: 'licencias-inactivas',
         name: 'LicenciasInactivas',
         component: LicenciasInactivasView,
+      },
+      {
+        path: 'diagnostico',
+        name: 'Diagnostico',
+        component: () => import('@/pages/DiagnosticView.vue'),
       }
     ],
   },

@@ -15,6 +15,7 @@ class EnvSettings(BaseSettings):
     UNIFI_USER: str = "admin"
     UNIFI_PASS: str = "admin"
     UNIFI_SITE: str = "default"
+    GEMINI_API_KEY: str = ""
 
     class Config:
         env_file = ".env"
