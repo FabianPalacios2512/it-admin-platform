@@ -175,9 +175,8 @@ async def diagnostic_websocket(websocket: WebSocket):
         
         status_msg = {
             "type": "status_update",
-            "message": f"🧠 Agente de diagnóstico inicializado (sesión {session_id}). "
-                       f"Analizando {machine_info['hostname']}...",
-            "phase": 1,
+            "message": f"🧠 SentinelAI inicializado (sesión {session_id}). "
+                       f"Analizando {machine_info['hostname']} — generando hipótesis...",
             "session_id": session_id,
         }
         await send_json(websocket, status_msg)
@@ -197,25 +196,43 @@ async def diagnostic_websocket(websocket: WebSocket):
         # ─────────────────────────────────────────────────────────────
         observation = None  # Primera iteración no tiene observación
         
+        # Backoff exponencial para respetar los límites de cuota de la API
+        # Gemini 3.5 Flash Lite = 5 RPM → mín. 12s entre llamadas
+        MIN_STEP_DELAY  = 12.0   # segundos mínimos entre pasos
+        MAX_STEP_DELAY  = 60.0   # techo del backoff
+        BACKOFF_FACTOR  = 1.5    # multiplicador en caso de error 429
+        current_delay   = MIN_STEP_DELAY
+        consecutive_errors = 0
+        
         while not session.is_complete:
-            # ── Esperar para no agotar la cuota de la API (Gemini 3.5 Flash = 5 RPM)
-            await asyncio.sleep(12)
+            # ── Backoff adaptativo: esperar entre pasos
+            await asyncio.sleep(current_delay)
             
             # ── Pedir al agente el siguiente paso
             try:
                 agent_result = await session.run_step(observation)
+                # Restablecer el delay si el paso fue exitoso
+                if agent_result.get("type") not in ("error", "max_steps"):
+                    current_delay = MIN_STEP_DELAY
+                    consecutive_errors = 0
             except Exception as e:
                 logger.error(f"[{session_id}] Error en run_step: {e}")
+                consecutive_errors += 1
+                current_delay = min(current_delay * BACKOFF_FACTOR, MAX_STEP_DELAY)
                 error_event = {
                     "type": "error",
                     "message": f"Error del agente: {str(e)}",
+                    "recoverable": consecutive_errors < 3,
                     "timestamp": datetime.now().isoformat(),
                 }
                 await send_json(websocket, error_event)
                 event_log.append(error_event)
                 await broadcast_to_viewers(session_id, error_event)
-                await asyncio.sleep(1)  # Dar tiempo al cliente para recibir el mensaje
-                break
+                if consecutive_errors >= 3:
+                    logger.error(f"[{session_id}] 3 errores consecutivos. Abortando sesión.")
+                    break
+                observation = f"ERROR INTERNO DEL AGENTE: {str(e)}. Continúa con la próxima acción disponible."
+                continue
             
             action_type = agent_result.get("type", "error")
             
@@ -226,6 +243,7 @@ async def diagnostic_websocket(websocket: WebSocket):
                     "type": "agent_thought",
                     "thought": thought,
                     "step": agent_result.get("step", session.step_count),
+                    "hypothesis": agent_result.get("hypothesis", ""),
                     "timestamp": datetime.now().isoformat(),
                 }
                 await send_json(websocket, thought_event)
@@ -234,15 +252,15 @@ async def diagnostic_websocket(websocket: WebSocket):
             
             # ── ACCIÓN: Ejecutar comando en PowerShell
             if action_type == "run_command":
-                command = agent_result["command"]
-                purpose = agent_result.get("purpose", "")
-                phase = agent_result.get("phase", 0)
+                command    = agent_result["command"]
+                purpose    = agent_result.get("purpose", "")
+                hypothesis = agent_result.get("hypothesis", "Investigación")
                 
                 cmd_event = {
                     "type": "execute_command",
                     "command": command,
                     "purpose": purpose,
-                    "phase": phase,
+                    "hypothesis": hypothesis,
                     "step": session.step_count,
                     "timestamp": datetime.now().isoformat(),
                 }
@@ -298,6 +316,7 @@ async def diagnostic_websocket(websocket: WebSocket):
                     await broadcast_to_viewers(session_id, result_event)
                     
                     # Construir la observación para el agente
+                    # Incluir toda la información para que la detección de errores funcione
                     observation = f"Exit Code: {exit_code}\n"
                     if stdout:
                         observation += f"STDOUT:\n{stdout}\n"
@@ -341,12 +360,14 @@ async def diagnostic_websocket(websocket: WebSocket):
                 }
                 await send_json(websocket, {
                     "type": "status_update",
-                    "message": agent_result.get("message", "Buscando información..."),
-                    "phase": 0,
+                    "message": agent_result.get("message", "Buscando información en la web..."),
+                    "session_id": session_id,
                 })
                 event_log.append(search_event)
                 await broadcast_to_viewers(session_id, search_event)
+                # La búsqueda ya fue procesada internamente, seguir sin nueva observación
                 observation = None
+                current_delay = MIN_STEP_DELAY  # Resetear delay después de búsqueda
                 continue
             
             # ── ACCIÓN: Diagnóstico completo
@@ -389,19 +410,34 @@ async def diagnostic_websocket(websocket: WebSocket):
             
             # ── ACCIÓN: Solo pensando (sin acción concreta)
             elif action_type == "thinking":
+                # La IA emitió un pensamiento sin llamar a una herramienta.
+                # Darle un empujón para que tome una acción concreta.
                 observation = None
+                current_delay = MIN_STEP_DELAY
             
-            # ── ERROR
+            # ── ERROR (no fatal — intentar continuar si es posible)
             elif action_type == "error":
+                error_msg = agent_result.get("message", "Error desconocido del agente.")
+                is_fatal  = session.is_complete or "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg
+                
                 error_event = {
                     "type": "error",
-                    "message": agent_result.get("message", "Error desconocido del agente."),
+                    "message": error_msg,
+                    "fatal": is_fatal,
                     "timestamp": datetime.now().isoformat(),
                 }
                 await send_json(websocket, error_event)
                 event_log.append(error_event)
                 await broadcast_to_viewers(session_id, error_event)
-                observation = None
+                
+                if is_fatal:
+                    logger.error(f"[{session_id}] Error fatal del agente. Cerrando sesión.")
+                    break
+                
+                # Error no fatal: incrementar delay y continuar
+                consecutive_errors += 1
+                current_delay = min(current_delay * BACKOFF_FACTOR, MAX_STEP_DELAY)
+                observation = f"Error en el último paso: {error_msg}. Continúa con la siguiente acción disponible."
         
         # ─────────────────────────────────────────────────────────────
         # PASO 4: Cierre limpio
@@ -546,7 +582,7 @@ async def get_powershell_script():
         
     return FileResponse(
         path=script_path,
-        media_type="text/plain",
+        media_type="text/plain; charset=utf-8",
         filename="Invoke-ITDiagnostic.ps1"
     )
 

@@ -161,8 +161,8 @@ function getEventIcon(type) {
   const icons = {
     'session_started':      '🔌',
     'agent_thought':        '🧠',
-    'execute_command':      '⚡',
-    'command_result':       '📋',
+    'execute_command':      '🔬',
+    'command_result':       '🖵️',
     'command_blocked':      '🛡️',
     'command_timeout':      '⏱️',
     'search_web':           '🔍',
@@ -425,21 +425,37 @@ onUnmounted(() => {
             <div class="flex-1 min-w-0">
               <!-- Thought del agente -->
               <template v-if="event.type === 'agent_thought'">
-                <p class="text-indigo-700 text-xs font-semibold uppercase tracking-wide mb-1">Razonamiento (Paso {{ event.step }})</p>
+                <div class="flex items-center gap-2 mb-1 flex-wrap">
+                  <p class="text-indigo-700 text-xs font-semibold uppercase tracking-wide">Razonamiento (Paso {{ event.step }})</p>
+                  <span v-if="event.hypothesis" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-600 text-[10px] font-semibold">
+                    🔬 {{ event.hypothesis }}
+                  </span>
+                </div>
                 <p class="text-gray-600 text-sm whitespace-pre-wrap leading-relaxed">{{ event.thought }}</p>
               </template>
               
               <!-- Comando ejecutado -->
               <template v-else-if="event.type === 'execute_command'">
-                <p class="text-blue-700 text-xs font-semibold mb-1">Fase {{ event.phase }} — {{ event.purpose }}</p>
-                <pre class="text-gray-800 text-xs bg-gray-50 border border-gray-100 px-3 py-2 rounded-lg overflow-x-auto">{{ event.command }}</pre>
+                <div class="flex items-center gap-2 mb-1.5 flex-wrap">
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-50 border border-violet-200 text-violet-700 text-[10px] font-bold tracking-wide">
+                    🔬 Hipótesis
+                  </span>
+                  <p class="text-blue-700 text-xs font-semibold">{{ event.hypothesis || 'Investigación general' }}</p>
+                </div>
+                <p class="text-gray-500 text-xs mb-1.5 italic">{{ event.purpose }}</p>
+                <pre class="text-gray-800 text-xs bg-gray-900 text-emerald-300 px-3 py-2.5 rounded-lg overflow-x-auto font-mono leading-relaxed">$ {{ event.command }}</pre>
               </template>
               
               <!-- Resultado del comando -->
               <template v-else-if="event.type === 'command_result'">
-                <p class="text-xs font-semibold mb-1" :class="event.exit_code === 0 ? 'text-emerald-700' : 'text-red-600'">
-                  Resultado (exit code: {{ event.exit_code }})
-                </p>
+                <div class="flex items-center gap-2 mb-1.5">
+                  <p class="text-xs font-semibold" :class="event.exit_code === 0 ? 'text-emerald-700' : 'text-red-600'">
+                    {{ event.exit_code === 0 ? '✅ Ejecutado' : '❌ Error' }} (exit code: {{ event.exit_code }})
+                  </p>
+                  <span v-if="event.stderr" class="inline-flex items-center px-1.5 py-0.5 rounded bg-red-100 text-red-600 text-[10px] font-bold">
+                    STDERR
+                  </span>
+                </div>
                 <pre v-if="event.stdout" class="text-gray-600 text-xs bg-gray-50 border border-gray-100 px-3 py-2 rounded-lg overflow-x-auto max-h-40 overflow-y-auto font-mono whitespace-pre-wrap">{{ event.stdout }}</pre>
                 <pre v-if="event.stderr" class="text-red-700 text-xs bg-red-50 border border-red-100 px-3 py-2 rounded-lg mt-1 overflow-x-auto font-mono">{{ event.stderr }}</pre>
               </template>

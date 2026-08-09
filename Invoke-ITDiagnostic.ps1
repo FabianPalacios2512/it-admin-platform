@@ -1,88 +1,48 @@
 <#
 .SYNOPSIS
-    Agente de Diagnstico IT Inteligente  Cliente PowerShell
-    
+    Agente de Diagnostico IT Inteligente - Cliente PowerShell
 .DESCRIPTION
-    Script iterativo que conecta un equipo Windows al backend de AdminInfra
-    para recibir un diagnstico inteligente impulsado por IA (Google Gemini).
-    
-    El script acta como los "ojos y manos" del agente: se conecta va WebSocket,
-    enva informacin del equipo, recibe comandos de diagnstico (solo lectura),
-    los ejecuta de forma segura, y devuelve los resultados al backend.
-    
-     SOLO LECTURA: Este script NUNCA modifica el sistema.
-       Todos los comandos estn validados contra una whitelist local Y del servidor.
-
+    Script que conecta un equipo Windows al backend de AdminInfra via WebSocket
+    para recibir un diagnostico inteligente impulsado por Google Gemini AI.
+    SOLO LECTURA: este script NUNCA modifica el sistema.
 .PARAMETER ServerUrl
-    URL del backend de AdminInfra (sin /api).
-    Ejemplo: http://192.168.20.100:8000
-
+    URL del backend. Ej: http://192.168.20.100:8000
 .PARAMETER Issue
-    Descripcin breve del problema reportado.
-    Ejemplo: "El equipo se reinicia solo cada 2 horas"
-
-.EXAMPLE
-    .\Invoke-ITDiagnostic.ps1 -ServerUrl "http://192.168.1.100:8000" -Issue "Se reinicia sola"
-    
+    Descripcion del problema. Ej: El equipo se reinicia solo
 .NOTES
-    Requiere: PowerShell 5.1+ con .NET Framework 4.5+
-    Ejecutar como: Administrador
+    Requiere PowerShell 5.1+ | Ejecutar como Administrador
 #>
 
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $false)]
     [string]$ServerUrl = "http://localhost:8000",
-    
     [Parameter(Mandatory = $false)]
     [string]$Issue = "El equipo se reinicia inesperadamente"
 )
 
-# 
-# CONFIGURACIN
-# 
+# UTF-8 FIX - ANTES de cualquier Write-Host
+$null = chcp 65001 2>$null
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+[Console]::InputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 
 $ErrorActionPreference = "Stop"
 $CommandTimeoutSeconds = 30
-$MaxReconnectAttempts  = 3
-
-# 
-# WHITELIST LOCAL (Doble seguridad  no depende solo del backend)
-# 
+$MaxReconnectAttempts = 3
 
 $AllowedCmdlets = @(
-    # Logs de eventos
-    "Get-EventLog", "Get-WinEvent",
-    # WMI / CIM
-    "Get-WmiObject", "Get-CimInstance",
-    # Procesos y servicios
-    "Get-Process", "Get-Service",
-    # Info del sistema
-    "systeminfo", "Get-ComputerInfo", "hostname", "whoami",
-    # Hotfixes
-    "Get-HotFix",
-    # Registro (solo lectura)
-    "Get-ItemProperty", "Get-ItemPropertyValue",
-    "reg query",
-    # Disco
+    "Get-EventLog", "Get-WinEvent", "Get-WmiObject", "Get-CimInstance",
+    "Get-Process", "Get-Service", "systeminfo", "Get-ComputerInfo", "hostname", "whoami",
+    "Get-HotFix", "Get-ItemProperty", "Get-ItemPropertyValue", "reg query",
     "Get-PhysicalDisk", "Get-Disk", "Get-Volume", "Get-Partition",
-    # Red
     "Get-NetAdapter", "Get-NetIPAddress", "ipconfig", "Test-Connection",
-    # Drivers
-    "Get-WindowsDriver", "driverquery", "Get-PnpDevice",
-    # Energa
-    "powercfg",
-    # Formateo
+    "Get-WindowsDriver", "driverquery", "Get-PnpDevice", "powercfg",
     "Select-Object", "Format-List", "Format-Table", "Where-Object",
     "Sort-Object", "Measure-Object", "ConvertTo-Json", "Out-String",
-    # Archivos (solo lectura)
-    "Get-ChildItem", "Get-Content",
-    # Contadores de rendimiento
-    "Get-Counter",
-    # Tareas programadas
-    "Get-ScheduledTask",
-    # Integridad (solo verificacin)
-    "sfc /verifyonly", "chkdsk"
+    "Get-ChildItem", "Get-Content", "Get-Counter", "Get-ScheduledTask",
+    "sfc /verifyonly", "chkdsk", "Get-NetTCPConnection", "Get-NetRoute",
+    "netstat", "Resolve-DnsName", "Test-NetConnection", "Get-DnsClientCache"
 )
 
 $BlockedPatterns = @(
@@ -93,35 +53,96 @@ $BlockedPatterns = @(
     "Add-", "Register-", "Unregister-", "Export-", "Import-",
     "cmd /c", "cmd.exe", "powershell -", "iex", "Invoke-Expression",
     "DownloadString", "DownloadFile", "Net User", "Net LocalGroup",
-    "Shutdown", "Restart-Computer", "Reset-", "Repair-",
-    ".exe"  # Bloquear ejecucin directa de .exe
+    "Shutdown", "Restart-Computer", "Reset-", "Repair-", ".exe"
 )
 
-# Excepciones al bloqueo de .exe (comandos del sistema permitidos)
-$ExeExceptions = @("systeminfo", "hostname", "whoami", "ipconfig", "driverquery", "powercfg", "chkdsk", "sfc", "reg")
-
-
-# 
-# FUNCIONES AUXILIARES
-# 
+$ExeExceptions = @("systeminfo", "hostname", "whoami", "ipconfig", "driverquery", "powercfg", "chkdsk", "sfc", "reg", "netstat")
 
 function Show-Banner {
-    $banner = "
-  +==================================================================+
-  |                                                                  |
-  |     IT DIAGNOSTIC AGENT  v1.0                                    |
-  |     by Fabian Paternina                                          |
-  |     Powered by Google Gemini 3.5 Flash Lite                      |
-  |                                                                  |
-  +==================================================================+
-"
-    Write-Host $banner -ForegroundColor Cyan
-    Write-Host "  [!] MODO: SOLO LECTURA - Este script NO modifica el sistema." -ForegroundColor Yellow
-    Write-Host "  [i] Servidor: $ServerUrl" -ForegroundColor Gray
-    Write-Host "  [i] Problema: $Issue" -ForegroundColor Gray
-    Write-Host "  [i] Presiona Ctrl+C en cualquier momento para abortar.`n" -ForegroundColor Gray
-    Write-Host "  ---------------------------------------------------------" -ForegroundColor DarkGray
+    param([string]$ServerUrl, [string]$Issue, [hashtable]$SysInfo)
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # PALETA DE COLORES â€” Sistema Cyber-Corp
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    $clrPrimary   = "Cyan"
+    $clrAccent    = "Green"
+    $clrAlert     = "Yellow"
+    $clrText      = "White"
+    $clrSecondary = "Gray"
+    $clrDim       = "DarkGray"
+
+    Clear-Host
+
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # BANNERS ROTATIVOS â€” Arte ASCII Cyber-Corp (3 diseÃ±os)
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+        $b1_b64 = 'CgogIOKWiOKWiOKWiOKWiOKWiOKWiOKVlyDilojilojilZcg4paI4paI4paI4paI4paI4pWXICDilojilojilojilojilojilojilZcg4paI4paI4paI4pWXICAg4paI4paI4pWXIOKWiOKWiOKWiOKWiOKWiOKWiOKVlyDilojilojilojilojilojilojilojilZfilojilojilojilojilojilojilojilojilZfilojilojilZcg4paI4paI4paI4paI4paI4paI4pWXCiAg4paI4paI4pWU4pWQ4pWQ4paI4paI4pWX4paI4paI4pWR4paI4paI4pWU4pWQ4pWQ4paI4paI4pWX4paI4paI4pWU4pWQ4pWQ4pWQ4pWQ4pWdIOKWiOKWiOKWiOKWiOKVlyAg4paI4paI4pWR4paI4paI4pWU4pWQ4pWQ4pWQ4paI4paI4pWX4paI4paI4pWU4pWQ4pWQ4pWQ4pWQ4pWd4pWa4pWQ4pWQ4paI4paI4pWU4pWQ4pWQ4pWd4paI4paI4pWR4paI4paI4pWU4pWQ4pWQ4pWQ4pWQ4pWdCiAg4paI4paI4pWRICDilojilojilZHilojilojilZHilojilojilojilojilojilojilojilZHilojilojilZEgIOKWiOKWiOKWiOKVl+KWiOKWiOKVlOKWiOKWiOKVlyDilojilojilZHilojilojilZEgICDilojilojilZHilojilojilojilojilojilojilojilZcgICDilojilojilZEgICDilojilojilZHilojilojilZEKICDilojilojilZEgIOKWiOKWiOKVkeKWiOKWiOKVkeKWiOKWiOKVlOKVkOKVkOKWiOKWiOKVkeKWiOKWiOKVkSAgIOKWiOKWiOKVkeKWiOKWiOKVkeKVmuKWiOKWiOKVl+KWiOKWiOKVkeKWiOKWiOKVkSAgIOKWiOKWiOKVkeKVmuKVkOKVkOKVkOKVkOKWiOKWiOKVkSAgIOKWiOKWiOKVkSAgIOKWiOKWiOKVkeKWiOKWiOKVkQogIOKWiOKWiOKWiOKWiOKWiOKWiOKVlOKVneKWiOKWiOKVkeKWiOKWiOKVkSAg4paI4paI4pWR4pWa4paI4paI4paI4paI4paI4paI4pWU4pWd4paI4paI4pWRIOKVmuKWiOKWiOKWiOKWiOKVkeKVmuKWiOKWiOKWiOKWiOKWiOKWiOKVlOKVneKWiOKWiOKWiOKWiOKWiOKWiOKWiOKVkSAgIOKWiOKWiOKVkSAgIOKWiOKWiOKVkeKVmuKWiOKWiOKWiOKWiOKWiOKWiOKVlwogIOKVmuKVkOKVkOKVkOKVkOKVkOKVnSDilZrilZDilZ3ilZrilZDilZ0gIOKVmuKVkOKVnSDilZrilZDilZDilZDilZDilZDilZ0g4pWa4pWQ4pWdICDilZrilZDilZDilZDilZ0g4pWa4pWQ4pWQ4pWQ4pWQ4pWQ4pWdIOKVmuKVkOKVkOKVkOKVkOKVkOKVkOKVnSAgIOKVmuKVkOKVnSAgIOKVmuKVkOKVnSDilZrilZDilZDilZDilZDilZDilZ0KCiAgICAgICAgICAgICAgICAgICAgICBbIFpFUk8gVFJVU1QgRElBR05PU1RJQyBFTkdJTkUgXQo='
+    $banner1 = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b1_b64))
+
+    $b2_b64 = 'CgogIOKVlOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVlwogIOKVkSAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg4pWRCiAg4pWRICAgIC9cICAvXCBfX18gIF9fXyAgL19cICAvXCAgL1wvXCBfX18gIC9cIC9cICAgL1wgIC9cX19fIC98ICB8ICB8ICAvXCAg4pWRCiAg4pWRICAgLyAvXy8gLy8gXyBcLyBfX3wvL19cXC8gL18vIC8gIFYgIC8gXyBcLyAvLyAvIC9fLyAvIC1fKVwgXHwgfCAgfCBcLyAg4pWRCiAg4pWRICAvXy8gL18vIFxfX18vXF9fXy9fLyBcX1xfX19fL3xffF98X1xfX18vXy8gXF9cX19fXy9cX19ffCAgXF98X3wgIHxfL19cIOKVkQogIOKVkSAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg4pWRCiAg4pWRICA+PiBTRU5USU5FTEFJICA6OiAgUkVNT1RFIElUIEZPUkVOU0lDUyAgOjogIHYyLjAgIDo6ICBDT1JQIEdSQURFICAgICAgIOKVkQogIOKVmuKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVnQo='
+    $banner2 = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b2_b64))
+
+    $b3_b64 = 'CgogIOKUjOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUkAogIOKUgiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICDilIIKICDilIIgICAgQUQ6SU5GUkEg4pa4IERJQUdOT1NUSUMgRU5HSU5FICAgICAgICAgICAgICAgICAgICBbIFNFQ1VSRSBDSEFOTkVMIF0gICDilIIKICDilIIgICAg4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSAICAgIOKUggogIOKUgiAgICBUQVJHRVQgQUNRVUlTSVRJT04g4pyTICAgIFBBWUxPQUQ6IFJFQUQtT05MWSDinJMgICAgQUkgQ09SRTogT05MSU5FIOKckyAgIOKUggogIOKUgiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICDilIIKICDilJTilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilJgK'
+    $banner3 = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b3_b64))
+
+    $banners  = @($banner1, $banner2, $banner3)
+    $selected = $banners | Get-Random
+    Write-Host $selected -ForegroundColor $clrPrimary
+
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # BLOQUE DE CRÃ‰DITOS
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    Write-Host $("  " + "$([char]0x2500)" * 73) -ForegroundColor $clrDim
     Write-Host ""
+
+    Write-Host "  [+] " -ForegroundColor $clrAccent -NoNewline
+    Write-Host "ZERO TRUST DIAGNOSTIC ENGINE v2.0" -ForegroundColor $clrText
+    
+    Write-Host "  [+] " -ForegroundColor $clrAccent -NoNewline
+    Write-Host "Arquitectura y Desarrollo por: " -ForegroundColor $clrSecondary -NoNewline
+    Write-Host "Fabian Paternina" -ForegroundColor $clrText
+    
+    Write-Host "  [+] " -ForegroundColor $clrAccent -NoNewline
+    Write-Host "Powered by " -ForegroundColor $clrSecondary -NoNewline
+    Write-Host "Google Gemini AI" -ForegroundColor $clrPrimary -NoNewline
+    Write-Host "  Â·  SentinelAI Core Active`n" -ForegroundColor $clrDim
+    
+    Write-Host $("  " + "$([char]0x2500)" * 73) -ForegroundColor $clrDim
+
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # BLOQUE DE ESTADO Y SEGURIDAD Y CONTEXTO COMPACTO (El "Grid")
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    Write-Host "`n  [!] " -ForegroundColor $clrAlert -NoNewline
+    Write-Host "MODO SEGURO: PolÃ­ticas de solo lectura aplicadas  |  CANAL: Zero Trust Tunnel Cifrado`n" -ForegroundColor $clrSecondary
+    
+    Write-Host $("  " + "$([char]0x2500)" * 73) -ForegroundColor $clrDim
+
+    # Procesamiento y padding para el Grid Ultra-Compacto
+    $osClean = $SysInfo.os -replace "Microsoft ", ""
+    if ($osClean.Length -gt 18) { $osClean = $osClean.Substring(0,15) + "..." }
+    $taskClean = $Issue
+    if ($taskClean.Length -gt 24) { $taskClean = $taskClean.Substring(0,21) + "..." }
+    $targetClean = $ServerUrl -replace "http://", "" -replace "https://", ""
+    
+    $col1 = 32; $col2 = 22
+    Write-Host "`n  " -NoNewline
+    Write-Host ("Target: " + $targetClean).PadRight($col1) -ForegroundColor $clrText -NoNewline
+    Write-Host "â”‚ " -ForegroundColor $clrDim -NoNewline
+    Write-Host ("Host: " + $SysInfo.hostname).PadRight($col2) -ForegroundColor $clrSecondary -NoNewline
+    Write-Host "â”‚ " -ForegroundColor $clrDim -NoNewline
+    Write-Host ("IP: " + $SysInfo.ip) -ForegroundColor $clrSecondary
+
+    Write-Host "  " -NoNewline
+    Write-Host ("Task: " + $taskClean).PadRight($col1) -ForegroundColor $clrText -NoNewline
+    Write-Host "â”‚ " -ForegroundColor $clrDim -NoNewline
+    Write-Host ("OS: " + $osClean).PadRight($col2) -ForegroundColor $clrSecondary -NoNewline
+    Write-Host "â”‚ " -ForegroundColor $clrDim -NoNewline
+    Write-Host ("Uptime: " + $SysInfo.uptime) -ForegroundColor $clrSecondary
+
+    Write-Host "`n"
+    Write-Host $("  " + "$([char]0x2500)" * 73) -ForegroundColor $clrDim
+    Write-Host "`n  [CTRL+C]" -ForegroundColor $clrAlert -NoNewline
+    Write-Host " Abortar sesiÃ³n en cualquier momento.`n" -ForegroundColor $clrDim
 }
 
 
@@ -152,18 +173,18 @@ function Test-CommandAllowed {
                     }
                 }
                 if (-not $isException) {
-                    Write-Host "  [BLOQUEADO] Patrn prohibido: .exe" -ForegroundColor Red
+                    Write-Host "  [BLOQUEADO] PatrÃ³n prohibido: .exe" -ForegroundColor Red
                     return $false
                 }
             }
         }
         elseif ($cmd -match [regex]::Escape($blocked)) {
-            Write-Host "  [BLOQUEADO] Patrn prohibido: $blocked" -ForegroundColor Red
+            Write-Host "  [BLOQUEADO] PatrÃ³n prohibido: $blocked" -ForegroundColor Red
             return $false
         }
     }
     
-    # La validacin por Whitelist ($AllowedCmdlets) fue eliminada 
+    # La validaciÃ³n por Whitelist ($AllowedCmdlets) fue eliminada 
     # para permitir total libertad creativa a la IA (bucles, ifs, variables, etc.).
     # La seguridad recae completamente en la robusta Blacklist superior.
     
@@ -212,7 +233,7 @@ function Invoke-SafeCommand {
             # Timeout
             Stop-Job $job -ErrorAction SilentlyContinue
             Remove-Job $job -Force -ErrorAction SilentlyContinue
-            $result.stderr = "TIMEOUT: El comando excedio $Timeout segundos."
+            $result.stderr = "TIMEOUT: El comando excediÃ³ $Timeout segundos."
             $result.exit_code = -1
         }
         else {
@@ -233,7 +254,7 @@ function Invoke-SafeCommand {
         $result.exit_code = 1
     }
     
-    # Limitar tamao de salida (evitar mensajes enormes por WebSocket)
+    # Limitar tamaÃ±o de salida (evitar mensajes enormes por WebSocket)
     $maxLen = 30000
     if ($result.stdout.Length -gt $maxLen) {
         $result.stdout = $result.stdout.Substring(0, $maxLen) + "`n`n[... SALIDA TRUNCADA ($($result.stdout.Length) chars total) ...]"
@@ -249,7 +270,7 @@ function Invoke-SafeCommand {
 function Get-MachineInfo {
     <#
     .SYNOPSIS
-        Recolecta la informacin bsica del equipo para enviar al backend.
+        Recolecta la informaciÃ³n bÃ¡sica del equipo para enviar al backend.
     #>
     
     $hostname = $env:COMPUTERNAME
@@ -280,7 +301,7 @@ function Send-WsMessage {
     
     $json = $Data | ConvertTo-Json -Depth 10 -Compress
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
-    $segment = New-Object System.ArraySegment[byte] -ArgumentList @(,$bytes)
+    $segment = New-Object System.ArraySegment[byte] -ArgumentList @(, $bytes)
     $WebSocket.SendAsync($segment, [System.Net.WebSockets.WebSocketMessageType]::Text, $true, [System.Threading.CancellationToken]::None).Wait()
 }
 
@@ -297,7 +318,7 @@ function Receive-WsMessage {
     $cts.CancelAfter($Timeout * 1000)
     
     do {
-        $segment = New-Object System.ArraySegment[byte] -ArgumentList @(,$buffer)
+        $segment = New-Object System.ArraySegment[byte] -ArgumentList @(, $buffer)
         try {
             $received = $WebSocket.ReceiveAsync($segment, $cts.Token).Result
         }
@@ -312,7 +333,7 @@ function Receive-WsMessage {
         }
         
         if ($received.MessageType -eq [System.Net.WebSockets.WebSocketMessageType]::Close) {
-            throw "El servidor cerr la conexin."
+            throw "El servidor cerrÃ³ la conexiÃ³n."
         }
         
         $chunk = [System.Text.Encoding]::UTF8.GetString($buffer, 0, $received.Count)
@@ -327,14 +348,14 @@ function Receive-WsMessage {
 
 function Show-Separator {
     param([string]$Color = "DarkGray")
-    Write-Host "  ---------------------------------------------------------" -ForegroundColor $Color
+    Write-Host "  $("$([char]0x2500)" * 57)" -ForegroundColor $Color
 }
 
 
 function Format-DiagnosisReport {
     <#
     .SYNOPSIS
-        Formatea y muestra el reporte de diagnstico final en la consola.
+        Formatea y muestra el reporte de diagnÃ³stico final en la consola.
     #>
     param([hashtable]$Report)
     
@@ -358,17 +379,17 @@ function Format-DiagnosisReport {
     
     Write-Host ""
     Write-Host "  " -ForegroundColor $color
-    Write-Host "                DIAGNSTICO FINAL                                 " -ForegroundColor $color
+    Write-Host "                DIAGNÃ“STICO FINAL                                 " -ForegroundColor $color
     Write-Host "  " -ForegroundColor $color
     Write-Host ""
     Write-Host "  $icon Severidad: $($sev.ToUpper())" -ForegroundColor $color
     Write-Host "  Equipo: $($Report.hostname)" -ForegroundColor White
-    Write-Host "  Sesin: $($Report.session_id)" -ForegroundColor Gray
+    Write-Host "  SesiÃ³n: $($Report.session_id)" -ForegroundColor Gray
     Write-Host "  Pasos ejecutados: $($Report.steps_taken)" -ForegroundColor Gray
     Write-Host ""
     Show-Separator
     Write-Host ""
-    Write-Host "  CAUSA RAZ:" -ForegroundColor White
+    Write-Host "  CAUSA RAÃZ:" -ForegroundColor White
     Write-Host "  $($Report.root_cause)" -ForegroundColor Cyan
     Write-Host ""
     Show-Separator
@@ -409,17 +430,25 @@ function Format-DiagnosisReport {
 # Verificar que se ejecuta como Administrador
 $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Write-Host "`n  [ERROR] Este script debe ejecutarse como Administrador." -ForegroundColor Red
-    Write-Host "  Haz clic derecho en PowerShell > 'Ejecutar como administrador'.`n" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  [ERROR] Este script debe ejecutarse como Administrador." -ForegroundColor Red
+    Write-Host "  Haz clic derecho en PowerShell > Ejecutar como administrador." -ForegroundColor Yellow
+    Write-Host ""
     exit 1
 }
 
-Show-Banner
+# 1. Recolectar info antes del banner para inyectarla en el Grid
+$sysInfo = Get-MachineInfo
+
+# 2. Renderizar Interfaz Compacta y Banners Rotativos Originales
+Show-Banner -ServerUrl $ServerUrl -Issue $Issue -SysInfo $sysInfo
+
+# 3. Ãšnica lÃ­nea elegante de conexiÃ³n
+Write-Host "  [+] Estableciendo Secure Web-Socket & SysInfo Sync... " -ForegroundColor Gray -NoNewline
 
 # Construir la URL del WebSocket
 $wsUrl = $ServerUrl -replace "^http", "ws"
 $wsUrl = "$wsUrl/api/v1/diagnostics/ws"
-Write-Host "  [*] Conectando a: $wsUrl" -ForegroundColor Cyan
 
 $ws = $null
 $attempt = 0
@@ -436,42 +465,25 @@ try {
             $cts.CancelAfter(15000)  # 15s timeout para conectar
             $ws.ConnectAsync($uri, $cts.Token).Wait()
             $cts.Dispose()
-            Write-Host "  [OK] Conexin WebSocket establecida.`n" -ForegroundColor Green
             break
         }
         catch {
             $errMsg = if ($_.Exception.InnerException) { $_.Exception.InnerException.Message } else { $_.Exception.Message }
-            Write-Host "  [ERROR] Intento $attempt/$MaxReconnectAttempts - No se pudo conectar: $errMsg" -ForegroundColor Red
-            if ($attempt -lt $MaxReconnectAttempts) {
-                Write-Host "  [*] Reintentando en 5 segundos..." -ForegroundColor Yellow
-                Start-Sleep -Seconds 5
-            }
-            else {
-                Write-Host "`n  [FATAL] No se pudo conectar al servidor despus de $MaxReconnectAttempts intentos." -ForegroundColor Red
+            if ($attempt -ge $MaxReconnectAttempts) {
+                Write-Host "`n  [FATAL] No se pudo conectar al servidor despues de $MaxReconnectAttempts intentos. Error: $errMsg" -ForegroundColor Red
                 exit 1
             }
+            Start-Sleep -Seconds 5
         }
     }
     
-    # -- Esperar el mensaje de bienvenida del servidor
-    $welcomeRaw = Receive-WsMessage -WebSocket $ws
-    $welcome = $welcomeRaw | ConvertFrom-Json
-    if ($welcome.message) {
-        Write-Host "  [Servidor] $($welcome.message)" -ForegroundColor Gray
-    }
+    # SincronizaciÃ³n inicial invisible en consola
+    $welcomeRaw = Receive-WsMessage -WebSocket $ws -Timeout 10
+    Send-WsMessage -WebSocket $ws -Data $sysInfo
     
-    # -- Enviar informacin del equipo
-    Write-Host "  [*] Recolectando informacin del equipo..." -ForegroundColor Cyan
-    $machineInfo = Get-MachineInfo
-    Write-Host "  [i] Hostname: $($machineInfo.hostname)" -ForegroundColor White
-    Write-Host "  [i] OS: $($machineInfo.os)" -ForegroundColor White
-    Write-Host "  [i] IP: $($machineInfo.ip)" -ForegroundColor White
-    Write-Host "  [i] Uptime: $($machineInfo.uptime)" -ForegroundColor White
-    Write-Host ""
-    
-    Send-WsMessage -WebSocket $ws -Data $machineInfo
-    Write-Host "  [OK] Informacin enviada. Esperando al agente de IA...`n" -ForegroundColor Green
-    Show-Separator
+    # Rematar lÃ­nea elegante con el [OK]
+    Write-Host "[OK]" -ForegroundColor Green
+    Write-Host $("  " + "$([char]0x2500)" * 73) -ForegroundColor DarkGray
     Write-Host ""
     
     # 
@@ -496,7 +508,7 @@ try {
             $msg = $msgRaw | ConvertFrom-Json
         }
         catch {
-            Write-Host "  [ERROR] Mensaje del servidor no es JSON vlido." -ForegroundColor Red
+            Write-Host "  [ERROR] Mensaje del servidor no es JSON vÃ¡lido." -ForegroundColor Red
             continue
         }
         
@@ -519,11 +531,10 @@ try {
                 $stepNumber++
                 $command = $msg.command
                 $purpose = $msg.purpose
-                $phase = $msg.phase
                 
                 Write-Host "  +--------------------------------------------------" -ForegroundColor DarkCyan
-                Write-Host "  | Fase $phase  Paso $stepNumber" -ForegroundColor Cyan
-                Write-Host "  | Propsito: $purpose" -ForegroundColor White
+                Write-Host "  | HipÃ³tesis / Paso $stepNumber" -ForegroundColor Cyan
+                Write-Host "  | PropÃ³sito: $purpose" -ForegroundColor White
                 Write-Host "  | Comando: $command" -ForegroundColor Yellow
                 Write-Host "  +--------------------------------------------------" -ForegroundColor DarkCyan
                 
@@ -551,9 +562,11 @@ try {
                 $preview = ""
                 if ($cmdResult.stdout) {
                     $preview = $cmdResult.stdout.Substring(0, [Math]::Min(200, $cmdResult.stdout.Length))
-                } elseif ($cmdResult.stderr) {
+                }
+                elseif ($cmdResult.stderr) {
                     $preview = $cmdResult.stderr.Substring(0, [Math]::Min(200, $cmdResult.stderr.Length))
-                } else {
+                }
+                else {
                     $preview = "(sin salida)"
                 }
                 $previewClean = $preview -replace "`n", " " -replace "`r", ""
@@ -571,15 +584,15 @@ try {
                 Send-WsMessage -WebSocket $ws -Data $response
             }
             
-            # -- Actualizacin de estado del agente
+            # -- ActualizaciÃ³n de estado del agente
             "status_update" {
                 Write-Host "  [Agente] $($msg.message)" -ForegroundColor Cyan
                 Write-Host ""
             }
             
-            # -- Diagnstico completo
+            # -- DiagnÃ³stico completo
             "diagnosis_complete" {
-                Write-Host "  [OK] El agente ha completado el diagnstico." -ForegroundColor Green
+                Write-Host "  [OK] El agente ha completado el diagnÃ³stico." -ForegroundColor Green
                 Write-Host ""
                 
                 # Convertir PSObject a hashtable para el formateador
@@ -591,14 +604,14 @@ try {
                 $sessionActive = $false
             }
             
-            # -- Diagnstico incompleto (mximo de pasos)
+            # -- DiagnÃ³stico incompleto (mÃ¡ximo de pasos)
             "diagnosis_incomplete" {
                 Write-Host "  [ADVERTENCIA] $($msg.message)" -ForegroundColor Yellow
                 Write-Host ""
                 $sessionActive = $false
             }
             
-            # -- Fin de sesin
+            # -- Fin de sesiÃ³n
             "session_end" {
                 Write-Host "  [i] $($msg.message)" -ForegroundColor Gray
                 $sessionActive = $false
@@ -608,7 +621,7 @@ try {
             "error" {
                 Write-Host "  [ERROR del Servidor] $($msg.message)" -ForegroundColor Red
                 Write-Host ""
-                # No romper el loop por un error  el agente puede recuperarse
+                # No romper el loop por un error, el agente puede recuperarse
             }
             
             # -- Mensaje desconocido
@@ -619,9 +632,21 @@ try {
     }
 }
 catch {
-    Write-Host "`n  [ERROR FATAL] $($_.Exception.Message)" -ForegroundColor Red
-    if ($_.Exception.InnerException) {
-        Write-Host "  [Detalle] $($_.Exception.InnerException.Message)" -ForegroundColor DarkRed
+    $ex = $_.Exception
+    # Desempaquetar AggregateException de las llamadas a .Wait() para ver el error real
+    while ($ex -is [System.AggregateException] -and $ex.InnerException) {
+        $ex = $ex.InnerException
+    }
+    
+    if ($ex -is [System.Net.WebSockets.WebSocketException]) {
+        Write-Host "`n  [DESCONEXION] La conexiÃ³n con el servidor se perdiÃ³ o fue cerrada abruptamente." -ForegroundColor Yellow
+        Write-Host "  [Detalle] $($ex.Message)" -ForegroundColor DarkYellow
+    }
+    else {
+        Write-Host "`n  [ERROR FATAL] $($ex.Message)" -ForegroundColor Red
+        if ($ex.InnerException) {
+            Write-Host "  [Detalle] $($ex.InnerException.Message)" -ForegroundColor DarkRed
+        }
     }
 }
 finally {
@@ -641,8 +666,8 @@ finally {
     }
     if ($ws) { $ws.Dispose() }
     
-    Write-Host "`n  ---------------------------------------------------------" -ForegroundColor DarkGray
-    Write-Host "  Sesin de diagnstico finalizada." -ForegroundColor Gray
+    Write-Host "`n  $("$([char]0x2500)" * 57)" -ForegroundColor DarkGray
+    Write-Host "  SesiÃ³n de diagnÃ³stico finalizada." -ForegroundColor Gray
     Write-Host "  Presiona Enter para cerrar..." -ForegroundColor Gray
     Write-Host ""
     Read-Host

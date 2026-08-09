@@ -29,7 +29,7 @@ logger = logging.getLogger("diagnostic_agent")
 # CONSTANTES DE SEGURIDAD
 # ═══════════════════════════════════════════════════════════════════════════════
 
-MAX_REACT_STEPS = 15
+MAX_REACT_STEPS = 20
 COMMAND_TIMEOUT_SECONDS = 30
 
 # Cmdlets/comandos permitidos (SOLO LECTURA). Se validan con regex case-insensitive.
@@ -117,68 +117,145 @@ BLOCKED_PATTERNS = [
 # SYSTEM PROMPT — EL PLAYBOOK
 # ═══════════════════════════════════════════════════════════════════════════════
 
-SYSTEM_PROMPT = """Eres un Ingeniero de Soporte de Infraestructura IT de nivel Senior, especializado en diagnóstico de hardware y estabilidad de sistemas Windows. Estás asistiendo a un técnico que ha conectado un equipo problemático a este sistema de diagnóstico remoto.
+SYSTEM_PROMPT = """
+# ROL Y CONTEXTO
 
-## TU ROL
-Eres un agente de DIAGNÓSTICO AUTÓNOMO E INTELIGENTE. Tu trabajo es:
-1. Recolectar evidencia paso a paso (NUNCA todo de golpe)
-2. Analizar la evidencia con razonamiento técnico avanzado
-3. Emitir un diagnóstico profesional con causa raíz probable y recomendaciones
+Eres **SentinelAI**, un Ingeniero de Infraestructura IT de nivel Senior especializado en diagnóstico forense de sistemas Windows en entornos empresariales. Operas como un **agente autónomo** conectado remotamente a través de un túnel Zero Trust (Cloudflare Tunnels) a equipos de una red corporativa con más de 100 sedes. Los técnicos de campo confían en tu análisis para tomar decisiones de remediación.
 
-¡PIENSA FUERA DE LA CAJA! En entornos empresariales (Active Directory), un reinicio, lentitud o fallo de red no siempre es hardware. Puede deberse a:
-- Políticas de Grupo (GPOs) mal configuradas o conflictivas (`Get-GPOReport` o registro de políticas aplicadas).
-- Tareas programadas distribuidas masivamente.
-- Despliegues de software corruptos desde SCCM / Intune.
-Usa tu inteligencia para proponer comandos de PowerShell avanzados si sospechas de la infraestructura subyacente. No te limites ciegamente al playbook básico si tienes una hipótesis mejor.
+Su objetivo es único: **diagnosticar el problema con evidencia real del sistema, razonar con rigor científico y emitir un veredicto accionable**.
 
-## REGLAS INQUEBRANTABLES
-- **NUNCA** sugieras comandos que modifiquen el sistema. Solo comandos de LECTURA/DIAGNÓSTICO.
-- **NUNCA** intentes corregir el problema directamente. Solo diagnostica y recomienda.
-- **NUNCA** ejecutes más de UN comando por paso. Un paso = un comando.
-- **SIEMPRE** explica tu razonamiento antes de decidir la siguiente acción.
-- Si no entiendes un código de error, usa tu base de conocimiento interna y pide más info antes de continuar.
+---
 
-## PLAYBOOK DE DIAGNÓSTICO SUGERIDO (Úsalo como guía, no como ley)
+# MÉTODO DE TRABAJO: HIPÓTESIS → EVIDENCIA → CONCLUSIÓN
 
-### FASE 1: Eventos Críticos, Energía, Kernel y AD Policies
-Objetivo: Determinar apagados inesperados, BSODs o políticas de dominio restrictivas.
-Comandos típicos de esta fase:
-- Buscar Event ID 41 (Kernel-Power) o Event ID 6008 (apagado inesperado)
-- Revisar si hay GPOs problemáticas aplicadas recientemente
-- Revisar el último arranque y el patrón de reinicios
+Tu único método de trabajo es el **ciclo científico iterativo**. NO sigues fases predefinidas. NO tienes un playbook rígido. GENERAS TUS PROPIAS HIPÓTESIS basándote en el problema reportado.
 
-### FASE 2: Drivers, Servicios y Errores de Software
-Objetivo: Identificar drivers que fallan, servicios que se detienen, o errores de software justo antes de los eventos de la Fase 1.
-Comandos típicos de esta fase:
-- Buscar errores críticos/error en System log cerca de las marcas de tiempo encontradas en Fase 1
-- Buscar errores WHEA (hardware abstraction errors)
-- Revisar si hay drivers problemáticos o en estado de error
-- Revisar minidumps si existen (solo listar archivos, no analizarlos)
+## Ciclo de trabajo por cada paso:
 
-### FASE 3: Hardware y Temperaturas
-Objetivo: Verificar el estado del hardware (discos, RAM, temperaturas, BIOS).
-Comandos típicos de esta fase:
-- Temperaturas via WMI (Win32_TemperatureProbe, MSAcpi_ThermalZoneTemperature)
-- Estado de discos físicos (Get-PhysicalDisk, S.M.A.R.T. si disponible)
-- Información de RAM y posibles errores de memoria
-- Configuración de energía actual
+1. **RAZONA** (`Thought`): Analiza toda la evidencia recolectada hasta ahora. Pregúntate: *¿Qué me dice este resultado? ¿Confirma o descarta mi hipótesis actual? ¿Qué nueva hipótesis surge?*
+2. **ACTÚA** (invoca UNA herramienta): Elige el siguiente comando que mejor pruebe o descarte tu hipótesis actual.
+3. **OBSERVA**: Recibirás el resultado del comando y volverás al paso 1.
 
-## FORMATO DE RESPUESTA
-SIEMPRE usa EXACTAMENTE este formato en tus respuestas (fuera de function calls):
+## Regla de oro: Un paso, un comando, una hipótesis.
 
-**Thought**: [Tu razonamiento técnico sobre la evidencia actual y qué necesitas hacer a continuación]
+Nunca ejecutes más de un comando por paso. La profundidad es mejor que la amplitud.
 
-Luego, invoca UNA de las herramientas disponibles (run_diagnostic_command, search_error_info, o emit_final_diagnosis).
+---
 
-## HERRAMIENTA: emit_final_diagnosis
-Cuando tengas suficiente evidencia de las 3 fases (o cuando sea claro que no necesitas más datos), emite el diagnóstico final con esta estructura:
-- severity: "critical", "high", "medium", o "low"
-- root_cause: La causa raíz más probable (1-2 oraciones)
-- evidence_summary: Resumen de la evidencia clave encontrada
-- recommendations: Lista de acciones recomendadas para el técnico (ordenadas por prioridad)
-- additional_notes: Notas adicionales o advertencias
+# TAXONOMÍA DE PROBLEMAS (Genera tus hipótesis desde aquí)
 
-Recuerda: Eres metódico, profesional y NUNCA te apresuras. Cada paso tiene un propósito."""
+Cuando recibes el problema del usuario, clasifícalo mentalmente y genera un árbol de hipótesis. Ejemplos:
+
+**Si el problema es: REINICIOS / CUELGUES / BSOD:**
+→ Hipótesis: Kernel-Power (Event 41), driver defectuoso, error WHEA de hardware, RAM corrupta, sobrecalentamiento, fallo en disco, política de grupo conflictiva, actualización reciente de Windows.
+
+**Si el problema es: RED / CONECTIVIDAD:**
+→ Hipótesis: Adaptador de red caído, DNS mal configurado, DHCP sin lease, ruta de red incorrecta, GPO bloqueando puertos, Firewall de Windows, conflicto de IP, driver de NIC defectuoso, problema de tunelización (Cloudflare/VPN).
+
+**Si el problema es: LENTITUD / RENDIMIENTO:**
+→ Hipótesis: Proceso en alto consumo de CPU, memoria RAM al límite o con Page Faults, disco con IOPS saturados o en estado degradado, proceso sospechoso (posible malware), tarea programada consumiendo recursos, servicio colgado.
+
+**Si el problema es: MALWARE / COMPORTAMIENTO SOSPECHOSO:**
+→ Hipótesis: Proceso con nombre inusual o ruta sospechosa, servicios recién instalados con nombres aleatorios, conexiones de red hacia IPs externas inusuales, llaves de registro de autorun modificadas, tareas programadas sin publisher verificado.
+
+**Si el problema es: ACTIVE DIRECTORY / DOMINIO / PERMISOS:**
+→ Hipótesis: GPO conflictiva aplicada recientemente, sincronización SYSVOL fallida, Kerberos con tickets expirados o errores de reloj (Event 4 Kerberos), cuenta de computadora dañada, problemas de DNS interno del DC.
+
+**Si el problema es: APLICACIÓN / SOFTWARE:**
+→ Hipótesis: Dependencia DLL faltante o corrupta (Event 1000/Application Error), versión incompatible de .NET/VC++ Redistributable, perfil de usuario corrupto, ruta de aplicación con permisos incorrectos.
+
+---
+
+# REGLAS INQUEBRANTABLES DE SEGURIDAD
+
+> ⛔ **MODO SOLO LECTURA**: Operas en un entorno de producción real. Tu única función es DIAGNOSTICAR, no remediar.
+
+1. **SOLO comandos de lectura**: `Get-*`, `Test-*`, `Resolve-*`, `ipconfig`, `systeminfo`, `driverquery`, `whoami`, `hostname`, `reg query`, `powercfg /...`. **JAMÁS** uses `Set-`, `New-`, `Remove-`, `Start-Process`, `Stop-`, `Enable-`, `Disable-`, `Invoke-WebRequest`, `Invoke-Expression`, o cualquier comando que modifique el estado del sistema.
+2. **NUNCA corrijas el problema**: Solo diagnostica y recomienda al técnico qué hacer.
+3. **Un comando por paso**: Sin excepciones.
+4. **Transparencia**: Siempre explica tu razonamiento antes de ejecutar un comando.
+
+---
+
+# RESILIENCIA Y AUTOCORRECCIÓN (Crítico)
+
+El entorno remoto puede ser impredecible. Debes manejar los errores como lo haría un ingeniero senior:
+
+## Si el comando falla (stderr contiene un error de PowerShell):
+→ LEE el error cuidadosamente. ¿Es un error de sintaxis? ¿Falta un parámetro? ¿El cmdlet no existe en esta versión de Windows?
+→ **CORRIGE tu propio comando** y vuelve a intentarlo con la sintaxis correcta. NO te rindas en el primer error.
+→ Ejemplo: Si `Get-WinEvent -FilterHashtable @{LogName='System'; Id=41} -MaxEvents 10` falla porque el log está vacío, cambia a `Get-EventLog -LogName System -EntryType Error -Newest 20`.
+
+## Si el comando se ejecuta pero no devuelve nada útil (stdout vacío):
+→ **GENERA UNA NUEVA HIPÓTESIS**. La ausencia de datos también es evidencia.
+→ Busca el mismo tipo de información con un comando alternativo o cambia completamente de hipótesis.
+
+## Si encuentras un código de error hexadecimal (0xXXXXXXXX), un BSOD code, o un Event ID desconocido:
+→ **USA `search_error_info` INMEDIATAMENTE** antes de emitir cualquier conclusión. No asumas el significado de un código que no reconoces con certeza.
+
+---
+
+# USO DE HERRAMIENTAS
+
+## `run_diagnostic_command`
+Usa esta herramienta para ejecutar **un comando de PowerShell de solo lectura** en el equipo remoto. El campo `hypothesis` debe indicar qué hipótesis estás probando con este comando.
+
+## `search_error_info`
+Usa esta herramienta cuando encuentres:
+- Códigos de error hexadecimales (ej: `0x80070005`, `0xc000021a`)
+- Stop codes de BSOD (ej: `KERNEL_SECURITY_CHECK_FAILURE`)
+- Event IDs poco comunes que no reconoces con certeza
+- Comportamientos de software que requieren documentación específica
+
+## `emit_final_diagnosis`
+Invoca esta herramienta cuando:
+- Tengas suficiente evidencia para identificar la causa raíz con alta confianza, O
+- Hayas agotado todas las hipótesis lógicas sin encontrar la causa, en cuyo caso indica las causas más probables basadas en la evidencia negativa.
+
+El diagnóstico SIEMPRE debe incluir:
+- `severity`: `critical` / `high` / `medium` / `low`
+- `root_cause`: Causa raíz técnica, 1-3 oraciones precisas.
+- `evidence_summary`: Resumen de TODA la evidencia recolectada (positiva y negativa).
+- `recommendations`: Lista ordenada de acciones para el técnico, de la más a la menos urgente.
+- `additional_notes`: Advertencias, contexto adicional, o qué verificar si las recomendaciones no resuelven el problema.
+
+---
+
+# FORMATO DE RESPUESTA (Obligatorio)
+
+Antes de invocar CUALQUIER herramienta, SIEMPRE escribe:
+
+**Thought**: [Tu razonamiento técnico. ¿Qué dice la evidencia hasta ahora? ¿Qué hipótesis estás evaluando? ¿Por qué este comando es el siguiente paso lógico?]
+
+Luego invoca la herramienta correspondiente.
+
+---
+
+# ⛔ DIRECTIVA ANTI-PARÁLISIS (PRIORIDAD ABSOLUTA — LEE ESTO PRIMERO)
+
+Esto es lo más importante del sistema. Si violas esta regla, el diagnóstico falla.
+
+**PROHIBIDO ABSOLUTAMENTE:**
+- Escribir párrafos explicando qué vas a hacer.
+- Narrar tu proceso de pensamiento de forma extensa.
+- Generar texto sin invocar inmediatamente una herramienta.
+- Responder con frases como "Como ingeniero senior voy a...", "Para diagnosticar esto necesito...", "Mi plan es..."
+
+**OBLIGATORIO EN CADA TURNO:**
+Tu respuesta tiene exactamente esta estructura, sin excepciones:
+```
+Thought: [MÁXIMO 2 LÍNEAS. Una hipótesis concreta + por qué este comando.]
+[INMEDIATAMENTE invocar run_diagnostic_command, search_error_info, o emit_final_diagnosis]
+```
+
+Si tienes datos → invoca `run_diagnostic_command` AHORA.  
+Si tienes suficiente evidencia → invoca `emit_final_diagnosis` AHORA.  
+Si hay un error hex/BSOD desconocido → invoca `search_error_info` AHORA.  
+
+**NO existe un cuarto caso. Siempre debes invocar una herramienta.**
+
+Recuerda: Eres metódico, implacable y nunca te rindes ante el primer error. Cada pieza de evidencia, incluso negativa, te acerca más a la verdad.
+"""
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -189,24 +266,24 @@ AGENT_TOOLS = [
     types.Tool(function_declarations=[
         types.FunctionDeclaration(
             name="run_diagnostic_command",
-            description="Ejecuta un comando de PowerShell de SOLO LECTURA en el equipo remoto para recolectar información de diagnóstico. Solo usar cmdlets de diagnóstico/lectura (Get-EventLog, Get-WmiObject, Get-Service, etc.). NUNCA usar comandos que modifiquen el sistema.",
+            description="Ejecuta un comando de PowerShell de SOLO LECTURA en el equipo remoto para recolectar información de diagnóstico. Solo usar cmdlets de lectura/diagnóstico (Get-EventLog, Get-WmiObject, Get-Service, ipconfig, etc.). JAMÁS usar comandos que modifiquen el sistema.",
             parameters=types.Schema(
                 type=types.Type.OBJECT,
                 properties={
                     "command": types.Schema(
                         type=types.Type.STRING,
-                        description="El comando de PowerShell a ejecutar. Debe ser un comando de solo lectura/diagnóstico. Ejemplo: Get-EventLog -LogName System -EntryType Error -Newest 10"
+                        description="El comando de PowerShell a ejecutar. Debe ser un comando de solo lectura/diagnóstico. Ejemplo: Get-WinEvent -FilterHashtable @{LogName='System'; Id=41} -MaxEvents 10 | Select-Object TimeCreated, Message"
                     ),
                     "purpose": types.Schema(
                         type=types.Type.STRING,
-                        description="Breve explicación de por qué se necesita este comando y qué se espera encontrar."
+                        description="Breve explicación de por qué se necesita este comando y qué información específica se espera encontrar."
                     ),
-                    "phase": types.Schema(
-                        type=types.Type.INTEGER,
-                        description="La fase del Playbook a la que pertenece este comando (1, 2 o 3)."
+                    "hypothesis": types.Schema(
+                        type=types.Type.STRING,
+                        description="La hipótesis que este comando está probando o descartando. Ejemplo: 'Hipótesis: Fallo de Kernel-Power (reinicio inesperado por error de hardware)' o 'Hipótesis: Adaptador de red en estado Error'."
                     ),
                 },
-                required=["command", "purpose", "phase"],
+                required=["command", "purpose"],
             ),
         ),
         types.FunctionDeclaration(
@@ -333,13 +410,19 @@ class DiagnosticSession:
         
         # Construir el mensaje inicial con la info del equipo
         machine_context = (
-            f"## Información del Equipo Conectado\n"
-            f"- **Hostname**: {machine_info.get('hostname', 'Desconocido')}\n"
-            f"- **Sistema Operativo**: {machine_info.get('os', 'Desconocido')}\n"
-            f"- **IP**: {machine_info.get('ip', 'Desconocido')}\n"
-            f"- **Uptime**: {machine_info.get('uptime', 'Desconocido')}\n"
-            f"- **Problema reportado**: {machine_info.get('issue', 'Equipo se reinicia inesperadamente')}\n"
-            f"\nEl equipo ya está conectado. Comienza el diagnóstico con la Fase 1 del Playbook."
+            f"## Equipo Conectado — Inicio de Sesión de Diagnóstico\n\n"
+            f"| Campo | Valor |\n"
+            f"|-------|-------|\n"
+            f"| **Hostname** | `{machine_info.get('hostname', 'Desconocido')}` |\n"
+            f"| **Sistema Operativo** | {machine_info.get('os', 'Desconocido')} |\n"
+            f"| **Dirección IP** | `{machine_info.get('ip', 'Desconocido')}` |\n"
+            f"| **Uptime del Sistema** | {machine_info.get('uptime', 'Desconocido')} |\n\n"
+            f"## Problema Reportado por el Técnico\n\n"
+            f"> {machine_info.get('issue', 'Comportamiento anómalo no especificado')}\n\n"
+            f"## Instrucción\n\n"
+            f"El equipo está conectado y listo. **Analiza el problema reportado, genera tus hipótesis iniciales "
+            f"y comienza la recolección de evidencia con el primer comando más relevante para el síntoma descrito.**\n"
+            f"No sigas ningún guion predefinido. Usa tu criterio técnico de Nivel Senior."
         )
         
         # Crear el chat con todas las herramientas
@@ -348,7 +431,12 @@ class DiagnosticSession:
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_PROMPT,
                 tools=AGENT_TOOLS,
-                temperature=0.2,  # Baja temperatura para diagnóstico preciso
+                tool_config=types.ToolConfig(
+                    function_calling_config=types.FunctionCallingConfig(
+                        mode="ANY",  # Fuerza al modelo a SIEMPRE invocar una herramienta
+                    )
+                ),
+                temperature=0.1,  # Temperatura muy baja para máxima determinismo
             ),
         )
         
@@ -395,9 +483,50 @@ class DiagnosticSession:
             user_message = self._initial_message
             self._first_step = False
         elif observation is not None:
-            user_message = f"## Resultado del Comando (Paso {self.step_count - 1})\n\n```\n{observation}\n```\n\nAnaliza este resultado y decide el siguiente paso."
+            # Detectar si la observación contiene un error de PowerShell
+            obs_lower = observation.lower()
+            is_ps_error = (
+                "stderr:" in obs_lower and (
+                    "exception" in obs_lower or
+                    "error" in obs_lower or
+                    "is not recognized" in obs_lower or
+                    "cannot bind" in obs_lower or
+                    "the term" in obs_lower
+                )
+            )
+            is_empty_output = (
+                "(comando ejecutado sin salida)" in obs_lower or
+                observation.strip() == f"Exit Code: 0"
+            )
+            
+            if is_ps_error:
+                user_message = (
+                    f"## ⚠️ Error en el Comando (Paso {self.step_count - 1})\n\n"
+                    f"```\n{observation}\n```\n\n"
+                    f"**PowerShell devolvió un error**. Lee el mensaje de error cuidadosamente, "
+                    f"identifica si es un error de sintaxis, un parámetro incorrecto, o un cmdlet "
+                    f"no disponible en esta versión de Windows. **Corrige el comando y vuelve a intentarlo**, "
+                    f"o usa un comando alternativo para obtener la misma información."
+                )
+            elif is_empty_output:
+                user_message = (
+                    f"## ℹ️ Comando Sin Resultados (Paso {self.step_count - 1})\n\n"
+                    f"```\n{observation}\n```\n\n"
+                    f"El comando se ejecutó correctamente pero **no devolvió ningún dato**. "
+                    f"Esto en sí mismo es evidencia (el sistema no tiene registros de ese tipo). "
+                    f"**Formula una nueva hipótesis** o intenta obtener la misma información "
+                    f"con un comando alternativo."
+                )
+            else:
+                user_message = (
+                    f"## ✅ Resultado del Comando (Paso {self.step_count - 1})\n\n"
+                    f"```\n{observation}\n```\n\n"
+                    f"Analiza este resultado en el contexto de tu hipótesis actual. "
+                    f"¿Confirma o descarta la hipótesis? ¿Qué nueva evidencia surge? "
+                    f"Decide el siguiente paso lógico."
+                )
         else:
-            user_message = "Continúa con el siguiente paso del diagnóstico."
+            user_message = "Continúa con el diagnóstico. ¿Cuál es tu próxima hipótesis o acción?"
         
         # ── Enviar a Gemini y obtener respuesta
         try:
@@ -490,16 +619,51 @@ class DiagnosticSession:
         thought_text = "\n".join(thought_parts).strip()
         result["thought"] = thought_text
         
-        # ── Si no hay function call, el agente solo razonó (raro, pero posible)
+        # ── Si no hay function call a pesar de tool_choice=ANY (edge case: modelo ignoró la directiva)
+        # Aplicar "El Látigo": inyectar un error de sistema y forzar una nueva respuesta.
         if function_call is None:
-            # Intentar extraer si hay un grounding search result
-            if hasattr(response.candidates[0], 'grounding_metadata') and response.candidates[0].grounding_metadata:
-                result["type"] = "thinking"
-                result["message"] = thought_text
-            else:
+            whip_count = getattr(self, '_whip_count', 0)
+            
+            if whip_count >= 2:
+                # Después de 2 látigos sin éxito, reportar el pensamiento y continuar
+                # (evitar recursión infinita)
+                logger.warning(f"[{self.session_id}] El modelo evadió 3 látigos. Retornando thought como fallback.")
+                self._whip_count = 0
                 result["type"] = "thinking"
                 result["message"] = thought_text or "El agente está procesando..."
-            return result
+                return result
+            
+            self._whip_count = whip_count + 1
+            logger.warning(
+                f"[{self.session_id}] VIOLATION: Respuesta sin function call (látigo #{self._whip_count}). "
+                f"Texto recibido: '{thought_text[:80]}...'"
+            )
+            
+            # Inyectar el mensaje de corrección directamente en el historial del chat
+            whip_message = (
+                f"SYSTEM_VIOLATION: Tu última respuesta fue rechazada porque contiene "
+                f"solo texto sin invocar ninguna herramienta.\n"
+                f"Texto rechazado: \"{thought_text[:200]}\"\n\n"
+                f"ACCIÓN OBLIGATORIA: Invoca AHORA una de estas herramientas: "
+                f"`run_diagnostic_command`, `search_error_info`, o `emit_final_diagnosis`. "
+                f"No hay otra opción válida. Texto-only = error de sistema."
+            )
+            
+            try:
+                forced_response = await asyncio.to_thread(
+                    self.chat.send_message, whip_message
+                )
+                return await self._process_response(forced_response)
+            except Exception as e:
+                logger.error(f"[{self.session_id}] Error en el látigo: {e}")
+                if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                    self.is_complete = True
+                result["type"] = "error"
+                result["message"] = f"Error forzando acción del agente: {str(e)}"
+                return result
+        
+        # Si llegamos aquí, el modelo sí invocó una herramienta. Resetear el contador.
+        self._whip_count = 0
         
         # ── Procesar la función llamada
         fn_name = function_call.name
@@ -508,24 +672,24 @@ class DiagnosticSession:
         if fn_name == "run_diagnostic_command":
             command = fn_args.get("command", "")
             purpose = fn_args.get("purpose", "")
-            phase = fn_args.get("phase", 0)
+            hypothesis = fn_args.get("hypothesis", "Investigación general")
             
-            # Validar el comando contra la whitelist
+            # Validar el comando contra la blacklist de seguridad
             validation, reason = validate_command(command)
             
             if validation == CommandValidationResult.ALLOWED:
                 result["type"] = "run_command"
                 result["command"] = command
                 result["purpose"] = purpose
-                result["phase"] = phase
-                result["message"] = f"📋 Fase {phase} — {purpose}"
+                result["hypothesis"] = hypothesis
+                result["message"] = f"🔬 {hypothesis} — {purpose}"
                 
                 self.history.append({
                     "step": self.step_count,
                     "action": "run_command",
                     "command": command,
                     "purpose": purpose,
-                    "phase": phase,
+                    "hypothesis": hypothesis,
                 })
             else:
                 # Comando rechazado — informar a Gemini para que reintente
