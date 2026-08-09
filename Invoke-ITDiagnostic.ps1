@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Agente de Diagnostico IT Inteligente - Cliente PowerShell
 .DESCRIPTION
@@ -61,7 +61,7 @@ $ExeExceptions = @("systeminfo", "hostname", "whoami", "ipconfig", "driverquery"
 function Show-Banner {
     param([string]$ServerUrl, [string]$Issue, [hashtable]$SysInfo)
     # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    # PALETA DE COLORES â€” Sistema Cyber-Corp
+    # PALETA DE COLORES - Sistema Cyber-Corp
     # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     $clrPrimary   = "Cyan"
     $clrAccent    = "Green"
@@ -73,7 +73,7 @@ function Show-Banner {
     Clear-Host
 
     # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    # BANNERS ROTATIVOS â€” Arte ASCII Cyber-Corp (3 diseÃ±os)
+    # BANNERS ROTATIVOS - Arte ASCII Cyber-Corp (3 disenos)
     # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         $b1_b64 = 'CgogIOKWiOKWiOKWiOKWiOKWiOKWiOKVlyDilojilojilZcg4paI4paI4paI4paI4paI4pWXICDilojilojilojilojilojilojilZcg4paI4paI4paI4pWXICAg4paI4paI4pWXIOKWiOKWiOKWiOKWiOKWiOKWiOKVlyDilojilojilojilojilojilojilojilZfilojilojilojilojilojilojilojilojilZfilojilojilZcg4paI4paI4paI4paI4paI4paI4pWXCiAg4paI4paI4pWU4pWQ4pWQ4paI4paI4pWX4paI4paI4pWR4paI4paI4pWU4pWQ4pWQ4paI4paI4pWX4paI4paI4pWU4pWQ4pWQ4pWQ4pWQ4pWdIOKWiOKWiOKWiOKWiOKVlyAg4paI4paI4pWR4paI4paI4pWU4pWQ4pWQ4pWQ4paI4paI4pWX4paI4paI4pWU4pWQ4pWQ4pWQ4pWQ4pWd4pWa4pWQ4pWQ4paI4paI4pWU4pWQ4pWQ4pWd4paI4paI4pWR4paI4paI4pWU4pWQ4pWQ4pWQ4pWQ4pWdCiAg4paI4paI4pWRICDilojilojilZHilojilojilZHilojilojilojilojilojilojilojilZHilojilojilZEgIOKWiOKWiOKWiOKVl+KWiOKWiOKVlOKWiOKWiOKVlyDilojilojilZHilojilojilZEgICDilojilojilZHilojilojilojilojilojilojilojilZcgICDilojilojilZEgICDilojilojilZHilojilojilZEKICDilojilojilZEgIOKWiOKWiOKVkeKWiOKWiOKVkeKWiOKWiOKVlOKVkOKVkOKWiOKWiOKVkeKWiOKWiOKVkSAgIOKWiOKWiOKVkeKWiOKWiOKVkeKVmuKWiOKWiOKVl+KWiOKWiOKVkeKWiOKWiOKVkSAgIOKWiOKWiOKVkeKVmuKVkOKVkOKVkOKVkOKWiOKWiOKVkSAgIOKWiOKWiOKVkSAgIOKWiOKWiOKVkeKWiOKWiOKVkQogIOKWiOKWiOKWiOKWiOKWiOKWiOKVlOKVneKWiOKWiOKVkeKWiOKWiOKVkSAg4paI4paI4pWR4pWa4paI4paI4paI4paI4paI4paI4pWU4pWd4paI4paI4pWRIOKVmuKWiOKWiOKWiOKWiOKVkeKVmuKWiOKWiOKWiOKWiOKWiOKWiOKVlOKVneKWiOKWiOKWiOKWiOKWiOKWiOKWiOKVkSAgIOKWiOKWiOKVkSAgIOKWiOKWiOKVkeKVmuKWiOKWiOKWiOKWiOKWiOKWiOKVlwogIOKVmuKVkOKVkOKVkOKVkOKVkOKVnSDilZrilZDilZ3ilZrilZDilZ0gIOKVmuKVkOKVnSDilZrilZDilZDilZDilZDilZDilZ0g4pWa4pWQ4pWdICDilZrilZDilZDilZDilZ0g4pWa4pWQ4pWQ4pWQ4pWQ4pWQ4pWdIOKVmuKVkOKVkOKVkOKVkOKVkOKVkOKVnSAgIOKVmuKVkOKVnSAgIOKVmuKVkOKVnSDilZrilZDilZDilZDilZDilZDilZ0KCiAgICAgICAgICAgICAgICAgICAgICBbIFpFUk8gVFJVU1QgRElBR05PU1RJQyBFTkdJTkUgXQo='
@@ -90,7 +90,7 @@ function Show-Banner {
     Write-Host $selected -ForegroundColor $clrPrimary
 
     # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    # BLOQUE DE CRÃ‰DITOS
+    # BLOQUE DE CREDITOS
     # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     Write-Host $("  " + "$([char]0x2500)" * 73) -ForegroundColor $clrDim
     Write-Host ""
@@ -105,7 +105,7 @@ function Show-Banner {
     Write-Host "  [+] " -ForegroundColor $clrAccent -NoNewline
     Write-Host "Powered by " -ForegroundColor $clrSecondary -NoNewline
     Write-Host "Google Gemini AI" -ForegroundColor $clrPrimary -NoNewline
-    Write-Host "  Â·  SentinelAI Core Active`n" -ForegroundColor $clrDim
+    Write-Host "  -  SentinelAI Core Active`n" -ForegroundColor $clrDim
     
     Write-Host $("  " + "$([char]0x2500)" * 73) -ForegroundColor $clrDim
 
@@ -113,7 +113,7 @@ function Show-Banner {
     # BLOQUE DE ESTADO Y SEGURIDAD Y CONTEXTO COMPACTO (El "Grid")
     # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     Write-Host "`n  [!] " -ForegroundColor $clrAlert -NoNewline
-    Write-Host "MODO SEGURO: PolÃ­ticas de solo lectura aplicadas  |  CANAL: Zero Trust Tunnel Cifrado`n" -ForegroundColor $clrSecondary
+    Write-Host "MODO SEGURO: Politicas de solo lectura aplicadas  |  CANAL: Zero Trust Tunnel Cifrado`n" -ForegroundColor $clrSecondary
     
     Write-Host $("  " + "$([char]0x2500)" * 73) -ForegroundColor $clrDim
 
@@ -127,22 +127,22 @@ function Show-Banner {
     $col1 = 32; $col2 = 22
     Write-Host "`n  " -NoNewline
     Write-Host ("Target: " + $targetClean).PadRight($col1) -ForegroundColor $clrText -NoNewline
-    Write-Host "â”‚ " -ForegroundColor $clrDim -NoNewline
+    Write-Host "| " -ForegroundColor $clrDim -NoNewline
     Write-Host ("Host: " + $SysInfo.hostname).PadRight($col2) -ForegroundColor $clrSecondary -NoNewline
-    Write-Host "â”‚ " -ForegroundColor $clrDim -NoNewline
+    Write-Host "| " -ForegroundColor $clrDim -NoNewline
     Write-Host ("IP: " + $SysInfo.ip) -ForegroundColor $clrSecondary
 
     Write-Host "  " -NoNewline
     Write-Host ("Task: " + $taskClean).PadRight($col1) -ForegroundColor $clrText -NoNewline
-    Write-Host "â”‚ " -ForegroundColor $clrDim -NoNewline
+    Write-Host "| " -ForegroundColor $clrDim -NoNewline
     Write-Host ("OS: " + $osClean).PadRight($col2) -ForegroundColor $clrSecondary -NoNewline
-    Write-Host "â”‚ " -ForegroundColor $clrDim -NoNewline
+    Write-Host "| " -ForegroundColor $clrDim -NoNewline
     Write-Host ("Uptime: " + $SysInfo.uptime) -ForegroundColor $clrSecondary
 
     Write-Host "`n"
     Write-Host $("  " + "$([char]0x2500)" * 73) -ForegroundColor $clrDim
     Write-Host "`n  [CTRL+C]" -ForegroundColor $clrAlert -NoNewline
-    Write-Host " Abortar sesiÃ³n en cualquier momento.`n" -ForegroundColor $clrDim
+    Write-Host " Abortar sesion en cualquier momento.`n" -ForegroundColor $clrDim
 }
 
 
@@ -173,18 +173,18 @@ function Test-CommandAllowed {
                     }
                 }
                 if (-not $isException) {
-                    Write-Host "  [BLOQUEADO] PatrÃ³n prohibido: .exe" -ForegroundColor Red
+                    Write-Host "  [BLOQUEADO] Patron prohibido: .exe" -ForegroundColor Red
                     return $false
                 }
             }
         }
         elseif ($cmd -match [regex]::Escape($blocked)) {
-            Write-Host "  [BLOQUEADO] PatrÃ³n prohibido: $blocked" -ForegroundColor Red
+            Write-Host "  [BLOQUEADO] Patron prohibido: $blocked" -ForegroundColor Red
             return $false
         }
     }
     
-    # La validaciÃ³n por Whitelist ($AllowedCmdlets) fue eliminada 
+    # La validacion por Whitelist ($AllowedCmdlets) fue eliminada 
     # para permitir total libertad creativa a la IA (bucles, ifs, variables, etc.).
     # La seguridad recae completamente en la robusta Blacklist superior.
     
@@ -233,7 +233,7 @@ function Invoke-SafeCommand {
             # Timeout
             Stop-Job $job -ErrorAction SilentlyContinue
             Remove-Job $job -Force -ErrorAction SilentlyContinue
-            $result.stderr = "TIMEOUT: El comando excediÃ³ $Timeout segundos."
+            $result.stderr = "TIMEOUT: El comando excedio $Timeout segundos."
             $result.exit_code = -1
         }
         else {
@@ -254,7 +254,7 @@ function Invoke-SafeCommand {
         $result.exit_code = 1
     }
     
-    # Limitar tamaÃ±o de salida (evitar mensajes enormes por WebSocket)
+    # Limitar tamano de salida (evitar mensajes enormes por WebSocket)
     $maxLen = 30000
     if ($result.stdout.Length -gt $maxLen) {
         $result.stdout = $result.stdout.Substring(0, $maxLen) + "`n`n[... SALIDA TRUNCADA ($($result.stdout.Length) chars total) ...]"
@@ -270,7 +270,7 @@ function Invoke-SafeCommand {
 function Get-MachineInfo {
     <#
     .SYNOPSIS
-        Recolecta la informaciÃ³n bÃ¡sica del equipo para enviar al backend.
+        Recolecta la informacion basica del equipo para enviar al backend.
     #>
     
     $hostname = $env:COMPUTERNAME
@@ -333,7 +333,7 @@ function Receive-WsMessage {
         }
         
         if ($received.MessageType -eq [System.Net.WebSockets.WebSocketMessageType]::Close) {
-            throw "El servidor cerrÃ³ la conexiÃ³n."
+            throw "El servidor cerro la conexion."
         }
         
         $chunk = [System.Text.Encoding]::UTF8.GetString($buffer, 0, $received.Count)
@@ -355,7 +355,7 @@ function Show-Separator {
 function Format-DiagnosisReport {
     <#
     .SYNOPSIS
-        Formatea y muestra el reporte de diagnÃ³stico final en la consola.
+        Formatea y muestra el reporte de diagnostico final en la consola.
     #>
     param([hashtable]$Report)
     
@@ -379,12 +379,12 @@ function Format-DiagnosisReport {
     
     Write-Host ""
     Write-Host "  " -ForegroundColor $color
-    Write-Host "                DIAGNÃ“STICO FINAL                                 " -ForegroundColor $color
+    Write-Host "                DIAGNOSTICO FINAL                                 " -ForegroundColor $color
     Write-Host "  " -ForegroundColor $color
     Write-Host ""
     Write-Host "  $icon Severidad: $($sev.ToUpper())" -ForegroundColor $color
     Write-Host "  Equipo: $($Report.hostname)" -ForegroundColor White
-    Write-Host "  SesiÃ³n: $($Report.session_id)" -ForegroundColor Gray
+    Write-Host "  Sesion: $($Report.session_id)" -ForegroundColor Gray
     Write-Host "  Pasos ejecutados: $($Report.steps_taken)" -ForegroundColor Gray
     Write-Host ""
     Show-Separator
@@ -443,7 +443,7 @@ $sysInfo = Get-MachineInfo
 # 2. Renderizar Interfaz Compacta y Banners Rotativos Originales
 Show-Banner -ServerUrl $ServerUrl -Issue $Issue -SysInfo $sysInfo
 
-# 3. Ãšnica lÃ­nea elegante de conexiÃ³n
+# 3. Unica linea elegante de conexion
 Write-Host "  [+] Estableciendo Secure Web-Socket & SysInfo Sync... " -ForegroundColor Gray -NoNewline
 
 # Construir la URL del WebSocket
@@ -477,11 +477,11 @@ try {
         }
     }
     
-    # SincronizaciÃ³n inicial invisible en consola
+    # Sincronizacion inicial invisible en consola
     $welcomeRaw = Receive-WsMessage -WebSocket $ws -Timeout 10
     Send-WsMessage -WebSocket $ws -Data $sysInfo
     
-    # Rematar lÃ­nea elegante con el [OK]
+    # Rematar linea elegante con el [OK]
     Write-Host "[OK]" -ForegroundColor Green
     Write-Host $("  " + "$([char]0x2500)" * 73) -ForegroundColor DarkGray
     Write-Host ""
@@ -508,7 +508,7 @@ try {
             $msg = $msgRaw | ConvertFrom-Json
         }
         catch {
-            Write-Host "  [ERROR] Mensaje del servidor no es JSON vÃ¡lido." -ForegroundColor Red
+            Write-Host "  [ERROR] Mensaje del servidor no es JSON valido." -ForegroundColor Red
             continue
         }
         
@@ -533,8 +533,8 @@ try {
                 $purpose = $msg.purpose
                 
                 Write-Host "  +--------------------------------------------------" -ForegroundColor DarkCyan
-                Write-Host "  | HipÃ³tesis / Paso $stepNumber" -ForegroundColor Cyan
-                Write-Host "  | PropÃ³sito: $purpose" -ForegroundColor White
+                Write-Host "  | Hipotesis / Paso $stepNumber" -ForegroundColor Cyan
+                Write-Host "  | Proposito: $purpose" -ForegroundColor White
                 Write-Host "  | Comando: $command" -ForegroundColor Yellow
                 Write-Host "  +--------------------------------------------------" -ForegroundColor DarkCyan
                 
@@ -584,15 +584,15 @@ try {
                 Send-WsMessage -WebSocket $ws -Data $response
             }
             
-            # -- ActualizaciÃ³n de estado del agente
+            # -- Actualizacion de estado del agente
             "status_update" {
                 Write-Host "  [Agente] $($msg.message)" -ForegroundColor Cyan
                 Write-Host ""
             }
             
-            # -- DiagnÃ³stico completo
+            # -- Diagnostico completo
             "diagnosis_complete" {
-                Write-Host "  [OK] El agente ha completado el diagnÃ³stico." -ForegroundColor Green
+                Write-Host "  [OK] El agente ha completado el diagnostico." -ForegroundColor Green
                 Write-Host ""
                 
                 # Convertir PSObject a hashtable para el formateador
@@ -604,14 +604,14 @@ try {
                 $sessionActive = $false
             }
             
-            # -- DiagnÃ³stico incompleto (mÃ¡ximo de pasos)
+            # -- Diagnostico incompleto (maximo de pasos)
             "diagnosis_incomplete" {
                 Write-Host "  [ADVERTENCIA] $($msg.message)" -ForegroundColor Yellow
                 Write-Host ""
                 $sessionActive = $false
             }
             
-            # -- Fin de sesiÃ³n
+            # -- Fin de sesion
             "session_end" {
                 Write-Host "  [i] $($msg.message)" -ForegroundColor Gray
                 $sessionActive = $false
@@ -639,7 +639,7 @@ catch {
     }
     
     if ($ex -is [System.Net.WebSockets.WebSocketException]) {
-        Write-Host "`n  [DESCONEXION] La conexiÃ³n con el servidor se perdiÃ³ o fue cerrada abruptamente." -ForegroundColor Yellow
+        Write-Host "`n  [DESCONEXION] La conexion con el servidor se perdio o fue cerrada abruptamente." -ForegroundColor Yellow
         Write-Host "  [Detalle] $($ex.Message)" -ForegroundColor DarkYellow
     }
     else {
@@ -667,7 +667,7 @@ finally {
     if ($ws) { $ws.Dispose() }
     
     Write-Host "`n  $("$([char]0x2500)" * 57)" -ForegroundColor DarkGray
-    Write-Host "  SesiÃ³n de diagnÃ³stico finalizada." -ForegroundColor Gray
+    Write-Host "  Sesion de diagnostico finalizada." -ForegroundColor Gray
     Write-Host "  Presiona Enter para cerrar..." -ForegroundColor Gray
     Write-Host ""
     Read-Host
