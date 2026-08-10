@@ -24,6 +24,8 @@ from datetime import datetime
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 
+from app.core.tunnel_manager import tunnel_manager
+
 from app.services.diagnostic_agent import (
     DiagnosticSession,
     COMMAND_TIMEOUT_SECONDS,
@@ -476,6 +478,13 @@ async def diagnostic_websocket(websocket: WebSocket):
         # Guardar sesión completada en historial
         if session:
             save_completed_session(session, event_log)
+            
+        # Cerrar el túnel efímero automáticamente al terminar
+        try:
+            tunnel_manager.stop()
+            logger.info(f"[{session_id or '?'}] Túnel Cloudflare cerrado al finalizar la sesión.")
+        except Exception as e:
+            logger.error(f"Error al cerrar túnel: {e}")
         
         # Limpiar sesión activa y viewers
         if session_id and session_id in active_sessions:
@@ -570,6 +579,21 @@ async def get_session_detail(session_id: str):
     return {"error": "Sesión no encontrada", "session_id": session_id}
 
 
+@router.get("/agent.py")
+async def get_python_agent_script():
+    """Sirve el script de Python para el agente en Linux/Mac (agent.py)."""
+    script_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "agent.py")
+    script_path = os.path.abspath(script_path)
+    
+    if not os.path.exists(script_path):
+        return {"error": "Script not found on server"}
+        
+    return FileResponse(
+        path=script_path,
+        media_type="text/x-python; charset=utf-8",
+        filename="agent.py"
+    )
+
 @router.get("/script")
 async def get_powershell_script():
     """Sirve el script de PowerShell para el agente (Invoke-ITDiagnostic.ps1)."""
@@ -599,3 +623,32 @@ async def get_server_ip():
         return {"ip": ip, "port": 8000}
     except Exception:
         return {"ip": "127.0.0.1", "port": 8000}
+
+
+# ── Endpoints del Túnel Efímero (Cloudflare) ──
+
+@router.post("/tunnel/start")
+async def start_tunnel():
+    """Inicia el túnel efímero de Cloudflare."""
+    try:
+        url = tunnel_manager.start()
+        return {"status": "ok", "url": url}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@router.post("/tunnel/stop")
+async def stop_tunnel():
+    """Detiene el túnel activo manualmente."""
+    try:
+        tunnel_manager.stop()
+        return {"status": "ok", "message": "Tunnel stopped"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@router.get("/tunnel/status")
+async def get_tunnel_status():
+    """Devuelve la URL actual si el túnel está activo."""
+    url = tunnel_manager.get_url()
+    if url:
+        return {"status": "active", "url": url}
+    return {"status": "inactive"}

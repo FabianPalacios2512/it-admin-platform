@@ -18,6 +18,8 @@ const viewerWs = ref(null)
 const isViewerConnected = ref(false)
 const loading = ref(false)
 const commandCopied = ref(false)
+const isOpeningTunnel = ref(false)
+const isTunnelActive = ref(false)
 const eventLogEl = ref(null)
 let pollInterval = null
 
@@ -26,17 +28,29 @@ let pollInterval = null
 const defaultUrl = window.location.protocol + '//' + window.location.hostname + ':8000'
 const serverUrl = ref(defaultUrl)
 const issueDescription = ref('')
+const selectedOS = ref('windows')
 
 const generatedCommand = computed(() => {
   const url = serverUrl.value.replace(/\/$/, '')
   const issue = issueDescription.value.trim() || 'El equipo se reinicia inesperadamente'
-  return `powershell -ExecutionPolicy Bypass -Command "& { Invoke-WebRequest -Uri '${url}/api/v1/diagnostics/script' -OutFile '$env:TEMP\\Invoke-ITDiagnostic.ps1'; & '$env:TEMP\\Invoke-ITDiagnostic.ps1' -ServerUrl '${url}' -Issue '${issue}' }"`
+  
+  if (selectedOS.value === 'windows') {
+    return `powershell -ExecutionPolicy Bypass -Command "& { Invoke-WebRequest -Uri '${url}/api/v1/diagnostics/script' -OutFile '$env:TEMP\\Invoke-ITDiagnostic.ps1'; & '$env:TEMP\\Invoke-ITDiagnostic.ps1' -ServerUrl '${url}' -Issue '${issue}' }"`
+  } else {
+    // Payload genérico para Linux/Mac (requiere Python 3)
+    return `curl -sL "${url}/api/v1/diagnostics/agent.py" -o /tmp/agent.py && python3 /tmp/agent.py --server "${url}" --issue "${issue}"`
+  }
 })
 
 const simpleCommand = computed(() => {
   const url = serverUrl.value.replace(/\/$/, '')
   const issue = issueDescription.value.trim() || 'El equipo se reinicia inesperadamente'
-  return `.\\Invoke-ITDiagnostic.ps1 -ServerUrl "${url}" -Issue "${issue}"`
+  
+  if (selectedOS.value === 'windows') {
+    return `.\\Invoke-ITDiagnostic.ps1 -ServerUrl "${url}" -Issue "${issue}"`
+  } else {
+    return `python3 agent.py --server "${url}" --issue "${issue}"`
+  }
 })
 
 function copyCommand(text) {
@@ -45,12 +59,40 @@ function copyCommand(text) {
   setTimeout(() => { commandCopied.value = false }, 3000)
 }
 
+async function generateAndCopyCommand() {
+  if (isOpeningTunnel.value) return;
+  
+  isOpeningTunnel.value = true;
+  try {
+    const res = await authFetch(`${API_BASE}/diagnostics/tunnel/start`, { method: 'POST' })
+    const data = await res.json()
+    
+    if (data.status === 'ok' && data.url) {
+      serverUrl.value = data.url
+      // Wait for computed properties to update
+      await nextTick()
+      copyCommand(generatedCommand.value)
+    } else {
+      console.error("Error al iniciar túnel:", data.message)
+      alert("No se pudo iniciar el túnel de Cloudflare. Usando IP local.")
+      copyCommand(generatedCommand.value)
+    }
+  } catch (err) {
+    console.error("Error de red al iniciar túnel:", err)
+    alert("Error de red. Usando IP local.")
+    copyCommand(generatedCommand.value)
+  } finally {
+    isOpeningTunnel.value = false;
+  }
+}
+
 // ── Polling de sesiones activas
 async function fetchSessions() {
   try {
-    const [activeRes, historyRes] = await Promise.all([
+    const [activeRes, historyRes, tunnelRes] = await Promise.all([
       authFetch(`${API_BASE}/diagnostics/sessions`),
-      authFetch(`${API_BASE}/diagnostics/history`)
+      authFetch(`${API_BASE}/diagnostics/history`),
+      authFetch(`${API_BASE}/diagnostics/tunnel/status`)
     ])
     
     if (activeRes.ok) {
@@ -60,6 +102,11 @@ async function fetchSessions() {
     if (historyRes.ok) {
       const data = await historyRes.json()
       completedSessions.value = data.sessions || []
+    }
+    if (tunnelRes.ok) {
+      // Only lock the UI if there is an ACTUAL ongoing ReAct diagnostic session.
+      // Generating a URL and opening the tunnel does NOT constitute a session until the agent connects.
+      isTunnelActive.value = activeSessions.value.length > 0
     }
   } catch (e) {
     console.error('Error fetching sessions:', e)
@@ -137,10 +184,10 @@ async function viewCompletedSession(sessionId) {
 // ── Helpers de UI
 function getSeverityConfig(severity) {
   const map = {
-    critical: { label: 'Crítico', bg: 'bg-red-100', text: 'text-red-700', dot: 'bg-red-500' },
-    high:     { label: 'Alto', bg: 'bg-orange-100', text: 'text-orange-700', dot: 'bg-orange-500' },
-    medium:   { label: 'Medio', bg: 'bg-yellow-100', text: 'text-yellow-700', dot: 'bg-yellow-500' },
-    low:      { label: 'Bajo', bg: 'bg-green-100', text: 'text-green-700', dot: 'bg-green-500' },
+    critical: { label: 'Crítico', bg: 'bg-red-600', text: 'text-white', dot: 'bg-red-500', border: 'border-t-red-600' },
+    high:     { label: 'Alto', bg: 'bg-orange-500', text: 'text-white', dot: 'bg-orange-500', border: 'border-t-orange-500' },
+    medium:   { label: 'Medio', bg: 'bg-yellow-500', text: 'text-white', dot: 'bg-yellow-500', border: 'border-t-yellow-500' },
+    low:      { label: 'Bajo', bg: 'bg-emerald-500', text: 'text-white', dot: 'bg-emerald-500', border: 'border-t-emerald-500' },
   }
   return map[severity] || map.medium
 }
@@ -261,13 +308,27 @@ onUnmounted(() => {
     <div v-if="activeTab === 'command'" class="flex flex-col items-center justify-center w-full max-w-3xl mx-auto py-10 lg:py-20">
       
       <!-- Título Saludo tipo IA -->
-      <div class="text-center mb-8">
+      <div class="text-center mb-6">
         <h2 class="text-3xl font-semibold text-slate-800 mb-3 tracking-tight">¿Qué ocurre en el equipo?</h2>
         <p class="text-slate-500 text-sm">Describe el problema para generar automáticamente el payload de diagnóstico.</p>
       </div>
 
+      <!-- Alerta de Bloqueo de Seguridad (Estilo Corporativo) -->
+      <div v-if="isTunnelActive" class="w-full mb-6 p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-start gap-3">
+        <div class="mt-0.5">
+          <svg class="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+        </div>
+        <div>
+          <h4 class="text-sm font-semibold text-slate-700">Escaneo en curso</h4>
+          <p class="text-xs text-slate-500 mt-1">Por seguridad, la generación de nuevos enlaces está <b>bloqueada</b>. Ya existe una sesión activa en el servidor. Ve a la pestaña "Monitor en vivo" para revisar el progreso antes de iniciar un nuevo escaneo.</p>
+        </div>
+      </div>
+
       <!-- Área de Input (Estilo ChatGPT/Gemini) -->
-      <div class="w-full relative bg-white rounded-2xl shadow-sm border border-slate-200 focus-within:border-blue-500 focus-within:shadow-md focus-within:ring-4 focus-within:ring-blue-500/10 transition-all">
+      <div 
+        class="w-full relative bg-white rounded-2xl shadow-sm border border-slate-200 transition-all"
+        :class="isTunnelActive ? 'opacity-60 pointer-events-none' : 'focus-within:border-blue-500 focus-within:shadow-md focus-within:ring-4 focus-within:ring-blue-500/10'"
+      >
         <textarea 
           v-model="issueDescription" 
           rows="1"
@@ -279,24 +340,54 @@ onUnmounted(() => {
         <!-- Controles Inferiores del Input -->
         <div class="flex items-center justify-between px-3 pb-3">
           <!-- Opciones Avanzadas (Izquierda) -->
-          <details class="group relative">
-            <summary class="p-2 rounded-full hover:bg-slate-100 text-slate-400 cursor-pointer list-none transition-colors" title="Configuración de Red" style="list-style: none;">
-              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-            </summary>
-            <!-- Menú Flotante Configuración -->
-            <div class="absolute bottom-full left-0 mb-3 w-72 bg-white rounded-xl shadow-lg border border-slate-100 p-4 z-20">
-              <label class="block text-xs font-semibold text-slate-700 mb-1.5">URL del servidor</label>
-              <input v-model="serverUrl" type="text" class="w-full px-3 py-2 border border-slate-200 bg-slate-50 rounded-lg text-xs outline-none focus:border-blue-500 focus:bg-white transition-colors" placeholder="http://192.168.1.100:8000" />
+          <div class="flex items-center gap-3">
+            <details class="group relative">
+              <summary class="p-2 rounded-full hover:bg-slate-100 text-slate-400 cursor-pointer list-none transition-colors" title="Configuración de Red" style="list-style: none;">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+              </summary>
+              <!-- Menú Flotante Configuración -->
+              <div class="absolute bottom-full left-0 mb-3 w-72 bg-white rounded-xl shadow-lg border border-slate-100 p-4 z-20">
+                <label class="block text-xs font-semibold text-slate-700 mb-1.5">URL del servidor</label>
+                <input v-model="serverUrl" type="text" class="w-full px-3 py-2 border border-slate-200 bg-slate-50 rounded-lg text-xs outline-none focus:border-blue-500 focus:bg-white transition-colors" placeholder="http://192.168.1.100:8000" />
+              </div>
+            </details>
+
+            <!-- OS Selector -->
+            <div class="flex bg-slate-100 p-1 rounded-lg select-none">
+              <button 
+                @click="selectedOS = 'windows'" 
+                :class="selectedOS === 'windows' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'" 
+                class="px-3 py-1 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5"
+              >
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M0,3.449L9.75,2.1v9.451H0V3.449z M10.949,1.936L24,0v11.551H10.949V1.936z M0,12.449h9.75v9.451L0,20.551V12.449z M10.949,12.449H24V24l-13.051-1.936V12.449z"/></svg>
+                Win
+              </button>
+              <button 
+                @click="selectedOS = 'linux'" 
+                :class="selectedOS === 'linux' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'" 
+                class="px-3 py-1 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5"
+              >
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12.001 0c-.397 0-.795.034-1.189.098 0 0-4.707.568-5.748 1.957-.75.998-1.026 2.05-1.218 3.102-.387 2.12-.596 4.305-.596 6.55 0 2.246.209 4.432.596 6.55.192 1.052.468 2.104 1.218 3.102 1.041 1.389 5.748 1.957 5.748 1.957.394.064.792.098 1.189.098.397 0 .795-.034 1.189-.098 0 0 4.707-.568 5.748-1.957.75-.998 1.026-2.05 1.218-3.102.387-2.12.596-4.305.596-6.55 0-2.246-.209-4.432-.596-6.55-.192-1.052-.468-2.104-1.218-3.102C17.503.666 12.796.098 12.796.098 12.402.034 12.004 0 12.001 0zm.014 3.018c.241 0 .47.017.697.043.203.023.364.195.364.398v.664c0 .203-.161.375-.364.398a6.386 6.386 0 00-1.394 0c-.203-.023-.364-.195-.364-.398v-.664c0-.203.161-.375.364-.398.227-.026.456-.043.697-.043zm2.597.575a6.49 6.49 0 011.025.437c.182.1.25.326.151.5l-.332.574c-.1.181-.326.249-.5.15a5.556 5.556 0 00-.88-.376c-.2-.061-.309-.272-.249-.472l.228-.627c.061-.2.272-.308.472-.248a6.568 6.568 0 01.085.062z"/></svg>
+                Linux/Mac
+              </button>
             </div>
-          </details>
+          </div>
 
           <!-- Botón Principal (Derecha) -->
           <button 
-            @click="copyCommand(generatedCommand)"
-            :class="commandCopied ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-slate-900 hover:bg-slate-800'"
-            class="flex items-center gap-2 px-5 py-2 rounded-xl text-white text-sm font-semibold transition-all shadow-sm"
+            @click="generateAndCopyCommand"
+            :disabled="isOpeningTunnel"
+            :class="[
+              commandCopied ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-slate-900 hover:bg-slate-800',
+              isOpeningTunnel ? 'opacity-75 cursor-wait' : ''
+            ]"
+            class="flex items-center gap-2 px-5 py-2 rounded-xl text-white text-sm font-semibold transition-all shadow-sm disabled:pointer-events-none"
           >
-            <template v-if="commandCopied">
+            <template v-if="isOpeningTunnel">
+              <svg class="animate-spin w-4 h-4 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+              Creando túnel seguro...
+            </template>
+            <template v-else-if="commandCopied">
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
               Copiado al portapapeles
             </template>
@@ -415,21 +506,18 @@ onUnmounted(() => {
                   <p class="text-blue-700 text-xs font-semibold">{{ event.hypothesis || 'Investigación general' }}</p>
                 </div>
                 <p class="text-gray-500 text-xs mb-1.5 italic">{{ event.purpose }}</p>
-                <pre class="text-gray-800 text-xs bg-gray-900 text-emerald-300 px-3 py-2.5 rounded-lg overflow-x-auto font-mono leading-relaxed">$ {{ event.command }}</pre>
+                <pre class="bg-slate-900 text-cyan-400 text-xs px-4 py-3 rounded-lg overflow-x-auto font-mono leading-relaxed shadow-inner border border-slate-800">$ {{ event.command }}</pre>
               </template>
               
               <!-- Resultado del comando -->
               <template v-else-if="event.type === 'command_result'">
-                <div class="flex items-center gap-2 mb-1.5">
-                  <p class="text-xs font-semibold" :class="event.exit_code === 0 ? 'text-emerald-700' : 'text-red-600'">
-                    {{ event.exit_code === 0 ? '✅ Ejecutado' : '❌ Error' }} (exit code: {{ event.exit_code }})
+                <div class="flex items-center gap-2 mb-1.5 mt-1">
+                  <p class="text-[11px] font-bold uppercase tracking-wider" :class="event.exit_code === 0 ? 'text-emerald-600' : 'text-red-500'">
+                    {{ event.exit_code === 0 ? 'Output (Success)' : `Error (Exit: ${event.exit_code})` }}
                   </p>
-                  <span v-if="event.stderr" class="inline-flex items-center px-1.5 py-0.5 rounded bg-red-100 text-red-600 text-[10px] font-bold">
-                    STDERR
-                  </span>
                 </div>
-                <pre v-if="event.stdout" class="text-gray-600 text-xs bg-gray-50 border border-gray-100 px-3 py-2 rounded-lg overflow-x-auto max-h-40 overflow-y-auto font-mono whitespace-pre-wrap">{{ event.stdout }}</pre>
-                <pre v-if="event.stderr" class="text-red-700 text-xs bg-red-50 border border-red-100 px-3 py-2 rounded-lg mt-1 overflow-x-auto font-mono">{{ event.stderr }}</pre>
+                <pre v-if="event.stdout" class="bg-slate-900 text-slate-300 text-xs px-4 py-3 rounded-lg overflow-x-auto max-h-60 overflow-y-auto font-mono whitespace-pre-wrap shadow-inner border border-slate-800">{{ event.stdout }}</pre>
+                <pre v-if="event.stderr" class="bg-slate-900 text-red-400 text-xs px-4 py-3 rounded-lg mt-1 overflow-x-auto font-mono whitespace-pre-wrap shadow-inner border border-red-900/50">{{ event.stderr }}</pre>
               </template>
               
               <!-- Búsqueda web -->
@@ -446,22 +534,40 @@ onUnmounted(() => {
               
               <!-- Diagnóstico completo -->
               <template v-else-if="event.type === 'diagnosis_complete'">
-                <div class="bg-gray-50 rounded-xl p-5 mt-2 border border-gray-200 shadow-sm">
-                  <div class="flex items-center gap-2 mb-4 pb-3 border-b border-gray-200">
-                    <span :class="['px-2.5 py-1 rounded-md text-xs font-bold shadow-sm', getSeverityConfig(event.report?.severity).bg, getSeverityConfig(event.report?.severity).text]">
+                <div :class="['bg-white rounded-xl p-6 mt-4 shadow-md border border-gray-200 border-t-4', getSeverityConfig(event.report?.severity).border]">
+                  <div class="flex items-center justify-between mb-5 pb-4 border-b border-gray-100">
+                    <div class="flex items-center gap-3">
+                      <div class="p-2 bg-blue-50 rounded-lg text-blue-600">
+                        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+                      </div>
+                      <h3 class="text-gray-900 text-lg font-bold">Reporte de Salud Técnico</h3>
+                    </div>
+                    <span :class="['px-3 py-1 rounded-full text-xs font-bold shadow-sm uppercase tracking-wider', getSeverityConfig(event.report?.severity).bg, getSeverityConfig(event.report?.severity).text]">
                       {{ getSeverityConfig(event.report?.severity).label }}
                     </span>
-                    <span class="text-gray-900 text-base font-semibold">Diagnóstico Finalizado</span>
                   </div>
-                  <p class="text-gray-900 text-sm font-semibold mb-2">{{ event.report?.root_cause }}</p>
-                  <p class="text-gray-600 text-sm mb-4 leading-relaxed">{{ event.report?.evidence_summary }}</p>
-                  <div v-if="event.report?.recommendations" class="space-y-2 mt-4 bg-white p-4 rounded-lg border border-gray-100">
-                    <p class="text-gray-900 text-sm font-semibold">Recomendaciones sugeridas:</p>
-                    <ul class="list-disc pl-5 space-y-1">
-                      <li v-for="(rec, i) in event.report.recommendations" :key="i" class="text-gray-700 text-sm">{{ rec }}</li>
+                  
+                  <div class="mb-5">
+                    <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Causa Raíz Identificada</h4>
+                    <p class="text-gray-900 text-sm font-semibold">{{ event.report?.root_cause }}</p>
+                  </div>
+                  
+                  <div class="mb-5">
+                    <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Evidencia</h4>
+                    <p class="text-gray-600 text-sm leading-relaxed">{{ event.report?.evidence_summary }}</p>
+                  </div>
+
+                  <div v-if="event.report?.recommendations" class="mt-6 bg-slate-50 p-5 rounded-xl border border-slate-100">
+                    <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Recomendaciones Sugeridas</h4>
+                    <ul class="space-y-2">
+                      <li v-for="(rec, i) in event.report.recommendations" :key="i" class="flex items-start gap-2.5">
+                        <svg class="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        <span class="text-slate-700 text-sm">{{ rec }}</span>
+                      </li>
                     </ul>
                   </div>
-                  <p v-if="event.report?.additional_notes" class="text-gray-500 text-xs mt-3 italic">Nota: {{ event.report.additional_notes }}</p>
+                  
+                  <p v-if="event.report?.additional_notes" class="text-gray-500 text-xs mt-4 italic">Nota adicional: {{ event.report.additional_notes }}</p>
                 </div>
               </template>
               
