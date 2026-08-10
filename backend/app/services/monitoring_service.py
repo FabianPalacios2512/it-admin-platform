@@ -8,9 +8,18 @@ from app.models.server import ServerConfig
 from app.core.encryption import decrypt_password
 from app.core.database import SessionLocal
 
+import tempfile
+import os
+
 _server_stats_cache = {}
 
 def get_server_stats(server: ServerConfig):
+    try:
+        return _get_server_stats_internal(server)
+    except Exception as e:
+        return {"status": "error", "error": f"Internal Error: {e}"}
+
+def _get_server_stats_internal(server: ServerConfig):
     """Obtiene métricas de CPU, RAM y Disco del servidor usando WMI nativo a través del túnel SMB."""
     ip = server.ip
     domain = server.domain
@@ -99,7 +108,15 @@ def get_server_stats(server: ServerConfig):
     if smb_conn.returncode != 0:
         return {"status": "offline", "error": smb_conn.stderr.replace(admin_pass, "********")}
         
-    wmi_res = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", wmi_script], capture_output=True, text=True, encoding='utf-8', errors='replace')
+    wmi_res = subprocess.run(
+        ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "-"],
+        input=wmi_script,
+        capture_output=True,
+        text=True,
+        encoding='utf-8',
+        errors='replace'
+    )
+        
     if wmi_res.returncode != 0:
         err = (wmi_res.stderr or wmi_res.stdout).replace(admin_pass, "********").replace(safe_pass, "********")
         return {"status": "error", "error": err}
