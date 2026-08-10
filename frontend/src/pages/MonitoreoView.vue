@@ -1,6 +1,7 @@
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import Sparkline from '@/components/common/Sparkline.vue'
+import VueApexCharts from 'vue3-apexcharts'
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1'
 const token = localStorage.getItem('access_token')
@@ -15,6 +16,168 @@ const error = ref('')
 const lastUpdate = ref('')
 let pollInterval = null
 
+// --- APEXCHARTS CONFIGURATION (GCP / Datadog Style) ---
+const corporateColors = ['#2563eb', '#059669', '#7c3aed', '#ea580c', '#0891b2'] // Azul rey, verde esmeralda, morado, naranja, cian
+
+// Generate X-Axis timestamps (last 20 points, simulated as 5 min intervals for GCP look)
+const categories = Array.from({ length: 20 }, (_, i) => {
+  return new Date(Date.now() - (19 - i) * 5 * 60000).getTime()
+})
+
+const baseChartOptions = {
+  chart: {
+    type: 'line',
+    group: 'monitoreo',
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+    toolbar: { show: false },
+    background: 'transparent',
+    animations: { enabled: false }
+  },
+  colors: corporateColors,
+  stroke: {
+    curve: 'straight',
+    width: 2
+  },
+  grid: {
+    borderColor: '#f1f5f9', // Gris extremadamente tenue
+    strokeDashArray: 0, // Líneas continuas, NO punteadas
+    padding: { top: 10, right: 10, bottom: 0, left: 10 },
+    xaxis: { lines: { show: false } }, // GCP NO usa líneas verticales
+    yaxis: { lines: { show: true } }
+  },
+  xaxis: {
+    type: 'datetime',
+    categories: categories,
+    axisBorder: { show: false },
+    axisTicks: { show: false },
+    labels: {
+      datetimeUTC: false,
+      format: 'h:mm a',
+      style: { colors: '#64748b', fontSize: '10px' }
+    },
+    tooltip: { enabled: false },
+    crosshairs: {
+      show: true,
+      stroke: {
+        color: '#94a3b8', // Gris oscuro
+        width: 1.5,
+        dashArray: 4
+      }
+    }
+  },
+  yaxis: {
+    opposite: true, // Eje Y a la derecha (GCP Style)
+    min: 0,
+    max: 100,
+    tickAmount: 2, // 3 valores exactos: 0, 50, 100
+    labels: {
+      style: { colors: '#64748b', fontSize: '10px' },
+      formatter: (value) => { return value.toFixed(0) + '%' }
+    }
+  },
+  markers: {
+    size: 0,
+    hover: { size: 4, sizeOffset: 2 }
+  },
+  tooltip: {
+    shared: true,
+    intersect: false,
+    custom: function({ series, seriesIndex, dataPointIndex, w }) {
+      const ts = w.config.xaxis.categories[dataPointIndex];
+      const date = new Date(ts);
+      const dateStr = new Intl.DateTimeFormat('es-ES', {
+        day: 'numeric', month: 'short', year: 'numeric',
+        hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true
+      }).format(date).replace('.', ''); // Para evitar "a. m." con punto en algunos navegadores
+
+      // El usuario solicitó estrictamente que el chart de CPU (izquierda) SIEMPRE muestre el tooltip a la derecha,
+      // y el chart de RAM (derecha) SIEMPRE muestre el tooltip a la izquierda, sin voltearse de forma desordenada.
+      const isCpuChart = w.globals.chartID === 'cpuChart';
+      const positionClass = isCpuChart ? 'translate-x-[15px] -translate-y-[10px]' : '-translate-x-[calc(100%+15px)] -translate-y-[10px]';
+
+      // Envolvemos en un div de width: 0 para engañar al detector de colisiones horizontal,
+      // pero dejamos que su altura fluya naturalmente para que ApexCharts mantenga el control vertical.
+      let html = `<div style="width: 0; position: relative; overflow: visible;">
+        <div class="bg-white/85 backdrop-blur-md border border-slate-200/60 p-3 text-xs font-sans rounded-none shadow-sm ${positionClass}" style="width: 230px;">
+          <div class="text-slate-500 mb-2 border-b border-slate-200/60 pb-1.5">${dateStr}</div>
+          <div class="flex flex-col gap-1">`;
+      
+      w.config.series.forEach((s, index) => {
+        const val = series[index][dataPointIndex];
+        const color = w.globals.colors[index];
+        // seriesIndex es -1 si no hay una línea específicamente resaltada
+        const isHovered = seriesIndex === index || seriesIndex === -1; 
+        const isFaded = seriesIndex !== -1 && seriesIndex !== index;
+        
+        const fontClass = isFaded ? 'text-slate-400' : 'font-bold text-slate-800';
+        const dotOpacity = isFaded ? '0.3' : '1';
+
+        html += `<div class="flex justify-between items-center">
+          <div class="flex items-center gap-1.5 ${fontClass}">
+            <span class="block w-2 h-2" style="background-color: ${color}; opacity: ${dotOpacity}; border-radius: 2px;"></span>
+            <span>${s.name}</span>
+          </div>
+          <span class="${fontClass}">${val !== undefined ? val + '%' : '-'}</span>
+        </div>`;
+      });
+      
+      html += `</div></div></div>`;
+      return html;
+    }
+  },
+  states: {
+    hover: { filter: { type: 'none' } },
+    active: { filter: { type: 'none' } }
+  },
+  legend: {
+    show: true,
+    position: 'bottom', // Abajo
+    horizontalAlign: 'left', // Alineado a la izquierda
+    fontSize: '11px',
+    markers: { radius: 0, width: 8, height: 8, offsetX: -2 }, // Cuadrados pequeños
+    itemMargin: { horizontal: 10, vertical: 0 }
+  }
+}
+
+const cpuChartOptions = { 
+  ...baseChartOptions,
+  chart: { ...baseChartOptions.chart, id: 'cpuChart' }
+}
+const ramChartOptions = { 
+  ...baseChartOptions,
+  chart: { ...baseChartOptions.chart, id: 'ramChart' }
+}
+
+const isHoveringCharts = ref(false)
+const cpuSeries = ref([])
+const ramSeries = ref([])
+
+// Función para actualizar los gráficos. 
+// Patrón UX "Analytic Freeze": Si el usuario está leyendo el tooltip, 
+// pausamos el refresco visual del gráfico para que no se le desaparezca la caja.
+function updateChartSeries() {
+  if (isHoveringCharts.value) return; 
+
+  const sorted = [...servers.value].sort((a, b) => a.name.localeCompare(b.name));
+  cpuSeries.value = sorted.slice(0, 5).map(srv => ({
+    name: srv.name,
+    data: srv.history?.cpu || []
+  }));
+  ramSeries.value = sorted.slice(0, 5).map(srv => ({
+    name: srv.name,
+    data: srv.history?.ram || []
+  }));
+}
+
+// En cuanto el usuario retira el mouse, el gráfico se actualiza de golpe con los datos más recientes
+watch(isHoveringCharts, (hovering) => {
+  if (!hovering) {
+    updateChartSeries();
+  }
+})
+// ------------------------------------------------------
+
+
 async function fetchStats() {
   loading.value = true
   error.value = ''
@@ -28,7 +191,6 @@ async function fetchStats() {
       data.data.forEach(incomingSrv => {
         let existingSrv = servers.value.find(s => s.id === incomingSrv.id)
         
-        // Garantizar que tenga estructura history si el backend por alguna razÃ³n no la enviÃ³ aÃºn
         if (!incomingSrv.history) {
           incomingSrv.history = { cpu: Array(20).fill(0), ram: Array(20).fill(0) }
         }
@@ -44,12 +206,14 @@ async function fetchStats() {
         }
       })
       
-      // Remover servidores que ya no existen en la BD
       const incomingIds = data.data.map(s => s.id)
       servers.value = servers.value.filter(s => incomingIds.includes(s.id))
       
+      // Actualizar gráficos solo si no están siendo inspeccionados
+      updateChartSeries()
+      
     } else {
-      error.value = data.detail || 'Error al obtener estadÃ­sticas.'
+      error.value = data.detail || 'Error al obtener estadísticas.'
     }
   } catch (e) {
     error.value = 'Fallo de red al conectar con el backend.'
@@ -62,7 +226,7 @@ function startPolling() {
   if (pollInterval) clearInterval(pollInterval)
   pollInterval = setInterval(() => {
     fetchStats()
-  }, 5000) // Poll every 5 seconds
+  }, 5000)
 }
 
 function stopPolling() {
@@ -70,21 +234,21 @@ function stopPolling() {
 }
 
 function getProgressColorHex(percent) {
-  if (percent >= 90) return '#EF4444' // red-500
-  if (percent >= 75) return '#F59E0B' // amber-500
-  return '#10B981' // emerald-500
+  if (percent >= 90) return '#dc2626'
+  if (percent >= 75) return '#d97706'
+  return '#2563eb'
 }
 
 function getProgressColorClass(percent) {
-  if (percent >= 90) return 'bg-red-500'
-  if (percent >= 75) return 'bg-amber-500'
-  return 'bg-emerald-500'
+  if (percent >= 90) return 'bg-red-600'
+  if (percent >= 75) return 'bg-amber-600'
+  return 'bg-blue-600'
 }
 
 function getTextClass(percent) {
   if (percent >= 90) return 'text-red-600'
   if (percent >= 75) return 'text-amber-600'
-  return 'text-emerald-600'
+  return 'text-slate-700'
 }
 
 function formatDecimal(val) {
@@ -100,7 +264,6 @@ const statsSummary = computed(() => {
   return { online, offline, total }
 })
 
-// Mantiene un orden alfabÃ©tico estricto en la UI para evitar parpadeos y reordenamientos
 const sortedServers = computed(() => {
   return [...servers.value].sort((a, b) => a.name.localeCompare(b.name))
 })
@@ -116,167 +279,206 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="space-y-6">
-    <!-- Header & Global Stats -->
-    <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-6 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-      <div>
-        <h1 class="text-2xl font-bold text-gray-900 tracking-tight">Centro de Monitoreo</h1>
-        <p class="text-sm text-gray-500 mt-1 flex items-center gap-2">
-          Monitoreo en vivo de infraestructura de servidores
-          <span v-if="lastUpdate" class="text-xs font-medium px-2 py-0.5 bg-gray-100 rounded text-gray-500 hidden md:inline-block">Actualizado: {{ lastUpdate }}</span>
-        </p>
-      </div>
-      
-      <div class="flex flex-wrap items-center gap-4">
-        <!-- Resumen Global -->
-        <div class="flex items-center gap-6 pr-6 border-r border-gray-200">
-          <div class="flex flex-col">
-            <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Total Servers</span>
-            <span class="text-2xl font-bold text-gray-800 leading-none">{{ statsSummary.total }}</span>
-          </div>
-          <div class="flex flex-col">
-            <span class="text-xs font-semibold text-emerald-500 uppercase tracking-wider mb-0.5">Healthy</span>
-            <span class="text-2xl font-bold text-gray-800 leading-none">{{ statsSummary.online }}</span>
-          </div>
-          <div class="flex flex-col">
-            <span class="text-xs font-semibold text-red-500 uppercase tracking-wider mb-0.5">Alerts</span>
-            <span class="text-2xl font-bold text-red-600 leading-none">{{ statsSummary.offline }}</span>
-          </div>
-        </div>
-      
-        <button @click="fetchStats" :disabled="loading" class="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-50">
-          <svg :class="['h-4 w-4', loading ? 'animate-spin' : '']" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-          Forzar Sincronización
+  <div class="max-w-[1600px] mx-auto w-full pb-10">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+      <h1 class="text-xl font-semibold text-slate-900">Centro de Monitoreo</h1>
+      <div class="flex items-center gap-4">
+        <span v-if="lastUpdate" class="text-xs font-mono text-slate-500">Última act: {{ lastUpdate }}</span>
+        <button @click="fetchStats" :disabled="loading" class="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-medium transition-colors disabled:opacity-50">
+          <svg :class="['h-3.5 w-3.5 text-slate-500', loading ? 'animate-spin' : '']" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+          Sincronizar
         </button>
       </div>
     </div>
 
     <!-- Error state -->
-    <div v-if="error" class="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg text-sm flex gap-3">
-      <svg class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+    <div v-if="error" class="mb-6 bg-red-50/50 border border-red-200 text-red-700 p-3 text-sm flex gap-2">
+      <svg class="h-4 w-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
       {{ error }}
     </div>
 
     <!-- Empty state -->
-    <div v-if="servers.length === 0 && !loading" class="bg-white rounded-xl shadow-sm border border-gray-200 p-16 text-center">
-      <svg class="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" /></svg>
-      <h3 class="text-lg font-semibold text-gray-900">No hay servidores registrados</h3>
-      <p class="text-sm text-gray-500 mt-2">Ve al módulo de Configuración para agregar infraestructura.</p>
+    <div v-if="servers.length === 0 && !loading" class="bg-white border border-slate-200 p-12 text-center">
+      <h3 class="text-sm font-semibold text-slate-900">No hay instancias registradas</h3>
     </div>
 
-    <!-- Server Grid -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      
-      <!-- Server Card -->
-      <div v-for="srv in sortedServers" :key="srv.id" class="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col hover:shadow-md transition-shadow overflow-hidden">
-        
-        <!-- Compact Header -->
-        <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between" :class="srv.stats.status === 'online' ? 'bg-white' : 'bg-red-50/50'">
-          <div class="flex items-center gap-3">
-            <!-- Icono Limpio Outline sin fondos -->
-            <div :class="['flex items-center justify-center shrink-0', srv.stats.status === 'online' ? 'text-gray-500' : 'text-red-500']">
-              <svg v-if="srv.type === 'da'" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
-              <svg v-else-if="srv.type === 'rds'" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-              <svg v-else class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" /></svg>
-            </div>
-            <div class="flex flex-col">
-              <h3 class="font-bold text-gray-900 text-base leading-tight">{{ srv.name }}</h3>
-              <span class="text-xs font-medium text-gray-500 leading-tight mt-0.5">{{ srv.ip }}</span>
-            </div>
-          </div>
-          <div>
-            <span v-if="srv.stats.status === 'online'" class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
-              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> ONLINE
-            </span>
-            <span v-else class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-red-50 text-red-700 text-[10px] font-bold border border-red-200">
-              <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> OFFLINE
-            </span>
-          </div>
+    <!-- Global Metrics Section (Grid) -->
+    <div v-if="servers.length > 0" 
+         class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8"
+         @mouseenter="isHoveringCharts = true"
+         @mouseleave="isHoveringCharts = false">
+      <!-- Global CPU Chart -->
+      <div class="bg-white border border-slate-200 flex flex-col relative">
+        <div class="px-4 py-2.5 border-b border-slate-200 bg-white relative z-10 flex justify-between items-center">
+          <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Uso de CPU Global (Top 5 Instancias)</h2>
+          <span class="text-[10px] text-slate-400 font-mono">Última hora</span>
         </div>
-
-        <!-- Body -->
-        <div class="p-4 flex-1 flex flex-col gap-4">
-          
-          <!-- Offline State -->
-          <div v-if="srv.stats.status !== 'online'" class="flex-1 flex flex-col items-center justify-center text-center py-6">
-            <div class="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mb-2">
-              <svg class="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-            </div>
-            <p class="text-sm font-bold text-red-600 mb-0.5">Connection Error</p>
-            <p class="text-xs text-gray-500 px-4 leading-relaxed break-all">{{ srv.stats.error || 'Timeout or credentials failure.' }}</p>
-          </div>
-
-          <!-- Online State (3 Columns) -->
-          <template v-else>
-            <div class="grid grid-cols-3 gap-5">
-              
-              <!-- Column 1: CPU (Time Series Area Chart) -->
-              <div class="flex flex-col bg-gray-50 rounded-xl p-3 border border-gray-100 overflow-hidden relative group">
-                <div class="flex justify-between items-start mb-2 relative z-10">
-                  <span class="text-xs font-bold text-gray-500 uppercase tracking-widest">CPU</span>
-                  <span :class="['text-2xl font-bold leading-none', getTextClass(srv.stats.CPU)]">{{ srv.stats.CPU }}%</span>
-                </div>
-                <!-- Sparkline Chart -->
-                <div class="h-20 w-full mt-auto -mb-3 -mx-1 opacity-90 group-hover:opacity-100 transition-opacity">
-                  <Sparkline 
-                    :data="srv.history?.cpu || []" 
-                    :color="getProgressColorHex(srv.stats.CPU)" 
-                    :min="0" :max="100" 
-                  />
-                </div>
-              </div>
-              
-              <!-- Column 2: RAM (Time Series Area Chart) -->
-              <div class="flex flex-col bg-gray-50 rounded-xl p-3 border border-gray-100 overflow-hidden relative group">
-                <div class="flex justify-between items-start mb-1 relative z-10">
-                  <span class="text-xs font-bold text-gray-500 uppercase tracking-widest">Mem</span>
-                  <span :class="['text-2xl font-bold leading-none', getTextClass(srv.stats.RAM_Percent)]">{{ srv.stats.RAM_Percent }}%</span>
-                </div>
-                <div class="text-[10px] font-medium text-gray-500 relative z-10 text-right leading-none mb-1">
-                  {{ formatDecimal(srv.stats.RAM_Used) }} / {{ formatDecimal(srv.stats.RAM_Total) }} GB
-                </div>
-                <!-- Sparkline Chart -->
-                <div class="h-16 w-full mt-auto -mb-3 -mx-1 opacity-90 group-hover:opacity-100 transition-opacity">
-                  <Sparkline 
-                    :data="srv.history?.ram || []" 
-                    :color="getProgressColorHex(srv.stats.RAM_Percent)" 
-                    :min="0" :max="100" 
-                  />
-                </div>
-              </div>
-
-              <!-- Column 3: Storage (Linear) -->
-              <div class="flex flex-col justify-center">
-                <span class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 text-center">Discos</span>
-                <div class="space-y-3">
-                  <div v-for="disk in srv.stats.Disks" :key="disk.DeviceID" class="bg-gray-50 rounded-lg p-2 border border-gray-100">
-                    <div class="flex justify-between items-end mb-1.5">
-                      <div class="flex items-center gap-1.5">
-                        <span class="text-[10px] font-bold text-gray-700 bg-white border border-gray-200 px-1.5 py-0.5 rounded">{{ disk.DeviceID }}</span>
-                        <span class="text-[11px] font-semibold text-gray-600">{{ Math.round(((disk.SizeGB - disk.FreeGB) / disk.SizeGB) * 100) }}%</span>
-                      </div>
-                      <span class="text-[9px] font-medium text-gray-500">{{ formatDecimal(disk.FreeGB) }} GB Libres</span>
-                    </div>
-                    <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                      <div :class="['h-full rounded-full transition-all duration-1000 ease-out', getProgressColorClass(((disk.SizeGB - disk.FreeGB) / disk.SizeGB) * 100)]" :style="`width: ${((disk.SizeGB - disk.FreeGB) / disk.SizeGB) * 100}%`"></div>
-                    </div>
-                  </div>
-                  <div v-if="!srv.stats.Disks || !srv.stats.Disks.length" class="text-xs text-gray-400 text-center">
-                    -
-                  </div>
-                </div>
-              </div>
-
-            </div>
-
-            <!-- Footer: Uptime (Compact) -->
-            <div class="mt-auto pt-2 border-t border-gray-100 flex items-center justify-end">
-              <span class="text-[10px] text-gray-400 font-medium">Uptime: <span class="font-semibold text-gray-600 ml-1">{{ srv.stats.UptimeDays }}d {{ srv.stats.UptimeHours }}h</span></span>
-            </div>
-          </template>
+        <div class="px-2 pt-4 pb-2 h-64 w-full relative z-10">
+          <VueApexCharts type="line" height="100%" :options="cpuChartOptions" :series="cpuSeries" />
         </div>
       </div>
       
+      <!-- Global RAM Chart -->
+      <div class="bg-white border border-slate-200 flex flex-col relative">
+        <div class="px-4 py-2.5 border-b border-slate-200 bg-white relative z-10 flex justify-between items-center">
+          <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Uso de Memoria (RAM)</h2>
+          <span class="text-[10px] text-slate-400 font-mono">Top 5 Instancias</span>
+        </div>
+        <div class="px-2 pt-4 pb-2 h-64 w-full relative z-10">
+          <VueApexCharts type="line" height="100%" :options="ramChartOptions" :series="ramSeries" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Data Grid (Nodes Table) -->
+    <div v-if="servers.length > 0" class="bg-white border border-slate-200">
+      <div class="px-4 py-2 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+        <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Métricas de Instancias</h2>
+        <div class="flex gap-4 font-mono text-[11px] text-slate-500">
+          <span>Total: {{ statsSummary.total }}</span>
+          <span class="text-emerald-600">Online: {{ statsSummary.online }}</span>
+          <span class="text-red-600">Offline: {{ statsSummary.offline }}</span>
+        </div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse whitespace-nowrap">
+          <thead>
+            <tr class="border-b border-slate-200 bg-white">
+              <th class="py-2 px-4 text-xs uppercase tracking-wider text-slate-500 font-semibold w-64">Instancia</th>
+              <th class="py-2 px-4 text-xs uppercase tracking-wider text-slate-500 font-semibold w-32">Estado</th>
+              <th class="py-2 px-4 text-xs uppercase tracking-wider text-slate-500 font-semibold w-48">CPU</th>
+              <th class="py-2 px-4 text-xs uppercase tracking-wider text-slate-500 font-semibold w-48">Memoria</th>
+              <th class="py-2 px-4 text-xs uppercase tracking-wider text-slate-500 font-semibold">Almacenamiento</th>
+              <th class="py-2 px-4 text-xs uppercase tracking-wider text-slate-500 font-semibold text-right w-32">Uptime</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <tr v-for="srv in sortedServers" :key="srv.id" :class="['transition-colors group', srv.stats.status === 'online' ? 'hover:bg-slate-50' : 'bg-red-50/30']">
+              
+              <!-- Instancia -->
+              <td class="py-2 px-4 align-middle border-r border-slate-50">
+                <div class="flex flex-col">
+                  <span class="font-semibold text-slate-800 text-xs">{{ srv.name }}</span>
+                  <span class="text-[11px] text-slate-500 font-mono mt-0.5">{{ srv.ip }}</span>
+                </div>
+              </td>
+              
+              <!-- Estado -->
+              <td class="py-2 px-4 align-middle border-r border-slate-50">
+                <div v-if="srv.stats.status === 'online'" class="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600">
+                  <div class="w-1.5 h-1.5 bg-emerald-500"></div> ONLINE
+                </div>
+                <div v-else class="flex flex-col justify-center">
+                  <div class="flex items-center gap-1.5 text-[11px] font-semibold text-red-600">
+                    <div class="w-1.5 h-1.5 bg-red-600"></div> OFFLINE
+                  </div>
+                  <div class="text-[10px] text-red-500 mt-1 truncate max-w-[120px]" :title="srv.stats.error">
+                    {{ srv.stats.error || 'Connection Timeout' }}
+                  </div>
+                </div>
+              </td>
+              
+              <!-- CPU -->
+              <td class="py-2 px-4 align-middle border-r border-slate-50">
+                <div v-if="srv.stats.status === 'online'" class="flex items-center gap-3">
+                  <span :class="['font-mono text-[11px] w-9 text-right font-medium', getTextClass(srv.stats.CPU)]">{{ srv.stats.CPU }}%</span>
+                  <div class="h-6 w-24 border-l border-b border-slate-200 flex-shrink-0 relative">
+                    <div class="absolute inset-0 pointer-events-none opacity-20" style="background-image: linear-gradient(to top, #cbd5e1 1px, transparent 1px); background-size: 100% 33%;"></div>
+                    <Sparkline :data="srv.history?.cpu || []" :color="getProgressColorHex(srv.stats.CPU)" :min="0" :max="100" />
+                  </div>
+                </div>
+                <div v-else class="text-xs text-slate-400 font-mono">-</div>
+              </td>
+              
+              <!-- Memoria -->
+              <td class="py-2 px-4 align-middle border-r border-slate-50">
+                <div v-if="srv.stats.status === 'online'" class="flex items-center gap-3">
+                  <div class="flex flex-col text-right w-12">
+                    <span :class="['font-mono text-[11px] font-medium', getTextClass(srv.stats.RAM_Percent)]">{{ srv.stats.RAM_Percent }}%</span>
+                    <span class="font-mono text-[9px] text-slate-400">{{ formatDecimal(srv.stats.RAM_Used) }}G</span>
+                  </div>
+                  <div class="h-6 w-24 border-l border-b border-slate-200 flex-shrink-0 relative">
+                    <div class="absolute inset-0 pointer-events-none opacity-20" style="background-image: linear-gradient(to top, #cbd5e1 1px, transparent 1px); background-size: 100% 33%;"></div>
+                    <Sparkline :data="srv.history?.ram || []" :color="getProgressColorHex(srv.stats.RAM_Percent)" :min="0" :max="100" />
+                  </div>
+                </div>
+                <div v-else class="text-xs text-slate-400 font-mono">-</div>
+              </td>
+              
+              <!-- Discos -->
+              <td class="py-2 px-4 align-middle whitespace-normal border-r border-slate-50">
+                <div v-if="srv.stats.status === 'online'" class="flex flex-wrap gap-2.5">
+                  <div v-for="disk in srv.stats.Disks" :key="disk.DeviceID" class="flex items-center gap-1.5 w-full max-w-[150px]">
+                    <span class="font-mono text-[10px] text-slate-600 font-semibold w-3">{{ disk.DeviceID.replace(':', '') }}</span>
+                    <div class="w-full bg-slate-100 h-1.5 border border-slate-200">
+                      <div :class="['h-full transition-all duration-1000 ease-out', getProgressColorClass(((disk.SizeGB - disk.FreeGB) / disk.SizeGB) * 100)]" :style="`width: ${((disk.SizeGB - disk.FreeGB) / disk.SizeGB) * 100}%`"></div>
+                    </div>
+                    <span class="font-mono text-[10px] text-slate-500 w-6 text-right">{{ Math.round(((disk.SizeGB - disk.FreeGB) / disk.SizeGB) * 100) }}%</span>
+                  </div>
+                  <div v-if="!srv.stats.Disks || !srv.stats.Disks.length" class="text-[10px] text-slate-400 italic">
+                    N/A
+                  </div>
+                </div>
+                <div v-else class="text-xs text-slate-400 font-mono">-</div>
+              </td>
+              
+              <!-- Uptime -->
+              <td class="py-2 px-4 align-middle text-right">
+                <div v-if="srv.stats.status === 'online'" class="text-[11px] text-slate-600 font-mono">
+                  {{ srv.stats.UptimeDays }}d {{ srv.stats.UptimeHours }}h
+                </div>
+                <div v-else class="text-xs text-slate-400 font-mono">-</div>
+              </td>
+              
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </template>
+
+<style>
+/* 
+  Ocultar el tooltip (cuadro) del gráfico inactivo en grupos sincronizados (GCP Style)
+  Solo muestra el tooltip en el gráfico donde está posicionado el ratón, 
+  mientras mantiene la línea vertical (crosshair) visible en ambos.
+*/
+.apexcharts-canvas .apexcharts-tooltip {
+  opacity: 0 !important;
+  pointer-events: none;
+  transition: opacity 0.1s ease;
+  box-shadow: none !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 0 !important;
+}
+.apexcharts-canvas:hover .apexcharts-tooltip.apexcharts-active {
+  opacity: 1 !important;
+}
+/* GCP Hover Style (Dimming) - CSS Nativo apuntando a los paths para forzar opacidad */
+.apexcharts-svg:has(.apexcharts-series.apexcharts-active) .apexcharts-series path {
+  opacity: 0.1 !important;
+  stroke-width: 1px !important;
+  transition: all 0.2s ease;
+}
+.apexcharts-svg:has(.apexcharts-series.apexcharts-active) .apexcharts-series.apexcharts-active path {
+  opacity: 1 !important;
+  stroke-width: 2.5px !important;
+  filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.1));
+}
+.apexcharts-series path {
+  transition: all 0.2s ease;
+}
+/* Evitar que el contenedor base del tooltip interfiera con nuestro transform */
+.apexcharts-tooltip {
+  overflow: visible !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+/* Forzar transparencia nativa para evitar superposición extraña de tooltip viejo */
+.apexcharts-canvas .apexcharts-tooltip-series-group {
+  display: none !important;
+}
+</style>
