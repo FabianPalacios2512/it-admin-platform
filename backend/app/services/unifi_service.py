@@ -10,6 +10,7 @@ class UniFiService:
         self.password = env_settings.UNIFI_PASS
         # Aquí guardaremos las cookies después del login
         self.cookies = {}
+        self.headers = {}
 
     def _get_client(self):
         # trust_env=False asegura que no usemos proxies configurados a nivel del SO
@@ -29,6 +30,9 @@ class UniFiService:
                 
                 # Extraemos la cookie generada y la guardamos manualmente
                 self.cookies = dict(res.cookies)
+                self.headers = {}
+                if 'x-csrf-token' in res.headers:
+                    self.headers['X-CSRF-Token'] = res.headers['x-csrf-token']
                 return True
             except Exception as e:
                 print(f"🔥 DEBUG UNIFI LOGIN ERROR: {str(e)}")
@@ -75,25 +79,25 @@ class UniFiService:
         url = f"{self.base_url}/api/s/{site_name}/cmd/devmgr"
         payload = {"cmd": "restart", "mac": mac}
         async with self._get_client() as client:
-            res = await client.post(url, json=payload, cookies=self.cookies)
+            res = await client.post(url, json=payload, cookies=self.cookies, headers=self.headers)
             res.raise_for_status()
             return res.json()
 
     async def block_client(self, mac: str, site_name: str = "default"):
         await self.login()
-        url = f"{self.base_url}/api/s/{site_name}/cmd/sitemgr"
+        url = f"{self.base_url}/api/s/{site_name}/cmd/stamgr"
         payload = {"cmd": "block-sta", "mac": mac}
         async with self._get_client() as client:
-            res = await client.post(url, json=payload, cookies=self.cookies)
+            res = await client.post(url, json=payload, cookies=self.cookies, headers=self.headers)
             res.raise_for_status()
             return res.json()
 
     async def unblock_client(self, mac: str, site_name: str = "default"):
         await self.login()
-        url = f"{self.base_url}/api/s/{site_name}/cmd/sitemgr"
+        url = f"{self.base_url}/api/s/{site_name}/cmd/stamgr"
         payload = {"cmd": "unblock-sta", "mac": mac}
         async with self._get_client() as client:
-            res = await client.post(url, json=payload, cookies=self.cookies)
+            res = await client.post(url, json=payload, cookies=self.cookies, headers=self.headers)
             res.raise_for_status()
             return res.json()
 

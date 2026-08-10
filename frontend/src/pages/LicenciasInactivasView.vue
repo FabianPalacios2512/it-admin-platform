@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
+import { getFriendlyLicenseName } from '../utils/licenses'
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1'
 const token = localStorage.getItem('access_token')
@@ -11,10 +12,12 @@ async function authFetch(url, opts = {}) {
 const loading = ref(false)
 const error = ref('')
 const users = ref([])
-const sortColumn = ref('daysInactive')
+const sortColumn = ref('daysInactiveAd')
 const sortDesc = ref(true)
 const searchQuery = ref('')
-const daysThreshold = ref(90)
+const adDaysThreshold = ref(90)
+const outlookDaysThreshold = ref(90)
+const licenseFilter = ref('Todas')
 
 const showToast = ref(false)
 const toastType = ref('success')
@@ -35,15 +38,11 @@ async function fetchInactiveUsers() {
   loading.value = true
   error.value = ''
   try {
-    const res = await authFetch(`${API_BASE}/licenses/inactive?days=${daysThreshold.value}`)
+    const res = await authFetch(`${API_BASE}/licenses/inactive`)
     const data = await res.json()
     if (res.ok && data.success) {
       users.value = data.data
-      if (users.value.length === 0) {
-        displayToast('success', '¡Excelente!', `No se encontraron licencias inactivas (más de ${daysThreshold.value} días).`)
-      } else {
-        displayToast('warning', 'Licencias Inactivas', `Se encontraron ${users.value.length} cuentas inactiva(s).`)
-      }
+      displayToast('success', 'Datos Actualizados', `Se cargaron ${users.value.length} licencias.`)
     } else {
       error.value = data.detail || 'Error al obtener datos'
       displayToast('error', 'Error API', error.value)
@@ -66,6 +65,17 @@ const filteredAndSortedUsers = computed(() => {
       u.displayName.toLowerCase().includes(q)
     )
   }
+  
+  result = result.filter(u => {
+    const adPass = adDaysThreshold.value === -1 || u.daysInactiveAd >= adDaysThreshold.value;
+    const outlookPass = outlookDaysThreshold.value === -1 || u.daysInactiveOutlook >= outlookDaysThreshold.value;
+    
+    // Filter by specific license if selected
+    const userLicenseNames = u.licenses ? u.licenses.map(lic => getFriendlyLicenseName(lic)) : [];
+    const licensePass = licenseFilter.value === 'Todas' || userLicenseNames.includes(licenseFilter.value);
+    
+    return adPass && outlookPass && licensePass;
+  })
   
   result.sort((a, b) => {
     let valA = a[sortColumn.value]
@@ -91,12 +101,12 @@ function toggleSort(column) {
   }
 }
 
-const totalLicenses = computed(() => users.value.length)
+const totalLicenses = computed(() => filteredAndSortedUsers.value.length)
 const avgDaysInactive = computed(() => {
   if (totalLicenses.value === 0) return 0
-  const validDays = users.value.filter(u => u.daysInactive !== 9999)
-  if (validDays.length === 0) return `>${daysThreshold.value}` // Todos son nunca
-  const sum = validDays.reduce((acc, u) => acc + u.daysInactive, 0)
+  const validDays = filteredAndSortedUsers.value.map(u => Math.min(u.daysInactiveAd, u.daysInactiveOutlook)).filter(d => d !== 9999)
+  if (validDays.length === 0) return `>90` // Todos son nunca
+  const sum = validDays.reduce((acc, d) => acc + d, 0)
   return Math.round(sum / validDays.length)
 })
 const estimatedWaste = computed(() => totalLicenses.value * 15) // USD 15 por licencia
@@ -156,13 +166,34 @@ function getDaysDisplay(days) {
       </div>
       <div class="flex items-center gap-3">
         <div class="flex items-center gap-2 text-sm text-slate-600">
-          <label for="daysFilter" class="font-medium">Inactivo por más de:</label>
-          <select id="daysFilter" v-model="daysThreshold" @change="fetchInactiveUsers" class="text-[12px] bg-slate-50 border border-slate-200 text-slate-700 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer">
-            <option :value="30">30 días</option>
-            <option :value="60">60 días</option>
-            <option :value="90">90 días</option>
-            <option :value="120">120 días</option>
-            <option :value="180">180 días</option>
+          <label for="adDaysFilter" class="font-medium whitespace-nowrap">Inactivo en AD:</label>
+          <select id="adDaysFilter" v-model="adDaysThreshold" class="text-[12px] bg-slate-50 border border-slate-200 text-slate-700 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer">
+            <option :value="-1">Ignorar</option>
+            <option :value="30">> 30 días</option>
+            <option :value="60">> 60 días</option>
+            <option :value="90">> 90 días</option>
+            <option :value="120">> 120 días</option>
+            <option :value="180">> 180 días</option>
+          </select>
+        </div>
+        <div class="flex items-center gap-2 text-sm text-slate-600">
+          <label for="outlookDaysFilter" class="font-medium whitespace-nowrap">Inactivo en Outlook:</label>
+          <select id="outlookDaysFilter" v-model="outlookDaysThreshold" class="text-[12px] bg-slate-50 border border-slate-200 text-slate-700 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer">
+            <option :value="-1">Ignorar</option>
+            <option :value="30">> 30 días</option>
+            <option :value="60">> 60 días</option>
+            <option :value="90">> 90 días</option>
+            <option :value="120">> 120 días</option>
+            <option :value="180">> 180 días</option>
+          </select>
+        </div>
+        <div class="flex items-center gap-2 text-sm text-slate-600">
+          <label for="licenseFilter" class="font-medium whitespace-nowrap">Licencia:</label>
+          <select id="licenseFilter" v-model="licenseFilter" class="text-[12px] bg-slate-50 border border-slate-200 text-slate-700 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer">
+            <option value="Todas">Todas</option>
+            <option value="Microsoft 365 Empresa Básico">Básica</option>
+            <option value="Microsoft 365 Empresa Estándar">Estándar</option>
+            <option value="Microsoft 365 Empresa Premium">Premium</option>
           </select>
         </div>
         <button @click="fetchInactiveUsers" :disabled="loading" class="text-[12px] font-medium text-slate-700 hover:text-blue-600 hover:bg-slate-50 px-4 py-2 rounded border border-slate-200 transition-colors flex items-center gap-2">
@@ -174,34 +205,25 @@ function getDaysDisplay(days) {
     </div>
 
     <!-- Executive Summary Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-      <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-5 flex items-center gap-4">
-        <div class="w-12 h-12 rounded-lg flex items-center justify-center bg-blue-50 text-blue-600">
-          <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-        </div>
-        <div>
-          <p class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Licencias Inactivas Encontradas</p>
-          <p class="text-2xl font-bold text-slate-900 leading-tight">{{ totalLicenses }}</p>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10 pl-2">
+      <div class="flex flex-col">
+        <p class="text-[13px] font-medium text-gray-500 mb-1">Licencias Inactivas</p>
+        <p class="text-4xl font-light text-gray-900 tracking-tight">{{ totalLicenses }}</p>
+      </div>
+      
+      <div class="flex flex-col border-l border-gray-200 pl-6">
+        <p class="text-[13px] font-medium text-gray-500 mb-1">Promedio de Inactividad</p>
+        <div class="flex items-baseline gap-2">
+          <p class="text-4xl font-light text-gray-900 tracking-tight">{{ avgDaysInactive }}</p>
+          <span v-if="avgDaysInactive !== '>90'" class="text-sm font-medium text-gray-500">días</span>
         </div>
       </div>
       
-      <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-5 flex items-center gap-4">
-        <div class="w-12 h-12 rounded-lg flex items-center justify-center bg-orange-50 text-orange-500">
-          <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-        </div>
-        <div>
-          <p class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Promedio de Inactividad</p>
-          <p class="text-2xl font-bold text-slate-900 leading-tight">{{ avgDaysInactive }} <span v-if="avgDaysInactive !== '>'+daysThreshold" class="text-sm font-normal text-slate-500">días</span></p>
-        </div>
-      </div>
-      
-      <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-5 flex items-center gap-4">
-        <div class="w-12 h-12 rounded-lg flex items-center justify-center bg-red-50 text-red-600">
-          <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-        </div>
-        <div>
-          <p class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Dinero Desperdiciado (Est. Mensual)</p>
-          <p class="text-2xl font-bold text-red-600 leading-tight">${{ estimatedWaste.toLocaleString() }} <span class="text-sm font-normal text-slate-500">USD</span></p>
+      <div class="flex flex-col border-l border-gray-200 pl-6">
+        <p class="text-[13px] font-medium text-gray-500 mb-1">Desperdicio Estimado</p>
+        <div class="flex items-baseline gap-2">
+          <p class="text-4xl font-light text-gray-900 tracking-tight">${{ estimatedWaste.toLocaleString() }}</p>
+          <span class="text-sm font-medium text-gray-500">USD/mes</span>
         </div>
       </div>
     </div>
@@ -220,34 +242,51 @@ function getDaysDisplay(days) {
         <table class="w-full text-left min-w-[800px]" v-if="!loading && filteredAndSortedUsers.length > 0">
           <thead>
             <tr class="border-b border-slate-200 bg-slate-50/50">
-              <th @click="toggleSort('displayName')" class="w-1/4 px-4 py-3 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer transition-colors select-none">
+              <th @click="toggleSort('displayName')" class="w-[20%] px-4 py-3 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer transition-colors select-none">
                 <div class="flex items-center gap-1">
                   Nombre a Mostrar
                   <svg v-if="sortColumn === 'displayName'" class="w-3 h-3" :class="{'rotate-180': !sortDesc}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
                 </div>
               </th>
-              <th @click="toggleSort('userPrincipalName')" class="w-1/4 px-4 py-3 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer transition-colors select-none">
+              <th @click="toggleSort('userPrincipalName')" class="w-[20%] px-4 py-3 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer transition-colors select-none">
                 <div class="flex items-center gap-1">
                   Identificador Único (UPN)
                   <svg v-if="sortColumn === 'userPrincipalName'" class="w-3 h-3" :class="{'rotate-180': !sortDesc}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
                 </div>
               </th>
-              <th @click="toggleSort('lastSignInDateTime')" class="w-1/4 px-4 py-3 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer transition-colors select-none">
+              <th @click="toggleSort('licenses')" class="w-[20%] px-4 py-3 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer transition-colors select-none">
                 <div class="flex items-center gap-1">
-                  Último Inicio de Sesión
-                  <svg v-if="sortColumn === 'lastSignInDateTime'" class="w-3 h-3" :class="{'rotate-180': !sortDesc}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                  Licencia(s)
                 </div>
               </th>
-              <th @click="toggleSort('daysInactive')" class="w-1/4 px-4 py-3 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer transition-colors select-none">
+              <th @click="toggleSort('lastSignInDateTimeAd')" class="w-[15%] px-4 py-3 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer transition-colors select-none">
                 <div class="flex items-center gap-1">
-                  Días Inactivo
-                  <svg v-if="sortColumn === 'daysInactive'" class="w-3 h-3" :class="{'rotate-180': !sortDesc}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                  Último Inicio AD
+                  <svg v-if="sortColumn === 'lastSignInDateTimeAd'" class="w-3 h-3" :class="{'rotate-180': !sortDesc}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                </div>
+              </th>
+              <th @click="toggleSort('lastSignInDateTimeOutlook')" class="w-[20%] px-4 py-3 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer transition-colors select-none">
+                <div class="flex items-center gap-1">
+                  Último Inicio Outlook
+                  <svg v-if="sortColumn === 'lastSignInDateTimeOutlook'" class="w-3 h-3" :class="{'rotate-180': !sortDesc}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                </div>
+              </th>
+              <th @click="toggleSort('daysInactiveAd')" class="w-[10%] px-4 py-3 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer transition-colors select-none">
+                <div class="flex items-center gap-1">
+                  Días AD
+                  <svg v-if="sortColumn === 'daysInactiveAd'" class="w-3 h-3" :class="{'rotate-180': !sortDesc}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                </div>
+              </th>
+              <th @click="toggleSort('daysInactiveOutlook')" class="w-[10%] px-4 py-3 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer transition-colors select-none">
+                <div class="flex items-center gap-1">
+                  Días Outlook
+                  <svg v-if="sortColumn === 'daysInactiveOutlook'" class="w-3 h-3" :class="{'rotate-180': !sortDesc}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
                 </div>
               </th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="user in filteredAndSortedUsers" :key="user.id" class="border-b border-slate-100 transition-colors duration-150 hover:bg-slate-50" :class="{'bg-red-50/30 hover:bg-red-50/50 border-b-red-100': user.daysInactive >= 120}">
+            <tr v-for="user in filteredAndSortedUsers" :key="user.id" class="border-b border-slate-100 transition-colors duration-150 hover:bg-slate-50" :class="{'bg-red-50/30 hover:bg-red-50/50 border-b-red-100': user.daysInactiveAd >= 120 && user.daysInactiveOutlook >= 120}">
               <td class="px-4 py-2.5 text-[13px] font-medium text-slate-800">
                 <div class="flex items-center gap-2">
                   <div class="w-6 h-6 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-bold">
@@ -257,10 +296,23 @@ function getDaysDisplay(days) {
                 </div>
               </td>
               <td class="px-4 py-2.5 text-[12px] text-slate-500">{{ user.userPrincipalName }}</td>
-              <td class="px-4 py-2.5 text-[12px] text-slate-600">{{ formatDate(user.lastSignInDateTime) }}</td>
+              <td class="px-4 py-2.5 text-[11px] text-slate-600">
+                <div class="flex flex-col gap-1">
+                  <span v-for="lic in user.licenses" :key="lic" class="truncate max-w-[150px]" :title="getFriendlyLicenseName(lic)">
+                    {{ getFriendlyLicenseName(lic) }}
+                  </span>
+                </div>
+              </td>
+              <td class="px-4 py-2.5 text-[12px] text-slate-600">{{ formatDate(user.lastSignInDateTimeAd) }}</td>
+              <td class="px-4 py-2.5 text-[12px] text-slate-600">{{ formatDate(user.lastSignInDateTimeOutlook) }}</td>
               <td class="px-4 py-2.5">
-                <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium" :class="user.daysInactive >= 120 ? 'bg-red-100 text-red-800' : 'bg-orange-100 text-orange-800'">
-                  {{ getDaysDisplay(user.daysInactive) }}
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium" :class="user.daysInactiveAd >= 120 ? 'bg-red-100 text-red-800' : 'bg-orange-100 text-orange-800'">
+                  {{ getDaysDisplay(user.daysInactiveAd) }}
+                </span>
+              </td>
+              <td class="px-4 py-2.5">
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium" :class="user.daysInactiveOutlook >= 120 ? 'bg-red-100 text-red-800' : 'bg-orange-100 text-orange-800'">
+                  {{ getDaysDisplay(user.daysInactiveOutlook) }}
                 </span>
               </td>
             </tr>

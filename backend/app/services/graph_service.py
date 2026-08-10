@@ -564,41 +564,72 @@ class MicrosoftGraphService:
             raise ValueError(f"Error modificando el estado MFA: {e}")
 
     async def get_inactive_licensed_users(self, days_threshold: int = 90) -> list:
-        """Encuentra usuarios con licencias que no han iniciado sesión en N días."""
+        """Encuentra usuarios con licencias y devuelve sus fechas de último inicio de sesión (AD y Outlook)."""
         import datetime
-        cutoff_date = (datetime.datetime.utcnow() - datetime.timedelta(days=days_threshold)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        now = datetime.datetime.utcnow()
         
         endpoint = f"/users?$select=id,displayName,userPrincipalName,assignedLicenses,signInActivity&$top=999"
         
         try:
             data = await self._request("GET", endpoint)
             
-            inactive_users = []
+            # Obtener los SKUs para filtrar solo las licencias de interés
+            subscribed_skus = await self.get_subscribed_skus()
+            target_sku_parts = {"SPB", "O365_BUSINESS_PREMIUM", "O365_BUSINESS_ESSENTIALS"}
+            target_sku_ids = {sku["skuId"] for sku in subscribed_skus if sku.get("skuPartNumber") in target_sku_parts}
+            
+            users_data = []
             for user in data.get("value", []):
                 licenses = user.get("assignedLicenses", [])
                 if not licenses:
                     continue
                     
-                last_sign_in = None
-                if "signInActivity" in user and user["signInActivity"]:
-                    last_sign_in = user["signInActivity"].get("lastSignInDateTime")
-                
-                is_inactive = False
-                if not last_sign_in:
-                    is_inactive = True
-                elif last_sign_in < cutoff_date:
-                    is_inactive = True
+                # Verificar si el usuario tiene alguna de las licencias de interés
+                has_target_license = any(lic.get("skuId") in target_sku_ids for lic in licenses)
+                if not has_target_license:
+                    continue
                     
-                if is_inactive:
-                    inactive_users.append({
-                        "id": user["id"],
-                        "displayName": user.get("displayName", ""),
-                        "userPrincipalName": user.get("userPrincipalName", ""),
-                        "lastSignInDateTime": last_sign_in,
-                        "licensesCount": len(licenses)
-                    })
+                ad_sign_in = None
+                outlook_sign_in = None
+                
+                if "signInActivity" in user and user["signInActivity"]:
+                    ad_sign_in_str = user["signInActivity"].get("lastSignInDateTime")
+                    outlook_sign_in_str = user["signInActivity"].get("lastNonInteractiveSignInDateTime")
+                    
+                    if ad_sign_in_str:
+                        ad_sign_in = ad_sign_in_str
+                    if outlook_sign_in_str:
+                        outlook_sign_in = outlook_sign_in_str
+                
+                def calc_days(date_str):
+                    if not date_str:
+                        return 9999
+                    try:
+                        # Parse ISO format string (e.g. 2023-01-01T00:00:00Z)
+                        dt = datetime.datetime.strptime(date_str[:19], "%Y-%m-%dT%H:%M:%S")
+                        return max(0, (now - dt).days)
+                    except Exception:
+                        return 9999
+                        
+                user_target_licenses = []
+                for lic in licenses:
+                    if lic.get("skuId") in target_sku_ids:
+                        sku_part = next((s["skuPartNumber"] for s in subscribed_skus if s["skuId"] == lic.get("skuId")), "Unknown")
+                        user_target_licenses.append(sku_part)
+
+                users_data.append({
+                    "id": user["id"],
+                    "displayName": user.get("displayName", ""),
+                    "userPrincipalName": user.get("userPrincipalName", ""),
+                    "lastSignInDateTimeAd": ad_sign_in,
+                    "lastSignInDateTimeOutlook": outlook_sign_in,
+                    "daysInactiveAd": calc_days(ad_sign_in),
+                    "daysInactiveOutlook": calc_days(outlook_sign_in),
+                    "licensesCount": len(licenses),
+                    "licenses": user_target_licenses
+                })
             
-            return inactive_users
+            return users_data
         except Exception as e:
             print(f"[GraphService] Error buscando licencias inactivas: {e}")
             raise ValueError(f"Error consultando Microsoft Graph: {str(e)}")
