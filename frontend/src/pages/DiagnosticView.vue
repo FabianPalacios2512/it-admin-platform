@@ -42,7 +42,7 @@ const simpleCommand = computed(() => {
 function copyCommand(text) {
   navigator.clipboard.writeText(text)
   commandCopied.value = true
-  setTimeout(() => { commandCopied.value = false }, 2000)
+  setTimeout(() => { commandCopied.value = false }, 3000)
 }
 
 // ── Polling de sesiones activas
@@ -258,101 +258,73 @@ onUnmounted(() => {
       </nav>
     </div>
 
-    <!-- ═══════════════════════ TAB: Generar Comando ═══════════════════════ -->
-    <div v-if="activeTab === 'command'" class="space-y-6">
-      <!-- Instrucciones -->
-      <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-        <h2 class="text-lg font-semibold text-gray-900 mb-4">Conectar un equipo para diagnóstico</h2>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-          <div class="flex gap-3">
-            <div class="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm">1</div>
-            <div>
-              <p class="text-sm font-medium text-gray-900">Configurar</p>
-              <p class="text-xs text-gray-500 mt-0.5">Indica la URL del servidor y describe el problema del equipo</p>
-            </div>
-          </div>
-          <div class="flex gap-3">
-            <div class="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm">2</div>
-            <div>
-              <p class="text-sm font-medium text-gray-900">Ejecutar</p>
-              <p class="text-xs text-gray-500 mt-0.5">Copia el comando y ejecútalo en PowerShell como Administrador</p>
-            </div>
-          </div>
-          <div class="flex gap-3">
-            <div class="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm">3</div>
-            <div>
-              <p class="text-sm font-medium text-gray-900">Monitorear</p>
-              <p class="text-xs text-gray-500 mt-0.5">Ve al tab "Monitor en vivo" para observar el diagnóstico en tiempo real</p>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div v-if="activeTab === 'command'" class="flex flex-col items-center justify-center w-full max-w-3xl mx-auto py-10 lg:py-20">
       
-      <!-- Formulario -->
-      <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1.5">URL del servidor AdminInfra</label>
-            <input 
-              v-model="serverUrl" 
-              type="text"
-              class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow"
-              placeholder="http://192.168.1.100:8000"
-            />
-            <p class="text-xs text-gray-400 mt-1">Debe ser accesible desde el equipo a diagnosticar</p>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1.5">Problema reportado</label>
-            <input 
-              v-model="issueDescription" 
-              type="text"
-              class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow"
-              placeholder="Ej: El equipo se reinicia solo cada 2 horas"
-            />
-            <p class="text-xs text-gray-400 mt-1">Esto le da contexto al agente de IA para diagnosticar</p>
-          </div>
-        </div>
+      <!-- Título Saludo tipo IA -->
+      <div class="text-center mb-8">
+        <h2 class="text-3xl font-semibold text-slate-800 mb-3 tracking-tight">¿Qué ocurre en el equipo?</h2>
+        <p class="text-slate-500 text-sm">Describe el problema para generar automáticamente el payload de diagnóstico.</p>
+      </div>
+
+      <!-- Área de Input (Estilo ChatGPT/Gemini) -->
+      <div class="w-full relative bg-white rounded-2xl shadow-sm border border-slate-200 focus-within:border-blue-500 focus-within:shadow-md focus-within:ring-4 focus-within:ring-blue-500/10 transition-all">
+        <textarea 
+          v-model="issueDescription" 
+          rows="1"
+          class="w-full px-5 py-5 text-slate-700 bg-transparent outline-none resize-none min-h-[70px] text-base"
+          placeholder="Ej: El equipo se apagó inesperadamente..."
+          @input="$event.target.style.height = 'auto'; $event.target.style.height = $event.target.scrollHeight + 'px'"
+        ></textarea>
         
-        <!-- Comando principal (Auto-descarga) -->
-        <div class="mb-4">
-          <label class="block text-sm font-medium text-gray-700 mb-1.5">Ejecutar directamente (Recomendado)</label>
-          <p class="text-xs text-gray-500 mb-2">Este comando descargará el script temporalmente y lo ejecutará sin requerir instalación manual.</p>
-          <div class="relative group">
-            <pre class="bg-gray-900 text-green-400 text-sm px-4 py-3 rounded-lg overflow-x-auto font-mono whitespace-pre-wrap break-all">{{ generatedCommand }}</pre>
-            <button 
-              @click="copyCommand(generatedCommand)" 
-              class="absolute top-2 right-2 p-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
-              title="Copiar al portapapeles"
-            >
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-            </button>
-          </div>
-        </div>
+        <!-- Controles Inferiores del Input -->
+        <div class="flex items-center justify-between px-3 pb-3">
+          <!-- Opciones Avanzadas (Izquierda) -->
+          <details class="group relative">
+            <summary class="p-2 rounded-full hover:bg-slate-100 text-slate-400 cursor-pointer list-none transition-colors" title="Configuración de Red" style="list-style: none;">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+            </summary>
+            <!-- Menú Flotante Configuración -->
+            <div class="absolute bottom-full left-0 mb-3 w-72 bg-white rounded-xl shadow-lg border border-slate-100 p-4 z-20">
+              <label class="block text-xs font-semibold text-slate-700 mb-1.5">URL del servidor</label>
+              <input v-model="serverUrl" type="text" class="w-full px-3 py-2 border border-slate-200 bg-slate-50 rounded-lg text-xs outline-none focus:border-blue-500 focus:bg-white transition-colors" placeholder="http://192.168.1.100:8000" />
+            </div>
+          </details>
 
-        <!-- Comando para copiar (si el script ya está en el equipo) -->
-        <div class="mb-4">
-          <label class="block text-sm font-medium text-gray-700 mb-1.5">Si el script ya está en el equipo (Alternativa)</label>
-          <div class="relative group">
-            <pre class="bg-gray-800 text-gray-300 text-sm px-4 py-3 rounded-lg overflow-x-auto font-mono whitespace-pre-wrap break-all">{{ simpleCommand }}</pre>
-            <button 
-              @click="copyCommand(simpleCommand)" 
-              class="absolute top-2 right-2 p-1.5 bg-gray-600 hover:bg-gray-500 text-gray-300 rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
-              title="Copiar al portapapeles"
-            >
+          <!-- Botón Principal (Derecha) -->
+          <button 
+            @click="copyCommand(generatedCommand)"
+            :class="commandCopied ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-slate-900 hover:bg-slate-800'"
+            class="flex items-center gap-2 px-5 py-2 rounded-xl text-white text-sm font-semibold transition-all shadow-sm"
+          >
+            <template v-if="commandCopied">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+              Copiado al portapapeles
+            </template>
+            <template v-else>
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-            </button>
-          </div>
-        </div>
-
-        <!-- Nota informativa -->
-        <div class="flex gap-3 p-3 bg-gray-50 rounded-lg">
-          <svg class="w-5 h-5 text-gray-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-          <div>
-            <p class="text-sm text-gray-600">El script <code class="bg-gray-100 px-1 rounded text-gray-700 text-xs">Invoke-ITDiagnostic.ps1</code> se encuentra en la raíz del proyecto AdminInfra. Cópialo al equipo afectado o compártelo desde una ubicación de red.</p>
-            <p class="text-xs text-gray-400 mt-1">Requiere PowerShell 5.1+ ejecutado como Administrador. Solo ejecuta comandos de lectura.</p>
-          </div>
+              Generar Comando
+            </template>
+          </button>
         </div>
       </div>
+
+      <!-- Detalles Técnicos Ocultos (Discreto) -->
+      <details class="group mt-8 w-full max-w-2xl">
+        <summary class="text-xs font-medium text-slate-400 hover:text-slate-600 cursor-pointer flex items-center justify-center gap-1.5 transition-colors" style="list-style: none;">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg>
+          Ver comandos generados
+        </summary>
+        <div class="mt-4 bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
+          <div>
+            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">PowerShell Remoto (Recomendado)</label>
+            <pre class="bg-slate-900 text-emerald-400 text-xs px-4 py-3 rounded-lg overflow-x-auto font-mono whitespace-pre-wrap break-all">{{ generatedCommand }}</pre>
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Ejecución Local (Alternativa)</label>
+            <pre class="bg-slate-800 text-slate-300 text-xs px-4 py-3 rounded-lg overflow-x-auto font-mono whitespace-pre-wrap break-all">{{ simpleCommand }}</pre>
+          </div>
+        </div>
+      </details>
     </div>
 
     <!-- ═══════════════════════ TAB: Monitor en Vivo ═══════════════════════ -->
@@ -426,10 +398,10 @@ onUnmounted(() => {
               <!-- Thought del agente -->
               <template v-if="event.type === 'agent_thought'">
                 <div class="flex items-center gap-2 mb-1 flex-wrap">
-                  <p class="text-indigo-700 text-xs font-semibold uppercase tracking-wide">Razonamiento (Paso {{ event.step }})</p>
-                  <span v-if="event.hypothesis" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-600 text-[10px] font-semibold">
-                    🔬 {{ event.hypothesis }}
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-[10px] font-bold tracking-wide uppercase">
+                    🧠 Razonamiento
                   </span>
+                  <p class="text-indigo-700 text-xs font-semibold">{{ event.hypothesis || `Paso ${event.step}` }}</p>
                 </div>
                 <p class="text-gray-600 text-sm whitespace-pre-wrap leading-relaxed">{{ event.thought }}</p>
               </template>
