@@ -1,6 +1,6 @@
 """
-Endpoints de configuración de servidores.
-Permite agregar, editar, eliminar y probar conexión a servidores.
+Endpoints de configuración de servidores v2.0.
+Soporte multi-OS: Windows (WMI) y Linux (SSH via paramiko).
 """
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -13,17 +13,22 @@ router = APIRouter()
 
 
 # ══════════════════════════════════════════════════════════════
-# ESQUEMAS
+# ESQUEMAS v2.0
 # ══════════════════════════════════════════════════════════════
 class ServerCreateRequest(BaseModel):
     name: str
-    server_type: str        # "da", "ha", "files", "printers"
+    server_type: str        # "da", "ha", "files", "printers", "app", "rds"
     ip: str
     domain: Optional[str] = ""
     admin_user: str
     admin_pass: str
     allowed_groups: Optional[str] = ""
     is_primary: bool = False
+    # ── v2.0: Multi-OS ──────────────────────────────────────────
+    os_type: Optional[str] = "windows"   # "windows" | "linux"
+    ssh_user: Optional[str] = ""         # Usuario SSH (Linux)
+    ssh_key: Optional[str] = ""          # Llave privada PEM (opcional, Linux)
+    ssh_port: Optional[int] = 22         # Puerto SSH
 
 
 class ServerUpdateRequest(BaseModel):
@@ -35,12 +40,16 @@ class ServerUpdateRequest(BaseModel):
     admin_pass: Optional[str] = None   # Si viene vacío, no se cambia
     allowed_groups: Optional[str] = None
     is_primary: Optional[bool] = None
+    # ── v2.0: Multi-OS ──────────────────────────────────────────
+    os_type: Optional[str] = None
+    ssh_user: Optional[str] = None
+    ssh_key: Optional[str] = None
+    ssh_port: Optional[int] = None
 
 
 # ══════════════════════════════════════════════════════════════
-# ENDPOINTS
+# CONSTANTES
 # ══════════════════════════════════════════════════════════════
-
 SERVER_TYPES = {
     "da": "Directorio Activo",
     "ha": "Alta Disponibilidad (HA)",
@@ -50,6 +59,10 @@ SERVER_TYPES = {
     "rds": "Servidor RDS / Escritorio Remoto",
 }
 
+
+# ══════════════════════════════════════════════════════════════
+# ENDPOINTS
+# ══════════════════════════════════════════════════════════════
 
 @router.get("/")
 def list_servers():
@@ -69,6 +82,10 @@ def list_servers():
             "allowed_groups": s.allowed_groups or "",
             "is_primary": s.is_primary,
             "created_at": s.created_at.isoformat() if s.created_at else None,
+            # v2.0
+            "os_type": getattr(s, "os_type", "windows") or "windows",
+            "ssh_user": getattr(s, "ssh_user", "") or "",
+            "ssh_port": getattr(s, "ssh_port", 22) or 22,
         })
     db.close()
     return result
@@ -76,15 +93,19 @@ def list_servers():
 
 @router.post("/")
 def create_server(req: ServerCreateRequest):
-    """Crea un nuevo servidor."""
+    """Crea un nuevo servidor (Windows o Linux)."""
     db = SessionLocal()
     try:
-        # Si se marca como primario, quitar primario de los demás del mismo tipo
         if req.is_primary:
             db.query(ServerConfig).filter(
                 ServerConfig.server_type == req.server_type,
                 ServerConfig.is_primary == True
             ).update({"is_primary": False})
+
+        # Encriptar llave SSH si se provee
+        ssh_key_encrypted = None
+        if req.os_type == "linux" and req.ssh_key and req.ssh_key.strip():
+            ssh_key_encrypted = encrypt_password(req.ssh_key.strip())
 
         server = ServerConfig(
             name=req.name,
@@ -95,6 +116,11 @@ def create_server(req: ServerCreateRequest):
             admin_pass=encrypt_password(req.admin_pass),
             allowed_groups=req.allowed_groups or "",
             is_primary=req.is_primary,
+            # v2.0
+            os_type=req.os_type or "windows",
+            ssh_user=req.ssh_user or "",
+            ssh_key=ssh_key_encrypted,
+            ssh_port=req.ssh_port or 22,
         )
         db.add(server)
         db.commit()
@@ -132,13 +158,21 @@ def update_server(server_id: int, req: ServerUpdateRequest):
             server.allowed_groups = req.allowed_groups
         if req.is_primary is not None:
             if req.is_primary:
-                # Quitar primario de los demás del mismo tipo
                 db.query(ServerConfig).filter(
                     ServerConfig.server_type == server.server_type,
                     ServerConfig.id != server_id,
                     ServerConfig.is_primary == True
                 ).update({"is_primary": False})
             server.is_primary = req.is_primary
+        # v2.0
+        if req.os_type is not None:
+            server.os_type = req.os_type
+        if req.ssh_user is not None:
+            server.ssh_user = req.ssh_user
+        if req.ssh_port is not None:
+            server.ssh_port = req.ssh_port
+        if req.ssh_key is not None and req.ssh_key.strip():
+            server.ssh_key = encrypt_password(req.ssh_key.strip())
 
         db.commit()
         return {"success": True, "message": f"Servidor '{server.name}' actualizado."}
@@ -174,15 +208,25 @@ def delete_server(server_id: int):
 
 @router.post("/{server_id}/test")
 def test_server_connection(server_id: int):
-    """Prueba la conexión a un servidor (LDAP para AD, WMI para Archivos/Impresoras)."""
+    """Prueba la conexión a un servidor guardado (LDAP / WMI / SSH)."""
     db = SessionLocal()
     try:
         server_cfg = db.query(ServerConfig).filter(ServerConfig.id == server_id).first()
         if not server_cfg:
             raise HTTPException(status_code=404, detail="Servidor no encontrado.")
 
+        os_type = getattr(server_cfg, "os_type", "windows") or "windows"
+
+        if os_type == "linux":
+            return _test_ssh_connection(
+                ip=server_cfg.ip,
+                port=getattr(server_cfg, "ssh_port", 22) or 22,
+                username=server_cfg.ssh_user or server_cfg.admin_user,
+                password=decrypt_password(server_cfg.admin_pass),
+                ssh_key_encrypted=getattr(server_cfg, "ssh_key", None),
+            )
+
         password = decrypt_password(server_cfg.admin_pass)
-        
         if server_cfg.server_type in ["da", "ha"]:
             from ldap3 import Server, Connection, ALL
             server = Server(server_cfg.ip, get_info=ALL)
@@ -192,8 +236,7 @@ def test_server_connection(server_id: int):
             server_name = str(info.other.get('dnsHostName', [''])[0]) if info and info.other else server_cfg.ip
             return {"success": True, "message": f"Conexión LDAP exitosa a {server_cfg.ip}", "server_name": server_name}
         else:
-            import wmi
-            import pythoncom
+            import wmi, pythoncom
             pythoncom.CoInitialize()
             try:
                 c = wmi.WMI(computer=server_cfg.ip, user=server_cfg.admin_user, password=password)
@@ -202,7 +245,6 @@ def test_server_connection(server_id: int):
                     c = wmi.WMI()
                 else:
                     raise
-            # Prueba simple para validar credenciales y WMI
             os_info = c.Win32_OperatingSystem()[0]
             return {"success": True, "message": f"Conexión WMI exitosa a {os_info.CSName}"}
             
@@ -218,6 +260,18 @@ def test_server_connection(server_id: int):
 def test_new_connection(req: ServerCreateRequest):
     """Prueba la conexión a un servidor ANTES de guardarlo."""
     try:
+        os_type = req.os_type or "windows"
+
+        if os_type == "linux":
+            return _test_ssh_connection(
+                ip=req.ip,
+                port=req.ssh_port or 22,
+                username=req.ssh_user or req.admin_user,
+                password=req.admin_pass,
+                ssh_key_encrypted=None,  # Llave en texto plano (aún no guardada)
+                ssh_key_plain=req.ssh_key if req.ssh_key and req.ssh_key.strip() else None,
+            )
+
         if req.server_type in ["da", "ha"]:
             from ldap3 import Server, Connection, ALL
             server = Server(req.ip, get_info=ALL)
@@ -225,8 +279,7 @@ def test_new_connection(req: ServerCreateRequest):
             conn.unbind()
             return {"success": True, "message": f"Conexión LDAP exitosa a {req.ip}"}
         else:
-            import wmi
-            import pythoncom
+            import wmi, pythoncom
             pythoncom.CoInitialize()
             try:
                 c = wmi.WMI(computer=req.ip, user=req.admin_user, password=req.admin_pass)
@@ -235,8 +288,91 @@ def test_new_connection(req: ServerCreateRequest):
                     c = wmi.WMI()
                 else:
                     raise
-            # Prueba simple para validar credenciales y WMI
             os_info = c.Win32_OperatingSystem()[0]
             return {"success": True, "message": f"Conexión WMI exitosa a {os_info.CSName}"}
     except Exception as e:
         return {"success": False, "message": f"Error de conexión: {str(e)}"}
+
+
+@router.post("/generate-ssh-key")
+def generate_ssh_key():
+    """Genera un par de llaves SSH (RSA) dinámicamente."""
+    try:
+        import paramiko
+        import io
+        key = paramiko.RSAKey.generate(bits=2048)
+        out = io.StringIO()
+        key.write_private_key(out)
+        private_key_str = out.getvalue()
+        public_key_str = f"{key.get_name()} {key.get_base64()} it-admin-platform"
+        return {"success": True, "private_key": private_key_str, "public_key": public_key_str}
+    except Exception as e:
+        return {"success": False, "message": f"Error generando llave: {str(e)}"}
+
+
+# ══════════════════════════════════════════════════════════════
+# HELPERS INTERNOS
+# ══════════════════════════════════════════════════════════════
+
+def _load_private_key(key_str: str):
+    import io
+    import paramiko
+    key_str = key_str.strip()
+    if key_str.startswith("ssh-rsa ") or key_str.startswith("ssh-ed25519 ") or key_str.startswith("ecdsa-sha2-nistp256 "):
+        raise ValueError("Parece que ingresaste una llave PÚBLICA (ssh-ed25519 / ssh-rsa). Debes ingresar tu llave PRIVADA (empieza con -----BEGIN...).")
+    
+    for cls in [paramiko.RSAKey, paramiko.Ed25519Key, paramiko.ECDSAKey]:
+        try:
+            return cls.from_private_key(io.StringIO(key_str))
+        except paramiko.ssh_exception.SSHException:
+            pass
+    raise ValueError("not a valid private key file o formato no soportado")
+
+def _test_ssh_connection(
+    ip: str,
+    port: int,
+    username: str,
+    password: str,
+    ssh_key_encrypted: Optional[str] = None,
+    ssh_key_plain: Optional[str] = None,
+) -> dict:
+    """Prueba conexión SSH y ejecuta 'hostname' para validar credenciales."""
+    import io
+    import paramiko
+
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+    connect_kwargs = {
+        "hostname": ip,
+        "port": port,
+        "username": username,
+        "timeout": 10,
+        "banner_timeout": 10,
+        "auth_timeout": 10,
+        "allow_agent": False,
+        "look_for_keys": False,
+    }
+
+    if ssh_key_encrypted:
+        decrypted = decrypt_password(ssh_key_encrypted)
+        connect_kwargs["pkey"] = _load_private_key(decrypted)
+    elif ssh_key_plain:
+        connect_kwargs["pkey"] = _load_private_key(ssh_key_plain)
+    elif password:
+        connect_kwargs["password"] = password
+
+    try:
+        client.connect(**connect_kwargs)
+        stdin, stdout, stderr = client.exec_command("hostname", timeout=5)
+        hostname = stdout.read().decode("utf-8", errors="replace").strip()
+        client.close()
+        return {"success": True, "message": f"Conexión SSH exitosa — hostname: {hostname or ip}"}
+    except paramiko.AuthenticationException:
+        return {"success": False, "message": "Autenticación SSH fallida. Verifica usuario y contraseña/llave."}
+    except paramiko.ssh_exception.NoValidConnectionsError:
+        return {"success": False, "message": f"No se pudo conectar a {ip}:{port}. ¿El servidor está activo?"}
+    except Exception as e:
+        return {"success": False, "message": f"Error SSH: {str(e)[:150]}"}
+    finally:
+        client.close()

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text
 from datetime import datetime
 from app.core.database import Base
 
@@ -17,3 +17,9 @@ class ServerConfig(Base):
     is_primary = Column(Boolean, default=False)              # ¿Es el servidor principal para login?
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # ── v2.0: Soporte Multi-OS ─────────────────────────────────────────────────
+    os_type = Column(String, nullable=False, default="windows")  # "windows" | "linux"
+    ssh_user = Column(String, nullable=True)                 # Usuario SSH (solo Linux)
+    ssh_key = Column(Text, nullable=True)                    # Llave privada PEM (encriptada, opcional)
+    ssh_port = Column(Integer, nullable=False, default=22)   # Puerto SSH (default 22)

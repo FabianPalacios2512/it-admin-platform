@@ -4,6 +4,7 @@ import time
 import json
 import uuid
 import concurrent.futures
+import logging
 from app.models.server import ServerConfig
 from app.core.encryption import decrypt_password
 from app.core.database import SessionLocal
@@ -11,16 +12,132 @@ from app.core.database import SessionLocal
 import tempfile
 import os
 
+logger = logging.getLogger(__name__)
+
 _server_stats_cache = {}
 
+# ── Timeout máximo por servidor en el pool de threads (segundos) ─────────────
+_WORKER_TIMEOUT = 30
+
+
 def get_server_stats(server: ServerConfig):
+    """Entry point unificado: enruta al servicio correcto según os_type."""
     try:
-        return _get_server_stats_internal(server)
+        os_type = getattr(server, "os_type", "windows") or "windows"
+        if os_type == "linux":
+            from app.services.linux_monitoring_service import get_linux_stats
+            return get_linux_stats(server)
+        else:
+            return _get_server_stats_internal(server)
     except Exception as e:
         return {"status": "error", "error": f"Internal Error: {e}"}
 
+
+def get_top_processes(server: ServerConfig) -> list:
+    """Obtiene el Top 5 de procesos bajo demanda según el OS del servidor."""
+    try:
+        os_type = getattr(server, "os_type", "windows") or "windows"
+        if os_type == "linux":
+            from app.services.linux_monitoring_service import get_linux_top_processes
+            return get_linux_top_processes(server)
+        else:
+            return _get_windows_top_processes(server)
+    except Exception as e:
+        logger.warning(f"[Top Processes] Error en {server.ip}: {e}")
+        return []
+
+
+def _get_windows_top_processes(server: ServerConfig) -> list:
+    """Obtiene el Top 5 de procesos en un servidor Windows via PowerShell remoto."""
+    ip = server.ip
+    admin_user = server.admin_user
+    admin_pass = decrypt_password(server.admin_pass)
+
+    domain = server.domain
+    if domain and "\\" not in admin_user and "@" not in admin_user:
+        admin_user = f"{domain}\\{admin_user}"
+
+    safe_pass = admin_pass.replace("'", "''")
+
+    # Script PowerShell que extrae Top 5 por CPU
+    ps_script = """
+    $procs = Get-Process | Where-Object {$_.CPU -gt 0} | Sort-Object CPU -Descending | Select-Object -First 5
+    $result = $procs | ForEach-Object {
+        $cpuPercent = [math]::Round($_.CPU / [math]::Max(1, ((Get-Date) - $_.StartTime).TotalSeconds) * 100, 1)
+        $memMb = [math]::Round($_.WorkingSet64 / 1MB, 1)
+        [PSCustomObject]@{
+            pid = $_.Id
+            name = $_.ProcessName
+            cpu_percent = $cpuPercent
+            mem_percent = $memMb
+        }
+    }
+    $result | ConvertTo-Json -Compress
+    """
+
+    import socket
+
+    def is_local_ip(target_ip):
+        if target_ip in ["127.0.0.1", "localhost", "::1"]:
+            return True
+        try:
+            return target_ip in [i[4][0] for i in socket.getaddrinfo(socket.gethostname(), None)]
+        except Exception:
+            return False
+
+    try:
+        if is_local_ip(ip):
+            res = subprocess.run(
+                ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_script],
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15
+            )
+            raw = res.stdout.strip()
+        else:
+            target_smb = f"\\\\{ip}\\IPC$"
+            subprocess.run(["net", "use", target_smb, "/delete", "/y"], capture_output=True)
+            subprocess.run(
+                ["net", "use", target_smb, admin_pass, f"/user:{admin_user}"],
+                capture_output=True, text=True, timeout=10
+            )
+            wmi_script = f"""
+            $password = ConvertTo-SecureString '{safe_pass}' -AsPlainText -Force
+            $cred = New-Object System.Management.Automation.PSCredential ('{admin_user}', $password)
+            Invoke-Command -ComputerName '{ip}' -Credential $cred -ScriptBlock {{
+                {ps_script}
+            }}
+            """
+            res = subprocess.run(
+                ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "-"],
+                input=wmi_script, capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=20
+            )
+            raw = res.stdout.strip()
+
+        if not raw:
+            return []
+
+        data = json.loads(raw)
+        # json.loads puede retornar dict si solo hay un proceso
+        if isinstance(data, dict):
+            data = [data]
+
+        return [
+            {
+                "pid": int(item.get("pid", 0)),
+                "name": str(item.get("name", ""))[:30],
+                "cpu_percent": float(item.get("cpu_percent", 0)),
+                "mem_percent": float(item.get("mem_percent", 0)),
+            }
+            for item in data
+        ][:5]
+
+    except Exception as e:
+        logger.warning(f"[Windows Processes] Error en {ip}: {e}")
+        return []
+
+
 def _get_server_stats_internal(server: ServerConfig):
-    """Obtiene métricas de CPU, RAM y Disco del servidor usando WMI nativo a través del túnel SMB."""
+    """Obtiene métricas de CPU, RAM y Disco del servidor Windows usando WMI nativo a través del túnel SMB."""
     ip = server.ip
     domain = server.domain
     admin_user = server.admin_user
@@ -153,10 +270,10 @@ def sync_monitoring_stats():
         # Run sequentially or with a ThreadPoolExecutor
         with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
             future_to_srv = {executor.submit(get_server_stats, srv): srv for srv in servers}
-            for future in concurrent.futures.as_completed(future_to_srv):
+            for future in concurrent.futures.as_completed(future_to_srv, timeout=_WORKER_TIMEOUT * len(servers) + 10):
                 srv = future_to_srv[future]
                 try:
-                    stats = future.result()
+                    stats = future.result(timeout=_WORKER_TIMEOUT)
                     
                     old_data = _server_stats_cache.get(srv.id, {})
                     old_hist = old_data.get("history", {"cpu": [0]*20, "ram": [0]*20})
@@ -179,12 +296,20 @@ def sync_monitoring_stats():
                         "id": srv.id,
                         "name": srv.name,
                         "type": srv.server_type,
+                        "os_type": getattr(srv, "os_type", "windows") or "windows",
                         "ip": srv.ip,
                         "stats": stats,
                         "history": history
                     }
+                except concurrent.futures.TimeoutError:
+                    # Este servidor tardó demasiado — no bloquea a los demás
+                    old_data = _server_stats_cache.get(srv.id, {})
+                    new_cache[srv.id] = {
+                        **old_data,
+                        "stats": {"status": "timeout", "error": "Worker timeout"},
+                    }
                 except Exception as e:
-                    pass
+                    logger.warning(f"[Sync] Error procesando {srv.name}: {e}")
                     
         _server_stats_cache = new_cache
     finally:

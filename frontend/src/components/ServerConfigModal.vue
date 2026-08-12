@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 
 const emit = defineEmits(['close'])
 const API_BASE = '/api/v1'
@@ -17,6 +17,9 @@ const showForm = ref(false)
 const testingConnection = ref(false)
 const saving = ref(false)
 const testResult = ref(null)
+const isGeneratingKey = ref(false)
+const generatedPublicKey = ref(null)
+const authMethod = ref('password') // 'password' o 'key'
 
 const formData = ref({
   id: null,
@@ -27,8 +30,16 @@ const formData = ref({
   admin_user: '',
   admin_pass: '',
   allowed_groups: 'SG_Admins_SoporteTI',
-  is_primary: false
+  is_primary: false,
+  // v2.0 Multi-OS
+  os_type: 'windows',
+  ssh_user: '',
+  ssh_key: '',
+  ssh_port: 22,
 })
+
+// Computed: ¿El servidor actual es Linux?
+const isLinux = computed(() => formData.value.os_type === 'linux')
 
 const fetchServers = async () => {
   loading.value = true
@@ -47,6 +58,7 @@ const openForm = (server = null) => {
   testResult.value = null
   error.value = ''
   successMsg.value = ''
+  authMethod.value = 'password'
   
   if (server) {
     formData.value = {
@@ -58,8 +70,14 @@ const openForm = (server = null) => {
       admin_user: server.admin_user,
       admin_pass: '',
       allowed_groups: server.allowed_groups,
-      is_primary: server.is_primary
+      is_primary: server.is_primary,
+      // v2.0
+      os_type: server.os_type || 'windows',
+      ssh_user: server.ssh_user || '',
+      ssh_key: '',
+      ssh_port: server.ssh_port || 22,
     }
+    authMethod.value = server.ssh_key ? 'key' : 'password'
   } else {
     formData.value = {
       id: null,
@@ -70,15 +88,46 @@ const openForm = (server = null) => {
       admin_user: 'code\\administrador',
       admin_pass: '',
       allowed_groups: 'SG_Admins_SoporteTI',
-      is_primary: servers.value.length === 0
+      is_primary: servers.value.length === 0,
+      // v2.0
+      os_type: 'windows',
+      ssh_user: '',
+      ssh_key: '',
+      ssh_port: 22,
     }
   }
+  generatedPublicKey.value = null
   showForm.value = true
 }
 
+// Cambia OS type y limpia campos del otro OS
+const setOsType = (type) => {
+  formData.value.os_type = type
+  if (type === 'windows') {
+    formData.value.server_type = 'da' // Default Windows
+    formData.value.ssh_user = ''
+    formData.value.ssh_key = ''
+    formData.value.ssh_port = 22
+  } else {
+    formData.value.server_type = 'generic' // Default Linux
+    formData.value.domain = ''
+    formData.value.admin_user = ''
+  }
+  testResult.value = null
+  generatedPublicKey.value = null
+}
+
 const testConnection = async () => {
-  if (!formData.value.ip || !formData.value.admin_user) {
-    testResult.value = { success: false, message: 'Falta IP o Usuario.' }
+  if (!formData.value.ip) {
+    testResult.value = { success: false, message: 'Falta IP o Hostname.' }
+    return
+  }
+  if (isLinux.value && !formData.value.ssh_user) {
+    testResult.value = { success: false, message: 'Falta el Usuario SSH.' }
+    return
+  }
+  if (!isLinux.value && !formData.value.admin_user) {
+    testResult.value = { success: false, message: 'Falta el Usuario Administrador.' }
     return
   }
   
@@ -103,6 +152,41 @@ const testConnection = async () => {
     testResult.value = { success: false, message: 'Error de red.' }
   } finally {
     testingConnection.value = false
+  }
+}
+
+// -----------------------------------------------------
+// GENERADOR DE LLAVES SSH
+// -----------------------------------------------------
+const generateSshKey = async () => {
+  isGeneratingKey.value = true
+  testResult.value = null
+  generatedPublicKey.value = null
+  
+  try {
+    const res = await fetch(`${API_BASE}/servers/generate-ssh-key`, {
+      method: 'POST'
+    })
+    const data = await res.json()
+    if (data.success) {
+      formData.value.ssh_key = data.private_key
+      generatedPublicKey.value = data.public_key
+    } else {
+      alert("Error del servidor al generar llave: " + data.message)
+    }
+  } catch (e) {
+    alert("Error de red al intentar generar la llave.")
+  } finally {
+    isGeneratingKey.value = false
+  }
+}
+
+const copyPublicKey = async () => {
+  if (!generatedPublicKey.value) return
+  try {
+    await navigator.clipboard.writeText(generatedPublicKey.value)
+  } catch (err) {
+    console.error("Error al copiar: ", err)
   }
 }
 
@@ -328,6 +412,7 @@ onMounted(() => {
             {{ successMsg }}
           </div>
 
+          <!-- LISTA de servidores -->
           <div v-if="!showForm">
             <div class="flex justify-end mb-4">
               <button @click="openForm()" class="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded-sm text-[12px] font-medium transition-colors">
@@ -348,8 +433,10 @@ onMounted(() => {
             <div v-else class="space-y-3">
               <div v-for="server in servers" :key="server.id" class="bg-white border border-slate-200 rounded-sm p-4 flex items-center justify-between shadow-sm hover:border-slate-300 transition-colors">
                 <div class="flex items-center gap-4">
-                  <div :class="['w-10 h-10 rounded-sm flex items-center justify-center shrink-0', server.server_type === 'da' ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-50 text-slate-600']">
-                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <!-- Icono OS -->
+                  <div :class="['w-10 h-10 rounded-sm flex items-center justify-center shrink-0 text-lg', server.os_type === 'linux' ? 'bg-slate-100' : (server.server_type === 'da' ? 'bg-indigo-50' : 'bg-slate-50')]">
+                    <span v-if="server.os_type === 'linux'">🐧</span>
+                    <svg v-else class="w-5 h-5" :class="server.server_type === 'da' ? 'text-indigo-600' : 'text-slate-600'" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
                     </svg>
                   </div>
@@ -357,11 +444,16 @@ onMounted(() => {
                     <div class="flex items-center gap-2">
                       <h3 class="text-[13px] font-bold text-slate-800">{{ server.name }}</h3>
                       <span v-if="server.is_primary" class="bg-emerald-100 text-emerald-800 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm">Primario</span>
+                      <!-- Badge OS -->
+                      <span :class="['text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm', server.os_type === 'linux' ? 'bg-slate-100 text-slate-600' : 'bg-slate-100 text-slate-500']">
+                        {{ server.os_type === 'linux' ? 'Linux' : 'Windows' }}
+                      </span>
                     </div>
                     <p class="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
                       <span class="font-medium text-slate-600">{{ server.server_type_label }}</span>
                       <span>•</span>
                       <span class="font-mono">{{ server.ip }}</span>
+                      <span v-if="server.os_type === 'linux'" class="font-mono text-slate-400">:{{ server.ssh_port || 22 }}</span>
                     </p>
                   </div>
                 </div>
@@ -377,6 +469,7 @@ onMounted(() => {
             </div>
           </div>
 
+          <!-- FORMULARIO: Nuevo / Editar Servidor -->
           <div v-else class="bg-white border border-slate-200 p-5 rounded-sm">
             <div class="flex items-center gap-3 mb-5 pb-3 border-b border-slate-100">
               <button @click="showForm = false" class="text-slate-400 hover:text-slate-700">
@@ -389,49 +482,141 @@ onMounted(() => {
               {{ error }}
             </div>
 
+            <!-- ── SELECTOR DE OS ───────────────────────────────────────── -->
+            <div class="mb-5">
+              <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Sistema Operativo</label>
+              <div class="flex gap-2">
+                <button
+                  type="button"
+                  @click="setOsType('windows')"
+                  :class="['flex items-center gap-2 px-4 py-2 rounded-sm border text-[12px] font-semibold transition-all', formData.os_type === 'windows' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400']"
+                >
+                  <span>🪟</span> Windows
+                </button>
+                <button
+                  type="button"
+                  @click="setOsType('linux')"
+                  :class="['flex items-center gap-2 px-4 py-2 rounded-sm border text-[12px] font-semibold transition-all', formData.os_type === 'linux' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400']"
+                >
+                  <span>🐧</span> Linux (SSH)
+                </button>
+              </div>
+            </div>
+
             <div class="grid grid-cols-2 gap-4">
               <div>
                 <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">Nombre del Servidor</label>
-                <input v-model="formData.name" type="text" placeholder="Ej: DC-PRINCIPAL" class="w-full border border-slate-300 rounded-sm px-3 py-1.5 text-[12px] focus:border-slate-800 outline-none"/>
+                <input v-model="formData.name" type="text" placeholder="Ej: SRV-UBUNTU-01" class="w-full border border-slate-300 rounded-sm px-3 py-1.5 text-[12px] focus:border-slate-800 outline-none"/>
               </div>
               
               <div>
                 <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">Tipo</label>
                 <select v-model="formData.server_type" class="w-full border border-slate-300 rounded-sm px-3 py-1.5 text-[12px] focus:border-slate-800 outline-none bg-white">
-                  <option value="da">Directorio Activo</option>
-                  <option value="ha">Alta Disponibilidad (HA)</option>
-                  <option value="files">Servidor de Archivos</option>
-                  <option value="printers">Servidor de Impresoras</option>
-                  <option value="app">Servidor de Aplicaciones</option>
-                  <option value="rds">Servidor RDS / Escritorio Remoto</option>
+                  <template v-if="!isLinux">
+                    <option value="da">Directorio Activo</option>
+                    <option value="ha">Alta Disponibilidad (HA)</option>
+                    <option value="files">Servidor de Archivos</option>
+                    <option value="printers">Servidor de Impresoras</option>
+                    <option value="app">Servidor de Aplicaciones</option>
+                    <option value="rds">Servidor RDS / Escritorio Remoto</option>
+                  </template>
+                  <template v-else>
+                    <option value="pbx">PBX / Telefonía (Issabel)</option>
+                    <option value="web">Servidor Web</option>
+                    <option value="db">Base de Datos</option>
+                    <option value="docker">Docker / Contenedores</option>
+                    <option value="generic">Genérico</option>
+                  </template>
                 </select>
               </div>
 
+              <!-- IP + Puerto (para Linux muestra el puerto SSH) -->
               <div>
                 <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">IP o Hostname</label>
                 <input v-model="formData.ip" type="text" placeholder="Ej: 192.168.20.100" class="w-full border border-slate-300 rounded-sm px-3 py-1.5 text-[12px] focus:border-slate-800 outline-none font-mono"/>
               </div>
 
-              <div v-if="formData.server_type === 'da' || formData.server_type === 'ha'">
+              <div v-if="isLinux">
+                <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">Puerto SSH</label>
+                <input v-model.number="formData.ssh_port" type="number" min="1" max="65535" placeholder="22" class="w-full border border-slate-300 rounded-sm px-3 py-1.5 text-[12px] focus:border-slate-800 outline-none font-mono"/>
+              </div>
+              <div v-else-if="formData.server_type === 'da' || formData.server_type === 'ha'">
                 <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">Dominio</label>
                 <input v-model="formData.domain" type="text" placeholder="Ej: code.local" class="w-full border border-slate-300 rounded-sm px-3 py-1.5 text-[12px] focus:border-slate-800 outline-none"/>
               </div>
 
+              <!-- CREDENCIALES SEPARADAS POR OS -->
               <div class="col-span-2 pt-2 pb-1">
-                <h4 class="text-[11px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1">Credenciales de Servicio</h4>
+                <h4 class="text-[11px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1">
+                  {{ isLinux ? 'Credenciales SSH' : 'Credenciales de Servicio' }}
+                </h4>
               </div>
 
-              <div>
-                <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">Usuario Administrador</label>
-                <input v-model="formData.admin_user" type="text" placeholder="Ej: code\administrador" class="w-full border border-slate-300 rounded-sm px-3 py-1.5 text-[12px] focus:border-slate-800 outline-none font-mono"/>
-              </div>
+              <!-- WINDOWS: Usuario + Contraseña -->
+              <template v-if="!isLinux">
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">Usuario Administrador</label>
+                  <input v-model="formData.admin_user" type="text" placeholder="Ej: code\administrador" class="w-full border border-slate-300 rounded-sm px-3 py-1.5 text-[12px] focus:border-slate-800 outline-none font-mono"/>
+                </div>
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">Contraseña</label>
+                  <input v-model="formData.admin_pass" type="password" :placeholder="formData.id ? 'Dejar en blanco para no cambiar' : 'Requerido'" class="w-full border border-slate-300 rounded-sm px-3 py-1.5 text-[12px] focus:border-slate-800 outline-none"/>
+                </div>
+              </template>
 
-              <div>
-                <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">Contraseña</label>
-                <input v-model="formData.admin_pass" type="password" :placeholder="formData.id ? 'Dejar en blanco para no cambiar' : 'Requerido'" class="w-full border border-slate-300 rounded-sm px-3 py-1.5 text-[12px] focus:border-slate-800 outline-none"/>
-              </div>
+              <!-- LINUX: Usuario SSH + Contraseña o Llave -->
+              <template v-else>
+                <div class="col-span-2">
+                  <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">Usuario SSH</label>
+                  <input v-model="formData.ssh_user" type="text" placeholder="Ej: root, ubuntu, admin" class="w-full border border-slate-300 rounded-sm px-3 py-1.5 text-[12px] focus:border-slate-800 outline-none font-mono"/>
+                </div>
+                
+                <div class="col-span-2 mt-1">
+                  <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Método de Autenticación</label>
+                  <div class="flex gap-6 p-2.5 bg-slate-50 border border-slate-200 rounded-sm">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input type="radio" v-model="authMethod" value="password" class="w-3.5 h-3.5 text-slate-800 border-slate-300 focus:ring-slate-800" />
+                      <span class="text-[12px] text-slate-700 font-medium">Autenticar con Contraseña</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input type="radio" v-model="authMethod" value="key" class="w-3.5 h-3.5 text-slate-800 border-slate-300 focus:ring-slate-800" />
+                      <span class="text-[12px] text-slate-700 font-medium">Autenticar con Llave SSH</span>
+                    </label>
+                  </div>
+                </div>
 
-              <div v-if="formData.server_type === 'da'" class="col-span-2">
+                <div v-if="authMethod === 'password'" class="col-span-2 mt-1">
+                  <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">Contraseña SSH</label>
+                  <input v-model="formData.admin_pass" type="password" :placeholder="formData.id ? 'Dejar en blanco para no cambiar' : 'Requerida'" class="w-full border border-slate-300 rounded-sm px-3 py-1.5 text-[12px] focus:border-slate-800 outline-none"/>
+                </div>
+                
+                <div v-else class="col-span-2 mt-1">
+                  <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5 flex justify-between items-center">
+                    Llave Privada SSH
+                  </label>
+                  <textarea v-model="formData.ssh_key" rows="6" class="w-full border border-slate-300 rounded-sm px-3 py-2 text-[11px] font-mono focus:border-slate-800 outline-none" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;..."></textarea>
+                  
+                  <div class="flex justify-end mt-1">
+                    <button @click.prevent="generateSshKey" :disabled="isGeneratingKey" class="text-[10px] text-blue-600 hover:text-blue-800 underline transition-colors disabled:opacity-50">
+                      {{ isGeneratingKey ? 'Generando llaves de forma segura...' : '¿No tienes una llave? Generar nueva automáticamente' }}
+                    </button>
+                  </div>
+
+                  <div v-if="generatedPublicKey" class="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-sm">
+                    <p class="text-[11px] font-bold text-blue-800 mb-1">¡Llave generada con éxito!</p>
+                    <p class="text-[11px] text-blue-700 mb-2 leading-relaxed">
+                      Hemos inyectado tu nueva <b>Llave Privada</b> arriba. Ahora, copia esta <b>Llave Pública</b> y agrégala a las claves SSH en la consola de tu proveedor antes de probar la conexión:
+                    </p>
+                    <div class="flex items-center gap-2">
+                      <input readonly :value="generatedPublicKey" class="w-full text-[10px] p-1.5 bg-white border border-blue-200 rounded-sm font-mono text-slate-600 outline-none select-all"/>
+                      <button @click.prevent="copyPublicKey" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] rounded-sm transition-colors whitespace-nowrap">Copiar</button>
+                    </div>
+                  </div>
+                </div>
+              </template>
+
+              <!-- Grupos permitidos (solo para tipo DA en Windows) -->
+              <div v-if="!isLinux && formData.server_type === 'da'" class="col-span-2 mt-2">
                 <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">Grupos permitidos para Login</label>
                 <input v-model="formData.allowed_groups" type="text" placeholder="Ej: SG_Admins_SoporteTI" class="w-full border border-slate-300 rounded-sm px-3 py-1.5 text-[12px] focus:border-slate-800 outline-none"/>
               </div>
@@ -449,7 +634,7 @@ onMounted(() => {
               <div class="flex items-center gap-3">
                 <button @click="testConnection" :disabled="testingConnection" type="button" class="text-[11px] font-semibold uppercase tracking-wider text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-4 py-2 rounded-sm transition-colors disabled:opacity-50 flex items-center gap-2">
                   <span v-if="testingConnection" class="w-3 h-3 border-2 border-slate-400 border-t-slate-600 rounded-full animate-spin"></span>
-                  Probar Conexión
+                  <span>{{ isLinux ? 'Probar SSH' : 'Probar Conexión' }}</span>
                 </button>
                 <span v-if="testResult" :class="['text-[11px] font-medium flex items-center gap-1.5', testResult.success ? 'text-emerald-600' : 'text-red-600']">
                   <span :class="['w-2 h-2 rounded-full', testResult.success ? 'bg-emerald-500' : 'bg-red-500']"></span>
@@ -460,6 +645,7 @@ onMounted(() => {
               <div class="flex gap-2">
                 <button @click="showForm = false" type="button" class="text-[12px] font-medium text-slate-600 hover:bg-slate-100 px-4 py-2 rounded-sm transition-colors">Cancelar</button>
                 <button @click="saveServer" :disabled="saving" type="button" class="text-[12px] font-medium text-white bg-slate-800 hover:bg-slate-900 px-6 py-2 rounded-sm flex items-center gap-2 transition-colors disabled:opacity-50">
+                  <span v-if="saving" class="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
                   Guardar Servidor
                 </button>
               </div>
@@ -514,7 +700,7 @@ onMounted(() => {
             </form>
           </div>
 
-          <!-- Estado: Desbloqueado y Configurando Entra ID -->
+          <!-- Estado: Desbloqueado -->
           <div v-else-if="envSetupState === 'unlocked'" class="bg-white border border-emerald-200 p-5 rounded-sm relative shadow-sm">
             <div class="absolute top-4 right-4 bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-sm flex items-center gap-1.5">
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Bóveda Abierta
@@ -528,12 +714,10 @@ onMounted(() => {
                 <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">Entra Tenant ID</label>
                 <input v-model="envData.ENTRA_TENANT_ID" type="text" placeholder="Ej. b9af4dc2-f021-..." class="w-full border border-slate-300 rounded-sm px-3 py-2 text-[12px] focus:border-slate-800 outline-none font-mono"/>
               </div>
-
               <div>
                 <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">Entra Client ID (Application ID)</label>
                 <input v-model="envData.ENTRA_CLIENT_ID" type="text" placeholder="Ej. e6b5baa0-1fc9-..." class="w-full border border-slate-300 rounded-sm px-3 py-2 text-[12px] focus:border-slate-800 outline-none font-mono"/>
               </div>
-
               <div>
                 <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">Entra Client Secret</label>
                 <div class="relative">

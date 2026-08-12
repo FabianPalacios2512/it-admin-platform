@@ -12,3 +12,4 @@ cryptography
 websockets
 pywinpty
 google-genai
+paramiko
