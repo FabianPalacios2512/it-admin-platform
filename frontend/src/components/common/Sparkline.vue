@@ -1,19 +1,6 @@
-﻿<template>
+<template>
   <div class="relative w-full h-full" ref="container">
     <svg class="w-full h-full overflow-visible" preserveAspectRatio="none">
-      <defs>
-        <linearGradient :id="gradientId" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" :stop-color="color" stop-opacity="0.4" />
-          <stop offset="100%" :stop-color="color" stop-opacity="0.0" />
-        </linearGradient>
-      </defs>
-      
-      <!-- Area Fill -->
-      <polygon 
-        :points="areaPoints" 
-        :fill="`url(#${gradientId})`"
-        class="transition-all duration-500 ease-linear"
-      />
       
       <!-- Line Stroke -->
       <polyline 
@@ -50,9 +37,6 @@ const props = defineProps({
     default: 100
   }
 })
-
-const gradientId = computed(() => 'sparkline-grad-' + Math.random().toString(36).substring(2, 9))
-
 const container = ref(null)
 const width = ref(200) // fallback
 const height = ref(50) // fallback
@@ -94,11 +78,5 @@ const linePoints = computed(() => {
     const y = height.value - ((clampedVal - props.min) / rangeY) * height.value
     return `${x},${y}`
   }).join(' ')
-})
-
-const areaPoints = computed(() => {
-  const pts = linePoints.value
-  if (!pts) return ''
-  return `${pts} ${width.value},${height.value} 0,${height.value}`
 })
 </script>

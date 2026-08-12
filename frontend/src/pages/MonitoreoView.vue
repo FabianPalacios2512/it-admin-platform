@@ -17,8 +17,13 @@ const lastUpdate = ref('')
 let pollInterval = null
 
 // ── PROCESOS (Modal & Popover) ──────────────────────────────────────────────
-const processesCache = ref({})           // Para el popover rápido
+const processesCache = ref({})           // Caché de la última petición
+const processHistoryCache = ref({})      // Caché temporal para dibujar líneas de tiempo
 const selectedServer = ref(null)
+
+// Mock Data para el Modal GCP-style
+const mockCpuSeries = ref([])
+const mockRamSeries = ref([])
 
 // Popover flotante
 const popoverData = ref({
@@ -29,71 +34,106 @@ const popoverData = ref({
   type: 'cpu'
 })
 
-// Mock Data para el Modal GCP-style
-const mockCpuSeries = ref([])
-const mockRamSeries = ref([])
-
 function openModal(srv) {
   if (!srv || srv.stats.status !== 'online') return
   selectedServer.value = srv
-  generateMockProcessData()
+  fetchProcesses(srv)
 }
 
 function closeModal() {
   selectedServer.value = null
 }
 
-function generateMockProcessData() {
-  const processes = ['node', 'mysqld', 'nginx', 'python3', 'docker']
-  const now = Date.now()
-  const points = 30 // 30 minutos
-  
-  const cpu = []
-  const ram = []
-  
-  processes.forEach((name, i) => {
-    const cpuData = []
-    const ramData = []
-    
-    let baseCpu = 2 + (i * 8)
-    let baseRam = 150 + (i * 200)
-    
-    for(let j = 0; j < points; j++) {
-      const time = now - ((points - 1 - j) * 60000)
-      
-      const cpuVal = Math.max(0.1, Math.min(100, baseCpu + ((Math.random() - 0.5) * 10)))
-      const ramVal = Math.max(50, baseRam + ((Math.random() - 0.5) * 50))
-      
-      cpuData.push([time, parseFloat(cpuVal.toFixed(1))])
-      ramData.push([time, parseFloat(ramVal.toFixed(0))])
-    }
-    
-    cpu.push({ name, data: cpuData })
-    ram.push({ name, data: ramData })
-  })
-  
-  mockCpuSeries.value = cpu
-  mockRamSeries.value = ram
-}
+// (Mock process function removed)
 
-// Fetch real para el Popover rápido
-async function fetchProcesses(srv) {
+const selectedCpuSeries = computed(() => {
+  if (!selectedServer.value) return []
+  return [{ name: 'CPU', data: selectedServer.value.history?.cpu || [] }]
+})
+
+const selectedRamSeries = computed(() => {
+  if (!selectedServer.value) return []
+  return [{ name: 'RAM', data: selectedServer.value.history?.ram || [] }]
+})
+
+// Fetch real para el Popover rápido y el Modal
+async function fetchProcesses(srv, force = false) {
   if (!srv || srv.stats.status !== 'online') return
   
   const cached = processesCache.value[srv.id]
-  if (cached && cached.data && !cached.loading) return
+  if (!force && cached && cached.data && !cached.loading) return
 
-  processesCache.value[srv.id] = { loading: true, data: null, error: null }
+  // Si estamos haciendo polling (force=true), conservamos la data anterior para evitar parpadeos visuales
+  const prevData = cached ? cached.data : null;
+  processesCache.value[srv.id] = { loading: true, data: prevData, error: null }
   try {
     const res = await authFetch(`${API_BASE}/monitoring/${srv.id}/processes`)
     const json = await res.json()
     if (json.success) {
       processesCache.value[srv.id] = { loading: false, data: json.processes, error: null }
+      
+      // Construir histórico local para gráficas multi-línea
+      if (!processHistoryCache.value[srv.id]) {
+        processHistoryCache.value[srv.id] = { cpu: {}, ram: {} }
+      }
+      const history = processHistoryCache.value[srv.id]
+      const now = Date.now()
+      
+      // TAREA 1 & TAREA 2: Agrupación por Nombre y Filtrado
+      const ignoredProcesses = ['ps', 'top', 'bash', 'awk', 'grep', 'sed', 'wmic', 'tasklist', 'htop']
+      const grouped = {}
+      
+      json.processes.forEach(p => {
+        const baseName = p.name.toLowerCase().replace('.exe', '').trim()
+        if (ignoredProcesses.includes(baseName)) return; // TAREA 2: Filtrar
+        
+        // Sumar recursos por nombre base (TAREA 1)
+        if (!grouped[baseName]) {
+          grouped[baseName] = { name: p.name, cpu: 0, ram: 0 }
+        }
+        grouped[baseName].cpu += p.cpu_percent
+        grouped[baseName].ram += p.mem_percent
+      })
+      
+      const currentNames = new Set(Object.keys(grouped))
+      
+      Object.keys(grouped).forEach(baseName => {
+        const p = grouped[baseName]
+        const displayName = p.name.substring(0, 20) // Nombre limpio sin PID
+        
+        if (!history.cpu[baseName]) {
+          history.cpu[baseName] = { name: displayName, data: Array.from({length: 19}, (_, i) => [now - (19-i)*5000, 0]) }
+        }
+        if (!history.ram[baseName]) {
+          history.ram[baseName] = { name: displayName, data: Array.from({length: 19}, (_, i) => [now - (19-i)*5000, 0]) }
+        }
+        
+        history.cpu[baseName].data.push([now, parseFloat(p.cpu.toFixed(1))])
+        history.ram[baseName].data.push([now, parseFloat(p.ram.toFixed(1))])
+      })
+      
+      // Limpiar procesos muertos y mantener ventana de 20 puntos
+      Object.keys(history.cpu).forEach(baseName => {
+        if (!currentNames.has(baseName)) {
+           history.cpu[baseName].data.push([now, 0])
+           history.ram[baseName].data.push([now, 0])
+        }
+        if (history.cpu[baseName].data.length > 20) history.cpu[baseName].data.shift()
+        if (history.ram[baseName].data.length > 20) history.ram[baseName].data.shift()
+        
+        const sumCpu = history.cpu[baseName].data.reduce((acc, curr) => acc + curr[1], 0)
+        const sumRam = history.ram[baseName].data.reduce((acc, curr) => acc + curr[1], 0)
+        if (sumCpu === 0 && sumRam === 0 && !currentNames.has(baseName)) {
+           delete history.cpu[baseName]
+           delete history.ram[baseName]
+        }
+      })
+      
     } else {
-      processesCache.value[srv.id] = { loading: false, data: [], error: json.error || 'Sin datos' }
+      processesCache.value[srv.id] = { loading: false, data: [], error: json.error || json.detail || 'Sin datos' }
     }
   } catch (e) {
-    processesCache.value[srv.id] = { loading: false, data: [], error: 'Error de red' }
+    processesCache.value[srv.id] = { loading: false, data: [], error: 'Error de red o timeout' }
   }
 }
 
@@ -128,7 +168,7 @@ watch(servers, (newServers) => {
 }, { deep: true })
 
 // ── APEXCHARTS CONFIGURATION (AREA CHARTS & LINE CHARTS) ─────────────────────
-const normalColors = ['#3b82f6', '#06b6d4', '#6366f1', '#8b5cf6', '#0ea5e9']
+const normalColors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899']
 
 const categories = Array.from({ length: 20 }, (_, i) => {
   return new Date(Date.now() - (19 - i) * 5 * 60000).getTime()
@@ -136,21 +176,17 @@ const categories = Array.from({ length: 20 }, (_, i) => {
 
 const baseChartOptions = {
   chart: {
-    type: 'area',
+    type: 'line',
     group: 'monitoreo',
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
     toolbar: { show: false },
+    zoom: { enabled: false },
     background: 'transparent',
     animations: { enabled: false }
   },
   fill: {
-    type: 'gradient',
-    gradient: {
-      shadeIntensity: 1,
-      opacityFrom: 0.4,
-      opacityTo: 0.05,
-      stops: [0, 100]
-    }
+    type: 'solid',
+    opacity: 1
   },
   dataLabels: { enabled: false },
   stroke: { curve: 'straight', width: 2 },
@@ -279,7 +315,43 @@ const ramChartOptions = ref({
   chart: { ...baseChartOptions.chart, id: 'ramChart' }
 })
 
-// Configs para los charts del Modal de Procesos (Multi-line)
+// Configs para los charts del Modal del Servidor (Single-line)
+const modalChartOptions = {
+  ...baseChartOptions,
+  chart: {
+    ...baseChartOptions.chart,
+    type: 'area',
+    animations: { enabled: true, dynamicAnimation: { speed: 500 } }
+  },
+  fill: {
+    type: 'gradient',
+    gradient: { shadeIntensity: 1, opacityFrom: 0.35, opacityTo: 0.05, stops: [0, 100] }
+  },
+  colors: ['#3b82f6'],
+  stroke: { curve: 'smooth', width: 2.5 },
+  xaxis: {
+    ...baseChartOptions.xaxis,
+    type: 'datetime',
+    categories: categories
+  }
+}
+
+const modalCpuChartOptions = ref({
+  ...modalChartOptions,
+  chart: { ...modalChartOptions.chart, id: 'modalCpuChart' },
+  yaxis: { ...modalChartOptions.yaxis, max: 100 }
+})
+
+const modalRamChartOptions = ref({
+  ...modalChartOptions,
+  colors: ['#8b5cf6'],
+  chart: { ...modalChartOptions.chart, id: 'modalRamChart' },
+  yaxis: { ...modalChartOptions.yaxis, max: 100 }
+})
+
+// (Mock process chart options removed)
+
+// Configuración base para Gráficas Multi-línea de Procesos
 const processChartOptions = {
   ...baseChartOptions,
   chart: {
@@ -287,27 +359,64 @@ const processChartOptions = {
     type: 'line',
     animations: { enabled: true, dynamicAnimation: { speed: 500 } }
   },
-  colors: ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ec4899'],
-  fill: { type: 'solid', opacity: 1 },
+  colors: ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'],
   stroke: { curve: 'smooth', width: 2.5 },
+  fill: { type: 'solid', opacity: 1 },
+  grid: {
+    ...baseChartOptions.grid,
+    padding: { top: 5, right: 10, bottom: -5, left: 10 }
+  },
+  legend: {
+    show: true,
+    position: 'bottom',
+    horizontalAlign: 'center',
+    fontSize: '10px',
+    fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+    offsetY: 5,
+    markers: { radius: 2, width: 8, height: 8, offsetX: -2 },
+    itemMargin: { horizontal: 6, vertical: 0 }
+  },
   xaxis: {
     ...baseChartOptions.xaxis,
     type: 'datetime',
-    categories: undefined // Para usar pares [timestamp, value]
+    categories: undefined, // Obligatorio quitar categories para arrays de timestamps
+    labels: {
+      ...baseChartOptions.xaxis.labels,
+      format: 'HH:mm:ss'
+    }
+  },
+  yaxis: {
+    ...baseChartOptions.yaxis,
+    max: 100 // TAREA 3: Escala fija del 0 al 100%
   }
 }
 
-const processCpuChartOptions = ref({
-  ...processChartOptions,
-  chart: { ...processChartOptions.chart, id: 'processCpuChart' },
-  yaxis: { ...processChartOptions.yaxis, max: 100 }
+const processCpuSeries = computed(() => {
+  const history = processHistoryCache.value[selectedServer.value?.id]?.cpu
+  if (!history || Object.keys(history).length === 0) return []
+  return Object.values(history)
+    .sort((a,b) => b.data[b.data.length-1][1] - a.data[a.data.length-1][1])
+    .slice(0, 5)
 })
 
-const processRamChartOptions = ref({
+const processCpuOptions = computed(() => ({
   ...processChartOptions,
-  chart: { ...processChartOptions.chart, id: 'processRamChart' },
-  yaxis: { ...processChartOptions.yaxis, max: undefined }
+  chart: { ...processChartOptions.chart, id: 'processCpuChart' }
+}))
+
+const processRamSeries = computed(() => {
+  const history = processHistoryCache.value[selectedServer.value?.id]?.ram
+  if (!history || Object.keys(history).length === 0) return []
+  return Object.values(history)
+    .sort((a,b) => b.data[b.data.length-1][1] - a.data[a.data.length-1][1])
+    .slice(0, 5)
 })
+
+const processRamOptions = computed(() => ({
+  ...processChartOptions,
+  colors: ['#8b5cf6', '#d946ef', '#f43f5e', '#f59e0b', '#10b981'],
+  chart: { ...processChartOptions.chart, id: 'processRamChart' }
+}))
 
 const isHoveringCharts = ref(false)
 const cpuSeries = ref([])
@@ -330,8 +439,7 @@ function updateChartSeries() {
   const getDynamicColor = (srv, idx, type) => {
     const history = type === 'cpu' ? srv.history?.cpu : srv.history?.ram;
     const latest = history ? history[history.length - 1] : 0;
-    if (latest >= 90) return '#dc2626'; 
-    if (latest >= 85) return '#f97316'; 
+    if (latest >= 80) return '#ef4444'; 
     return normalColors[idx % normalColors.length];
   }
 
@@ -382,6 +490,11 @@ async function fetchStats() {
       servers.value = servers.value.filter(s => incomingIds.includes(s.id))
 
       updateChartSeries()
+      
+      // Auto-refrescar los procesos si el modal de algún servidor está abierto (polling silencioso)
+      if (selectedServer.value) {
+        fetchProcesses(selectedServer.value, true)
+      }
     } else {
       error.value = data.detail || 'Error al obtener estadísticas.'
     }
@@ -403,20 +516,17 @@ function stopPolling() {
 
 // ── HELPERS DE COLOR Y FORMATO ───────────────────────────────────────────────
 function getProgressColorHex(percent) {
-  if (percent >= 90) return '#dc2626'
-  if (percent >= 85) return '#f97316'
+  if (percent >= 80) return '#ef4444'
   return '#2563eb'
 }
 
 function getProgressColorClass(percent) {
-  if (percent >= 90) return 'bg-red-600'
-  if (percent >= 85) return 'bg-orange-500'
+  if (percent >= 80) return 'bg-red-500'
   return 'bg-blue-600'
 }
 
 function getTextClass(percent) {
-  if (percent >= 90) return 'text-red-600'
-  if (percent >= 85) return 'text-orange-600'
+  if (percent >= 80) return 'text-red-500'
   return 'text-slate-700'
 }
 
@@ -438,10 +548,10 @@ const sortedServers = computed(() =>
   [...servers.value].sort((a, b) => a.name.localeCompare(b.name))
 )
 
-// Servidor en estado crítico (>= 90%)
+// Servidor en estado crítico (>= 80%)
 function isCritical(srv) {
   if (srv.stats.status !== 'online') return false
-  return srv.stats.CPU >= 90 || srv.stats.RAM_Percent >= 90
+  return srv.stats.CPU >= 80 || srv.stats.RAM_Percent >= 80
 }
 
 onMounted(() => {
@@ -490,7 +600,7 @@ onUnmounted(() => {
           <span class="text-[10px] text-slate-400 font-mono">Última hora</span>
         </div>
         <div class="px-2 pt-4 pb-2 h-64 w-full relative z-10">
-          <VueApexCharts type="area" height="100%" :options="cpuChartOptions" :series="cpuSeries" />
+          <VueApexCharts type="line" height="100%" :options="cpuChartOptions" :series="cpuSeries" />
         </div>
       </div>
       <div class="bg-white border border-slate-200 flex flex-col relative shadow-sm">
@@ -499,7 +609,7 @@ onUnmounted(() => {
           <span class="text-[10px] text-slate-400 font-mono">Top 5 Instancias</span>
         </div>
         <div class="px-2 pt-4 pb-2 h-64 w-full relative z-10">
-          <VueApexCharts type="area" height="100%" :options="ramChartOptions" :series="ramSeries" />
+          <VueApexCharts type="line" height="100%" :options="ramChartOptions" :series="ramSeries" />
         </div>
       </div>
     </div>
@@ -602,7 +712,7 @@ onUnmounted(() => {
                 <!-- Discos -->
                 <td class="py-2 px-4 align-middle whitespace-normal border-r border-slate-50">
                   <div v-if="srv.stats.status === 'online'" class="flex flex-wrap gap-2.5">
-                    <div v-for="disk in srv.stats.Disks" :key="disk.DeviceID" class="flex items-center gap-1.5 w-full max-w-[150px]">
+                    <div v-for="disk in (srv.os_type === 'linux' ? srv.stats.Disks.filter(d => d.DeviceID === '/') : srv.stats.Disks)" :key="disk.DeviceID" class="flex items-center gap-1.5 w-full max-w-[150px]">
                       <span class="font-mono text-[10px] text-slate-600 font-semibold w-3">{{ disk.DeviceID.replace(':', '') }}</span>
                       <div class="w-full bg-slate-100 h-1.5 border border-slate-200">
                         <div :class="['h-full transition-all duration-1000 ease-out', getProgressColorClass(((disk.SizeGB - disk.FreeGB) / disk.SizeGB) * 100)]" :style="`width: ${((disk.SizeGB - disk.FreeGB) / disk.SizeGB) * 100}%`"></div>
@@ -677,34 +787,35 @@ onUnmounted(() => {
     <Teleport to="body">
       <div v-if="selectedServer" class="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6">
         <!-- Backdrop -->
-        <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" @click="closeModal"></div>
+        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity" @click="closeModal"></div>
         
         <!-- Modal Content -->
-        <div class="relative bg-white w-full max-w-6xl h-[85vh] max-h-[900px] shadow-2xl flex flex-col rounded-md overflow-hidden animate-fade-in-up">
+        <div class="relative bg-slate-50 w-full max-w-6xl max-h-[95vh] shadow-2xl flex flex-col rounded-md overflow-hidden animate-fade-in-up border border-slate-200">
           
           <!-- Header GCP Style -->
-          <div class="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between shrink-0">
-            <div class="flex items-center gap-4">
+          <div class="px-4 py-2 border-b border-slate-200 bg-white flex items-center justify-between shrink-0">
+            <div class="flex items-center gap-3">
               <!-- Pulsing Dot -->
               <div class="flex justify-center items-center h-full" :title="selectedServer.stats.status">
-                <span v-if="selectedServer.stats.status === 'online'" class="relative flex h-3 w-3">
+                <span v-if="selectedServer.stats.status === 'online'" class="relative flex h-2.5 w-2.5">
                   <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                  <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                 </span>
-                <span v-else class="relative flex h-3 w-3">
-                  <span class="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                <span v-else class="relative flex h-2.5 w-2.5">
+                  <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
                 </span>
               </div>
 
               <!-- Titulo e Info -->
-              <div>
-                <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+              <div class="flex items-center gap-3">
+                <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2">
                   {{ selectedServer.name }}
-                  <span :class="['text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm shrink-0', selectedServer.os_type === 'linux' ? 'bg-slate-200 text-slate-600' : 'bg-slate-200 text-slate-500']">
+                  <span :class="['text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm shrink-0', selectedServer.os_type === 'linux' ? 'bg-slate-100 text-slate-500' : 'bg-slate-100 text-slate-400']">
                     {{ selectedServer.os_type === 'linux' ? 'LNX' : 'WIN' }}
                   </span>
                 </h2>
-                <div class="flex items-center gap-3 text-xs font-mono text-slate-500 mt-0.5">
+                <div class="h-3 w-px bg-slate-200"></div>
+                <div class="flex items-center gap-3 text-[11px] font-mono text-slate-500">
                   <span>{{ selectedServer.ip }}</span>
                   <span class="text-slate-300">|</span>
                   <span>Uptime: {{ selectedServer.stats.UptimeDays }}d {{ selectedServer.stats.UptimeHours }}h</span>
@@ -712,8 +823,8 @@ onUnmounted(() => {
               </div>
             </div>
             
-            <button @click="closeModal" class="text-slate-400 hover:text-slate-600 p-2 rounded-sm transition-colors bg-white border border-slate-200 shadow-sm hover:shadow">
-              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <button @click="closeModal" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-sm transition-colors hover:bg-slate-100">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
               </svg>
             </button>
@@ -722,34 +833,89 @@ onUnmounted(() => {
           <!-- Body -->
           <div class="flex-1 overflow-y-auto bg-slate-50 p-6">
             <div class="mb-6">
-              <h3 class="text-sm font-bold text-slate-800 mb-1">Métricas Históricas de Procesos</h3>
-              <p class="text-xs text-slate-500">Consumo de recursos a lo largo del tiempo (Top 5 Procesos) - Generado vía Mock Data</p>
+              <h3 class="text-sm font-bold text-slate-800 mb-1">Visor de Rendimiento</h3>
+              <p class="text-xs text-slate-500">Evolución de recursos de la instancia en tiempo real</p>
             </div>
 
-            <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div v-if="selectedServer.history?.cpu?.length > 0" class="grid grid-cols-1 xl:grid-cols-2 gap-6">
               
               <!-- CPU Chart -->
-              <div class="bg-white border border-slate-200 rounded-sm flex flex-col shadow-sm">
-                <div class="px-5 py-3 border-b border-slate-100 flex justify-between items-center bg-white">
-                  <h4 class="text-xs font-bold text-slate-600 uppercase tracking-wider">Top 5 Procesos — CPU (%)</h4>
-                  <span class="text-[10px] text-slate-400 font-mono">Últimos 30 min</span>
+              <div class="bg-white border border-slate-200 flex flex-col shadow-sm rounded-sm">
+                <div class="px-4 py-2 border-b border-slate-200 bg-white relative z-10 flex justify-between items-center rounded-t-sm">
+                  <h2 class="text-[11px] font-bold text-slate-600 tracking-wider">Uso de CPU</h2>
+                  <span class="text-[9px] text-slate-400 font-mono">Histórico %</span>
                 </div>
-                <div class="p-4 h-80 w-full relative">
-                  <VueApexCharts type="line" height="100%" :options="processCpuChartOptions" :series="mockCpuSeries" />
+                <div class="p-2 h-56 w-full relative z-10">
+                  <VueApexCharts type="area" height="100%" :options="modalCpuChartOptions" :series="selectedCpuSeries" />
                 </div>
               </div>
 
               <!-- RAM Chart -->
-              <div class="bg-white border border-slate-200 rounded-sm flex flex-col shadow-sm">
-                <div class="px-5 py-3 border-b border-slate-100 flex justify-between items-center bg-white">
-                  <h4 class="text-xs font-bold text-slate-600 uppercase tracking-wider">Top 5 Procesos — RAM (MB)</h4>
-                  <span class="text-[10px] text-slate-400 font-mono">Últimos 30 min</span>
+              <div class="bg-white border border-slate-200 flex flex-col shadow-sm rounded-sm">
+                <div class="px-4 py-2 border-b border-slate-200 bg-white relative z-10 flex justify-between items-center rounded-t-sm">
+                  <h2 class="text-[11px] font-bold text-slate-600 tracking-wider">Uso de Memoria</h2>
+                  <span class="text-[9px] text-slate-400 font-mono">Histórico %</span>
                 </div>
-                <div class="p-4 h-80 w-full relative">
-                  <VueApexCharts type="line" height="100%" :options="processRamChartOptions" :series="mockRamSeries" />
+                <div class="p-2 h-56 w-full relative z-10">
+                  <VueApexCharts type="area" height="100%" :options="modalRamChartOptions" :series="selectedRamSeries" />
+                </div>
+              </div>
+              
+              <!-- Process CPU List -->
+              <div class="bg-white border border-slate-200 flex flex-col shadow-sm rounded-sm">
+                <div class="px-4 py-2 border-b border-slate-200 bg-white relative z-10 flex justify-between items-center rounded-t-sm">
+                  <h2 class="text-[11px] font-bold text-slate-600 tracking-wider">Top Procesos — CPU</h2>
+                  <span class="text-[9px] text-emerald-600 font-mono font-semibold flex items-center gap-1">
+                    <span class="relative flex h-1.5 w-1.5"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span></span>
+                    Tiempo Real
+                  </span>
+                </div>
+                <div class="p-1 h-56 overflow-y-hidden relative z-10">
+                  <div v-if="processesCache[selectedServer.id]?.loading && !processesCache[selectedServer.id]?.data" class="flex justify-center h-full items-center">
+                     <span class="w-6 h-6 border-2 border-slate-300 border-t-blue-600 rounded-full animate-spin"></span>
+                  </div>
+                  <div v-else-if="!processesCache[selectedServer.id]?.data || processesCache[selectedServer.id].data.length === 0" class="flex flex-col items-center justify-center h-full text-slate-400 p-6 text-center">
+                    <svg class="w-8 h-8 mb-2 opacity-50 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" v-if="processesCache[selectedServer.id]?.error"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                    <svg class="w-8 h-8 mb-2 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" v-else><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+                    
+                    <span class="text-xs font-medium text-slate-500">{{ processesCache[selectedServer.id]?.error ? 'Error al obtener procesos' : 'No hay datos de procesos' }}</span>
+                    <span class="text-[10px] text-slate-400 mt-1 max-w-[250px] leading-relaxed">{{ processesCache[selectedServer.id]?.error || 'El agente no ha reportado procesos aún' }}</span>
+                  </div>
+                  <div v-else class="h-full w-full p-2">
+                    <VueApexCharts type="line" height="100%" :options="processCpuOptions" :series="processCpuSeries" />
+                  </div>
                 </div>
               </div>
 
+              <!-- Process RAM List -->
+              <div class="bg-white border border-slate-200 flex flex-col shadow-sm rounded-sm">
+                <div class="px-4 py-2 border-b border-slate-200 bg-white relative z-10 flex justify-between items-center rounded-t-sm">
+                  <h2 class="text-[11px] font-bold text-slate-600 tracking-wider">Top Procesos — RAM</h2>
+                  <span class="text-[9px] text-emerald-600 font-mono font-semibold flex items-center gap-1">
+                    <span class="relative flex h-1.5 w-1.5"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span></span>
+                    Tiempo Real
+                  </span>
+                </div>
+                <div class="p-1 h-56 overflow-y-hidden relative z-10">
+                  <div v-if="processesCache[selectedServer.id]?.loading && !processesCache[selectedServer.id]?.data" class="flex justify-center h-full items-center">
+                     <span class="w-6 h-6 border-2 border-slate-300 border-t-purple-600 rounded-full animate-spin"></span>
+                  </div>
+                  <div v-else-if="!processesCache[selectedServer.id]?.data || processesCache[selectedServer.id].data.length === 0" class="flex flex-col items-center justify-center h-full text-slate-400 p-6 text-center">
+                    <svg class="w-8 h-8 mb-2 opacity-50 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" v-if="processesCache[selectedServer.id]?.error"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                    <svg class="w-8 h-8 mb-2 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" v-else><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+                    
+                    <span class="text-xs font-medium text-slate-500">{{ processesCache[selectedServer.id]?.error ? 'Error al obtener procesos' : 'No hay datos de procesos' }}</span>
+                    <span class="text-[10px] text-slate-400 mt-1 max-w-[250px] leading-relaxed">{{ processesCache[selectedServer.id]?.error || 'El agente no ha reportado procesos aún' }}</span>
+                  </div>
+                  <div v-else class="h-full w-full p-2">
+                    <VueApexCharts type="line" height="100%" :options="processRamOptions" :series="processRamSeries" />
+                  </div>
+                </div>
+              </div>
+
+            </div>
+            <div v-else class="flex justify-center items-center h-48 bg-white border border-slate-200 border-dashed rounded-sm shadow-sm">
+              <span class="text-xs text-slate-400 font-medium">Recopilando datos iniciales...</span>
             </div>
           </div>
           
