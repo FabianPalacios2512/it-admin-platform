@@ -47,12 +47,12 @@ function closeModal() {
 // (Mock process function removed)
 
 const selectedCpuSeries = computed(() => {
-  if (!selectedServer.value) return []
+  if (!selectedServer.value) return [{ name: 'CPU', data: [] }]
   return [{ name: 'CPU', data: selectedServer.value.history?.cpu || [] }]
 })
 
 const selectedRamSeries = computed(() => {
-  if (!selectedServer.value) return []
+  if (!selectedServer.value) return [{ name: 'RAM', data: [] }]
   return [{ name: 'RAM', data: selectedServer.value.history?.ram || [] }]
 })
 
@@ -263,9 +263,10 @@ const baseChartOptions = {
 
       // Ordenar items de mayor a menor consumo
       const currentPoints = w.config.series.map((s, idx) => {
+         const val = (series && series[idx] && series[idx][dataPointIndex] !== undefined) ? series[idx][dataPointIndex] : 0
          return {
             name: s.name,
-            val: series[idx][dataPointIndex],
+            val: val,
             color: w.globals.colors[idx],
             index: idx
          }
@@ -393,9 +394,14 @@ const processChartOptions = {
 
 const processCpuSeries = computed(() => {
   const history = processHistoryCache.value[selectedServer.value?.id]?.cpu
-  if (!history || Object.keys(history).length === 0) return []
+  if (!history || Object.keys(history).length === 0) return [{ name: 'Sin datos', data: [] }]
   return Object.values(history)
-    .sort((a,b) => b.data[b.data.length-1][1] - a.data[a.data.length-1][1])
+    .filter(item => item && item.data && item.data.length > 0)
+    .sort((a,b) => {
+      const valB = b.data[b.data.length-1]?.[1] || 0
+      const valA = a.data[a.data.length-1]?.[1] || 0
+      return valB - valA
+    })
     .slice(0, 5)
 })
 
@@ -406,9 +412,14 @@ const processCpuOptions = computed(() => ({
 
 const processRamSeries = computed(() => {
   const history = processHistoryCache.value[selectedServer.value?.id]?.ram
-  if (!history || Object.keys(history).length === 0) return []
+  if (!history || Object.keys(history).length === 0) return [{ name: 'Sin datos', data: [] }]
   return Object.values(history)
-    .sort((a,b) => b.data[b.data.length-1][1] - a.data[a.data.length-1][1])
+    .filter(item => item && item.data && item.data.length > 0)
+    .sort((a,b) => {
+      const valB = b.data[b.data.length-1]?.[1] || 0
+      const valA = a.data[a.data.length-1]?.[1] || 0
+      return valB - valA
+    })
     .slice(0, 5)
 })
 

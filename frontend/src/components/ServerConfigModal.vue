@@ -470,48 +470,48 @@ onMounted(() => {
           </div>
 
           <!-- FORMULARIO: Nuevo / Editar Servidor -->
-          <div v-else class="bg-white border border-slate-200 p-5 rounded-sm">
-            <div class="flex items-center gap-3 mb-5 pb-3 border-b border-slate-100">
-              <button @click="showForm = false" class="text-slate-400 hover:text-slate-700">
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+          <div v-else class="bg-white border border-gray-100 p-6 rounded-xl shadow-sm">
+            <div class="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100">
+              <button @click="showForm = false" class="text-gray-400 hover:text-gray-700 transition-colors">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
               </button>
-              <h3 class="text-[13px] font-bold text-slate-800">{{ formData.id ? 'Editar Servidor' : 'Nuevo Servidor' }}</h3>
+              <h3 class="text-lg font-semibold text-gray-900">{{ formData.id ? 'Editar servidor' : 'Nuevo servidor' }}</h3>
             </div>
 
-            <div v-if="error" class="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-[12px] rounded-sm">
+            <div v-if="error" class="mb-5 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-md">
               {{ error }}
             </div>
 
             <!-- ── SELECTOR DE OS ───────────────────────────────────────── -->
-            <div class="mb-5">
-              <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Sistema Operativo</label>
-              <div class="flex gap-2">
+            <div class="mb-6">
+              <label class="block text-sm font-medium text-gray-700 mb-2">Sistema operativo</label>
+              <div class="flex gap-1 bg-gray-100 p-1 rounded-lg">
                 <button
                   type="button"
                   @click="setOsType('windows')"
-                  :class="['flex items-center gap-2 px-4 py-2 rounded-sm border text-[12px] font-semibold transition-all', formData.os_type === 'windows' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400']"
+                  :class="['flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-all outline-none focus:ring-2 focus:ring-blue-500/20', formData.os_type === 'windows' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700']"
                 >
                   <span>🪟</span> Windows
                 </button>
                 <button
                   type="button"
                   @click="setOsType('linux')"
-                  :class="['flex items-center gap-2 px-4 py-2 rounded-sm border text-[12px] font-semibold transition-all', formData.os_type === 'linux' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400']"
+                  :class="['flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-all outline-none focus:ring-2 focus:ring-blue-500/20', formData.os_type === 'linux' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700']"
                 >
                   <span>🐧</span> Linux (SSH)
                 </button>
               </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-2 gap-5">
               <div>
-                <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">Nombre del Servidor</label>
-                <input v-model="formData.name" type="text" placeholder="Ej: SRV-UBUNTU-01" class="w-full border border-slate-300 rounded-sm px-3 py-1.5 text-[12px] focus:border-slate-800 outline-none"/>
+                <label class="block text-sm font-medium text-gray-700 mb-1.5">Nombre del servidor</label>
+                <input v-model="formData.name" type="text" placeholder="Ej: SRV-UBUNTU-01" class="w-full bg-white border border-gray-200 rounded-md px-3 py-2 text-sm text-gray-900 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 placeholder:text-gray-400"/>
               </div>
               
               <div>
-                <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">Tipo</label>
-                <select v-model="formData.server_type" class="w-full border border-slate-300 rounded-sm px-3 py-1.5 text-[12px] focus:border-slate-800 outline-none bg-white">
+                <label class="block text-sm font-medium text-gray-700 mb-1.5">Tipo de servidor</label>
+                <select v-model="formData.server_type" class="w-full bg-white border border-gray-200 rounded-md px-3 py-2 text-sm text-gray-900 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20">
                   <template v-if="!isLinux">
                     <option value="da">Directorio Activo</option>
                     <option value="ha">Alta Disponibilidad (HA)</option>
@@ -530,123 +530,124 @@ onMounted(() => {
                 </select>
               </div>
 
-              <!-- IP + Puerto (para Linux muestra el puerto SSH) -->
+              <!-- IP + Puerto -->
               <div>
-                <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">IP o Hostname</label>
-                <input v-model="formData.ip" type="text" placeholder="Ej: 192.168.20.100" class="w-full border border-slate-300 rounded-sm px-3 py-1.5 text-[12px] focus:border-slate-800 outline-none font-mono"/>
+                <label class="block text-sm font-medium text-gray-700 mb-1.5">IP o hostname</label>
+                <input v-model="formData.ip" type="text" placeholder="Ej: 192.168.20.100" class="w-full bg-white border border-gray-200 rounded-md px-3 py-2 text-sm text-gray-900 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 font-mono placeholder:text-gray-400"/>
               </div>
 
               <div v-if="isLinux">
-                <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">Puerto SSH</label>
-                <input v-model.number="formData.ssh_port" type="number" min="1" max="65535" placeholder="22" class="w-full border border-slate-300 rounded-sm px-3 py-1.5 text-[12px] focus:border-slate-800 outline-none font-mono"/>
+                <label class="block text-sm font-medium text-gray-700 mb-1.5">Puerto SSH</label>
+                <input v-model.number="formData.ssh_port" type="number" min="1" max="65535" placeholder="22" class="w-full bg-white border border-gray-200 rounded-md px-3 py-2 text-sm text-gray-900 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 font-mono placeholder:text-gray-400"/>
               </div>
               <div v-else-if="formData.server_type === 'da' || formData.server_type === 'ha'">
-                <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">Dominio</label>
-                <input v-model="formData.domain" type="text" placeholder="Ej: code.local" class="w-full border border-slate-300 rounded-sm px-3 py-1.5 text-[12px] focus:border-slate-800 outline-none"/>
+                <label class="block text-sm font-medium text-gray-700 mb-1.5">Dominio</label>
+                <input v-model="formData.domain" type="text" placeholder="Ej: code.local" class="w-full bg-white border border-gray-200 rounded-md px-3 py-2 text-sm text-gray-900 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 placeholder:text-gray-400"/>
               </div>
 
               <!-- CREDENCIALES SEPARADAS POR OS -->
-              <div class="col-span-2 pt-2 pb-1">
-                <h4 class="text-[11px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1">
-                  {{ isLinux ? 'Credenciales SSH' : 'Credenciales de Servicio' }}
+              <div class="col-span-2 flex items-center gap-3 mt-4 mb-2">
+                <h4 class="text-xs uppercase tracking-wider font-semibold text-gray-500 whitespace-nowrap">
+                  {{ isLinux ? 'Credenciales SSH' : 'Credenciales de servicio' }}
                 </h4>
+                <hr class="w-full border-gray-200" />
               </div>
 
               <!-- WINDOWS: Usuario + Contraseña -->
               <template v-if="!isLinux">
                 <div>
-                  <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">Usuario Administrador</label>
-                  <input v-model="formData.admin_user" type="text" placeholder="Ej: code\administrador" class="w-full border border-slate-300 rounded-sm px-3 py-1.5 text-[12px] focus:border-slate-800 outline-none font-mono"/>
+                  <label class="block text-sm font-medium text-gray-700 mb-1.5">Usuario administrador</label>
+                  <input v-model="formData.admin_user" type="text" placeholder="Ej: code\administrador" class="w-full bg-white border border-gray-200 rounded-md px-3 py-2 text-sm text-gray-900 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 font-mono placeholder:text-gray-400"/>
                 </div>
                 <div>
-                  <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">Contraseña</label>
-                  <input v-model="formData.admin_pass" type="password" :placeholder="formData.id ? 'Dejar en blanco para no cambiar' : 'Requerido'" class="w-full border border-slate-300 rounded-sm px-3 py-1.5 text-[12px] focus:border-slate-800 outline-none"/>
+                  <label class="block text-sm font-medium text-gray-700 mb-1.5">Contraseña</label>
+                  <input v-model="formData.admin_pass" type="password" :placeholder="formData.id ? 'Dejar en blanco para no cambiar' : 'Requerido'" class="w-full bg-white border border-gray-200 rounded-md px-3 py-2 text-sm text-gray-900 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 placeholder:text-gray-400"/>
                 </div>
               </template>
 
               <!-- LINUX: Usuario SSH + Contraseña o Llave -->
               <template v-else>
                 <div class="col-span-2">
-                  <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">Usuario SSH</label>
-                  <input v-model="formData.ssh_user" type="text" placeholder="Ej: root, ubuntu, admin" class="w-full border border-slate-300 rounded-sm px-3 py-1.5 text-[12px] focus:border-slate-800 outline-none font-mono"/>
+                  <label class="block text-sm font-medium text-gray-700 mb-1.5">Usuario SSH</label>
+                  <input v-model="formData.ssh_user" type="text" placeholder="Ej: root, ubuntu, admin" class="w-full bg-white border border-gray-200 rounded-md px-3 py-2 text-sm text-gray-900 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 font-mono placeholder:text-gray-400"/>
                 </div>
                 
-                <div class="col-span-2 mt-1">
-                  <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">Método de Autenticación</label>
-                  <div class="flex gap-6 p-2.5 bg-slate-50 border border-slate-200 rounded-sm">
+                <div class="col-span-2 mt-2">
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Método de autenticación</label>
+                  <div class="flex gap-6 p-3 bg-gray-50 border border-gray-200 rounded-md">
                     <label class="flex items-center gap-2 cursor-pointer">
-                      <input type="radio" v-model="authMethod" value="password" class="w-3.5 h-3.5 text-slate-800 border-slate-300 focus:ring-slate-800" />
-                      <span class="text-[12px] text-slate-700 font-medium">Autenticar con Contraseña</span>
+                      <input type="radio" v-model="authMethod" value="password" class="w-4 h-4 text-blue-600 bg-white border-gray-300 focus:ring-blue-500 focus:ring-2 focus:ring-offset-1" />
+                      <span class="text-sm text-gray-700 font-medium">Contraseña</span>
                     </label>
                     <label class="flex items-center gap-2 cursor-pointer">
-                      <input type="radio" v-model="authMethod" value="key" class="w-3.5 h-3.5 text-slate-800 border-slate-300 focus:ring-slate-800" />
-                      <span class="text-[12px] text-slate-700 font-medium">Autenticar con Llave SSH</span>
+                      <input type="radio" v-model="authMethod" value="key" class="w-4 h-4 text-blue-600 bg-white border-gray-300 focus:ring-blue-500 focus:ring-2 focus:ring-offset-1" />
+                      <span class="text-sm text-gray-700 font-medium">Llave SSH</span>
                     </label>
                   </div>
                 </div>
 
-                <div v-if="authMethod === 'password'" class="col-span-2 mt-1">
-                  <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">Contraseña SSH</label>
-                  <input v-model="formData.admin_pass" type="password" :placeholder="formData.id ? 'Dejar en blanco para no cambiar' : 'Requerida'" class="w-full border border-slate-300 rounded-sm px-3 py-1.5 text-[12px] focus:border-slate-800 outline-none"/>
+                <div v-if="authMethod === 'password'" class="col-span-2 mt-2">
+                  <label class="block text-sm font-medium text-gray-700 mb-1.5">Contraseña SSH</label>
+                  <input v-model="formData.admin_pass" type="password" :placeholder="formData.id ? 'Dejar en blanco para no cambiar' : 'Requerida'" class="w-full bg-white border border-gray-200 rounded-md px-3 py-2 text-sm text-gray-900 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 placeholder:text-gray-400"/>
                 </div>
                 
-                <div v-else class="col-span-2 mt-1">
-                  <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5 flex justify-between items-center">
-                    Llave Privada SSH
+                <div v-else class="col-span-2 mt-2">
+                  <label class="block text-sm font-medium text-gray-700 mb-1.5 flex justify-between items-center">
+                    Llave privada SSH
                   </label>
-                  <textarea v-model="formData.ssh_key" rows="6" class="w-full border border-slate-300 rounded-sm px-3 py-2 text-[11px] font-mono focus:border-slate-800 outline-none" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;..."></textarea>
+                  <textarea v-model="formData.ssh_key" rows="6" class="w-full bg-white border border-gray-200 rounded-md px-3 py-2 text-sm font-mono text-gray-900 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 placeholder:text-gray-400" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;..."></textarea>
                   
-                  <div class="flex justify-end mt-1">
-                    <button @click.prevent="generateSshKey" :disabled="isGeneratingKey" class="text-[10px] text-blue-600 hover:text-blue-800 underline transition-colors disabled:opacity-50">
-                      {{ isGeneratingKey ? 'Generando llaves de forma segura...' : '¿No tienes una llave? Generar nueva automáticamente' }}
+                  <div class="flex justify-end mt-2">
+                    <button @click.prevent="generateSshKey" :disabled="isGeneratingKey" class="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline transition-colors outline-none focus:ring-2 focus:ring-blue-500/20 rounded-sm disabled:opacity-50">
+                      {{ isGeneratingKey ? 'Generando llaves...' : 'Generar nueva llave automáticamente' }}
                     </button>
                   </div>
 
-                  <div v-if="generatedPublicKey" class="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-sm">
-                    <p class="text-[11px] font-bold text-blue-800 mb-1">¡Llave generada con éxito!</p>
-                    <p class="text-[11px] text-blue-700 mb-2 leading-relaxed">
-                      Hemos inyectado tu nueva <b>Llave Privada</b> arriba. Ahora, copia esta <b>Llave Pública</b> y agrégala a las claves SSH en la consola de tu proveedor antes de probar la conexión:
+                  <div v-if="generatedPublicKey" class="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-md">
+                    <p class="text-sm font-semibold text-gray-900 mb-1">Llave generada con éxito</p>
+                    <p class="text-sm text-gray-600 mb-3 leading-relaxed">
+                      Copia esta <b>Llave Pública</b> y agrégala a las claves SSH de tu servidor antes de probar la conexión.
                     </p>
                     <div class="flex items-center gap-2">
-                      <input readonly :value="generatedPublicKey" class="w-full text-[10px] p-1.5 bg-white border border-blue-200 rounded-sm font-mono text-slate-600 outline-none select-all"/>
-                      <button @click.prevent="copyPublicKey" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] rounded-sm transition-colors whitespace-nowrap">Copiar</button>
+                      <input readonly :value="generatedPublicKey" class="w-full text-xs p-2 bg-white border border-gray-200 rounded-md font-mono text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 select-all"/>
+                      <button @click.prevent="copyPublicKey" class="px-4 py-2 bg-white border border-gray-200 hover:bg-gray-50 hover:text-gray-900 text-gray-700 font-medium text-sm rounded-md transition-colors whitespace-nowrap outline-none focus:ring-2 focus:ring-blue-500/20">Copiar</button>
                     </div>
                   </div>
                 </div>
               </template>
 
               <!-- Grupos permitidos (solo para tipo DA en Windows) -->
-              <div v-if="!isLinux && formData.server_type === 'da'" class="col-span-2 mt-2">
-                <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">Grupos permitidos para Login</label>
-                <input v-model="formData.allowed_groups" type="text" placeholder="Ej: SG_Admins_SoporteTI" class="w-full border border-slate-300 rounded-sm px-3 py-1.5 text-[12px] focus:border-slate-800 outline-none"/>
+              <div v-if="!isLinux && formData.server_type === 'da'" class="col-span-2 mt-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1.5">Grupos permitidos para login</label>
+                <input v-model="formData.allowed_groups" type="text" placeholder="Ej: SG_Admins_SoporteTI" class="w-full bg-white border border-gray-200 rounded-md px-3 py-2 text-sm text-gray-900 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 placeholder:text-gray-400"/>
               </div>
 
-              <div class="col-span-2 flex items-center gap-2 mt-2">
-                <input v-model="formData.is_primary" type="checkbox" id="primaryCheck" class="w-3.5 h-3.5 rounded-sm border-slate-300 text-slate-800 focus:ring-slate-800"/>
-                <label for="primaryCheck" class="text-[12px] text-slate-700 font-medium cursor-pointer">
-                  Usar como servidor principal (Primario)
+              <div class="col-span-2 flex items-center gap-3 mt-4">
+                <input v-model="formData.is_primary" type="checkbox" id="primaryCheck" class="w-4 h-4 rounded text-blue-600 bg-white border-gray-300 focus:ring-blue-500 focus:ring-2 focus:ring-offset-1 transition-all"/>
+                <label for="primaryCheck" class="text-sm text-gray-700 font-medium cursor-pointer select-none">
+                  Establecer como servidor principal
                 </label>
               </div>
             </div>
 
-            <!-- Pruebas y guardado -->
-            <div class="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
+            <!-- Pruebas y guardado (Footer) -->
+            <div class="mt-8 pt-5 border-t border-gray-100 flex items-center justify-between">
               <div class="flex items-center gap-3">
-                <button @click="testConnection" :disabled="testingConnection" type="button" class="text-[11px] font-semibold uppercase tracking-wider text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-4 py-2 rounded-sm transition-colors disabled:opacity-50 flex items-center gap-2">
-                  <span v-if="testingConnection" class="w-3 h-3 border-2 border-slate-400 border-t-slate-600 rounded-full animate-spin"></span>
-                  <span>{{ isLinux ? 'Probar SSH' : 'Probar Conexión' }}</span>
+                <button @click="testConnection" :disabled="testingConnection" type="button" class="text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 px-4 py-2 rounded-lg transition-all outline-none focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50 flex items-center gap-2">
+                  <span v-if="testingConnection" class="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin"></span>
+                  <span>{{ isLinux ? 'Probar SSH' : 'Probar conexión' }}</span>
                 </button>
-                <span v-if="testResult" :class="['text-[11px] font-medium flex items-center gap-1.5', testResult.success ? 'text-emerald-600' : 'text-red-600']">
+                <span v-if="testResult" :class="['text-sm font-medium flex items-center gap-2', testResult.success ? 'text-emerald-600' : 'text-red-600']">
                   <span :class="['w-2 h-2 rounded-full', testResult.success ? 'bg-emerald-500' : 'bg-red-500']"></span>
                   {{ testResult.message }}
                 </span>
               </div>
 
-              <div class="flex gap-2">
-                <button @click="showForm = false" type="button" class="text-[12px] font-medium text-slate-600 hover:bg-slate-100 px-4 py-2 rounded-sm transition-colors">Cancelar</button>
-                <button @click="saveServer" :disabled="saving" type="button" class="text-[12px] font-medium text-white bg-slate-800 hover:bg-slate-900 px-6 py-2 rounded-sm flex items-center gap-2 transition-colors disabled:opacity-50">
-                  <span v-if="saving" class="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                  Guardar Servidor
+              <div class="flex items-center gap-3">
+                <button @click="showForm = false" type="button" class="text-sm font-medium text-gray-500 hover:text-gray-800 hover:underline px-3 py-2 transition-colors outline-none focus:ring-2 focus:ring-gray-400/20 rounded-md">Cancelar</button>
+                <button @click="saveServer" :disabled="saving" type="button" class="text-sm font-semibold text-white bg-gray-900 hover:bg-black px-6 py-2.5 rounded-lg flex items-center gap-2 transition-all outline-none focus:ring-2 focus:ring-gray-900/20 disabled:opacity-50">
+                  <span v-if="saving" class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                  Guardar servidor
                 </button>
               </div>
             </div>
