@@ -1248,7 +1248,7 @@ const statusConfig = computed(() => {
                   <div class="mb-8">
                     <div v-if="!accountOptions.account_locked" class="bg-green-50 border border-green-200 rounded p-2 px-3 flex items-center gap-2">
                       <svg class="w-4 h-4 text-green-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-                      <span class="text-xs font-bold text-green-900">Cuenta Segura (0 bloqueos)</span>
+                      <span class="text-xs font-bold text-green-900">Cuenta Segura ({{ userProfile.badPwdCount }} intentos fallidos)</span>
                     </div>
                     <div v-else class="bg-red-50 border border-red-200 rounded p-3 flex flex-col gap-2">
                       <div class="flex items-center gap-2">

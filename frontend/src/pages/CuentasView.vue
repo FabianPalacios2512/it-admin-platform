@@ -323,6 +323,27 @@ async function bulkResetPassword() {
   bulkLoading.value = false
 }
 
+async function bulkUnlock() {
+  if (!confirm(`¿Desbloquear ${selectedUsers.value.size} cuenta(s)?`)) return
+  bulkLoading.value = true
+  let success = 0, fail = 0
+  for (const username of selectedUsers.value) {
+    try {
+      const res = await authFetch(`${API_BASE}/accounts/unlock`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username })
+      })
+      if (res.ok) success++; else fail++
+    } catch { fail++ }
+  }
+  alert(`Resultado: ${success} desbloqueados, ${fail} fallidos`)
+  selectedUsers.value = new Set()
+  selectAll.value = false
+  bulkLoading.value = false
+  fetchUsers()
+}
+
 async function bulkDisable() {
   if (!confirm(`¿Bloquear inicio de sesión para ${selectedUsers.value.size} usuario(s)?`)) return
   bulkLoading.value = true
@@ -357,13 +378,44 @@ function exportCsv() {
   link.click()
 }
 
-// â”€â”€ Data Fetching â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const lockedUsers = ref(new Set())
+const seenLockedUsers = ref(new Set(JSON.parse(localStorage.getItem('seen_locked_users') || '[]')))
+
+const newLockedUsersCount = computed(() => {
+  let count = 0
+  for (const user of lockedUsers.value) {
+    if (!seenLockedUsers.value.has(user)) count++
+  }
+  return count
+})
+
+function markLockedAsSeen() {
+  seenLockedUsers.value = new Set(lockedUsers.value)
+  localStorage.setItem('seen_locked_users', JSON.stringify(Array.from(seenLockedUsers.value)))
+}
+
 async function fetchUsers() {
   isLoading.value = true
   try {
-    const res = await authFetch(`${API_BASE}/accounts/search?q=${encodeURIComponent(searchQuery.value)}&limit=5000`)
-    if (res.ok) {
-      users.value = await res.json()
+    const [resSearch, resLocked] = await Promise.all([
+      authFetch(`${API_BASE}/accounts/search?q=${encodeURIComponent(searchQuery.value)}&limit=5000`),
+      authFetch(`${API_BASE}/accounts/locked`).catch(() => ({ ok: false, json: () => [] }))
+    ])
+    
+    if (resLocked.ok) {
+      const lockedData = await resLocked.json()
+      lockedUsers.value = new Set(lockedData.map(u => u.username))
+      if (activeFilter.value === 'bloqueados') {
+        markLockedAsSeen()
+      }
+    }
+
+    if (resSearch.ok) {
+      const rawUsers = await resSearch.json()
+      users.value = rawUsers.map(u => ({
+        ...u,
+        status: lockedUsers.value.has(u.username) ? 'locked' : u.status
+      }))
       const token = localStorage.getItem('access_token')
       fetchLicensesSummary(token)
     }
@@ -437,6 +489,9 @@ function goToUserProfile(username) {
 function setFilter(filter) {
   activeFilter.value = filter
   router.replace({ query: { ...route.query, estado: filter } })
+  if (filter === 'bloqueados') {
+    markLockedAsSeen()
+  }
 }
 
 </script>
@@ -463,23 +518,27 @@ function setFilter(filter) {
         <div class="w-px h-4 bg-gray-300 mx-1"></div>
         <button @click="showCreateDrawer = true" class="text-sm font-medium text-gray-900 hover:bg-gray-100 px-2 py-1 rounded-md transition-colors flex items-center gap-2">
           <svg class="w-4 h-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-          Nuevo usuario
+          Nuevo (AD)
         </button>
         <button @click="fetchUsers" class="text-sm font-medium text-gray-900 hover:bg-gray-100 px-2 py-1 rounded-md transition-colors flex items-center gap-2">
           <svg class="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
           Actualizar
         </button>
+        <button @click="bulkUnlock" :disabled="!hasSelection || bulkLoading" class="text-sm font-medium text-gray-900 hover:bg-gray-100 px-2 py-1 rounded-md transition-colors flex items-center gap-2 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default">
+          <svg class="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>
+          Desbloquear (AD)
+        </button>
         <button @click="bulkResetPassword" :disabled="!hasSelection || bulkLoading" class="text-sm font-medium text-gray-900 hover:bg-gray-100 px-2 py-1 rounded-md transition-colors flex items-center gap-2 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default">
           <svg class="w-4 h-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
-          Restablecer contraseña
+          Restablecer clave (AD)
         </button>
-        <button @click="enterMfaContext(singleSelectedUser)" :disabled="!isSingleCloudUser" :title="!isSingleCloudUser ? 'Solo disponible para usuarios en la nube (con licencia)' : ''" class="text-sm font-medium text-gray-900 hover:bg-gray-100 px-2 py-1 rounded-md transition-colors flex items-center gap-2 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default">
+        <button v-if="activeFilter !== 'bloqueados'" @click="enterMfaContext(singleSelectedUser)" :disabled="!isSingleCloudUser" :title="!isSingleCloudUser ? 'Solo disponible para usuarios en la nube (con licencia)' : ''" class="text-sm font-medium text-gray-900 hover:bg-gray-100 px-2 py-1 rounded-md transition-colors flex items-center gap-2 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default">
           <svg class="w-4 h-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
-          MFA por usuario
+          MFA por usuario (M365)
         </button>
         <button @click="bulkDisable" :disabled="!hasSelection || bulkLoading" class="text-sm font-medium text-gray-900 hover:bg-gray-100 px-2 py-1 rounded-md transition-colors flex items-center gap-2 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default">
           <svg class="w-4 h-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
-          Bloquear sesión
+          Deshabilitar (AD)
         </button>
         <button @click="exportCsv" :disabled="!hasSelection" class="text-sm font-medium text-gray-900 hover:bg-gray-100 px-2 py-1 rounded-md transition-colors flex items-center gap-2 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default">
           <svg class="w-4 h-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
@@ -529,7 +588,12 @@ function setFilter(filter) {
         <button @click="setFilter('todos')" :class="['px-3 py-1 text-sm transition-colors whitespace-nowrap', activeFilter==='todos' ? 'text-gray-900 border-b-2 border-gray-900 font-semibold' : 'text-gray-500 hover:text-gray-700']">Todos</button>
         <button @click="setFilter('activos')" :class="['px-3 py-1 text-sm transition-colors whitespace-nowrap', activeFilter==='activos' ? 'text-gray-900 border-b-2 border-gray-900 font-semibold' : 'text-gray-500 hover:text-gray-700']">Activos</button>
         <button @click="setFilter('deshabilitados')" :class="['px-3 py-1 text-sm transition-colors whitespace-nowrap', activeFilter==='deshabilitados' ? 'text-gray-900 border-b-2 border-gray-900 font-semibold' : 'text-gray-500 hover:text-gray-700']">Deshabilitados</button>
-        <button @click="setFilter('bloqueados')" :class="['px-3 py-1 text-sm transition-colors whitespace-nowrap', activeFilter==='bloqueados' ? 'text-gray-900 border-b-2 border-gray-900 font-semibold' : 'text-gray-500 hover:text-gray-700']">Bloqueados</button>
+        <button @click="setFilter('bloqueados')" :class="['px-3 py-1 text-sm transition-colors whitespace-nowrap flex items-center gap-1.5', activeFilter==='bloqueados' ? 'text-gray-900 border-b-2 border-gray-900 font-semibold' : 'text-gray-500 hover:text-gray-700']">
+          Bloqueados
+          <span v-if="newLockedUsersCount > 0" class="flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white shadow-sm ring-2 ring-white">
+            {{ newLockedUsersCount > 9 ? '9+' : newLockedUsersCount }}
+          </span>
+        </button>
         <div class="w-px h-4 bg-gray-200 mx-2"></div>
         <button @click="setFilter('licenciados')" :class="['px-3 py-1 text-sm transition-colors whitespace-nowrap', activeFilter==='licenciados' ? 'text-gray-900 border-b-2 border-gray-900 font-semibold' : 'text-gray-500 hover:text-gray-700']">Con Licencia</button>
         <button @click="setFilter('sin_licencia')" :class="['px-3 py-1 text-sm transition-colors whitespace-nowrap', activeFilter==='sin_licencia' ? 'text-gray-900 border-b-2 border-gray-900 font-semibold' : 'text-gray-500 hover:text-gray-700']">Sin Licencia</button>

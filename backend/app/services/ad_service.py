@@ -173,7 +173,8 @@ def get_user_profile(username: str) -> dict | None:
     if not flags:
         flags.append("NORMAL_ACCOUNT")
 
-    is_locked = bool(uac & 0x0010)
+    lockout_time = int(str(entry.lockoutTime)) if entry.lockoutTime else 0
+    is_locked = bool(lockout_time >= 1)
     is_disabled = bool(uac & 0x0002)
 
     status = "active"
@@ -445,7 +446,7 @@ def get_account_options(username: str) -> dict:
     conn = _get_admin_connection()
     search_base = _get_search_base()
     conn.search(search_base, f"(sAMAccountName={username})", SUBTREE,
-                attributes=['distinguishedName', 'userAccountControl', 'pwdLastSet', 'accountExpires'])
+                attributes=['distinguishedName', 'userAccountControl', 'pwdLastSet', 'accountExpires', 'lockoutTime'])
 
     if not conn.entries:
         conn.unbind()
@@ -453,6 +454,7 @@ def get_account_options(username: str) -> dict:
 
     entry = conn.entries[0]
     uac = int(str(entry.userAccountControl)) if 'userAccountControl' in entry else 0
+    lockout_time = int(str(entry.lockoutTime)) if 'lockoutTime' in entry and entry.lockoutTime else 0
     
     # pwdLastSet is 0 if user must change password
     pwd_last_set = -1
@@ -485,7 +487,7 @@ def get_account_options(username: str) -> dict:
         "password_never_expires":      bool(uac & 0x10000),
         "store_reversible_encryption": bool(uac & 0x0080),
         "account_disabled":            bool(uac & 0x0002),
-        "account_locked":              bool(uac & 0x0010),
+        "account_locked":              bool(lockout_time >= 1),
         "smart_card_required":         bool(uac & 0x40000),
         "trusted_for_delegation":      bool(uac & 0x80000),
         "account_expires_never":       account_expires_never,
@@ -519,8 +521,8 @@ def update_account_options(username: str, options: dict) -> dict:
 
     # Aplicar cada bit
     for key, bit in UAC_BITS.items():
-        if key == "must_change_password" or bit is None:
-            continue  # Se maneja por separado con pwdLastSet
+        if key == "must_change_password" or bit is None or key == "account_locked":
+            continue  # Se maneja por separado con pwdLastSet o lockoutTime
         if key in options:
             if options[key]:
                 uac |= bit   # Encender el bit
@@ -535,6 +537,10 @@ def update_account_options(username: str, options: dict) -> dict:
     if "must_change_password" in options:
         pwd_val = '0' if options["must_change_password"] else '-1'
         conn.modify(user_dn, {'pwdLastSet': [(MODIFY_REPLACE, [pwd_val])]})
+
+    # account_locked se controla con lockoutTime (solo se permite desbloquear = 0)
+    if "account_locked" in options and options["account_locked"] is False:
+        conn.modify(user_dn, {'lockoutTime': [(MODIFY_REPLACE, ['0'])]})
 
     conn.unbind()
     if errors:

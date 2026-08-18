@@ -39,18 +39,17 @@ async function authFetch(url, opts = {}) {
 const loadSites = async () => {
   loading.value = true
   try {
-    const res = await authFetch(`${API_BASE}/wifi/sites`)
-    const data = await res.json()
-    if (res.ok && data.success) {
-      sites.value = data.data
-      if (sites.value.length > 0 && !selectedSite.value) {
-        selectedSite.value = sites.value[0].name
-      }
-    } else {
-      error.value = data.detail || 'Error cargando sitios'
+    // === DATOS TEMPORALES (MOCK) PARA PRUEBAS ===
+    sites.value = [
+      { name: 'default', desc: 'Sede Principal (MOCK)' },
+      { name: 'sucursal', desc: 'Sucursal Norte (MOCK)' }
+    ]
+    if (sites.value.length > 0 && !selectedSite.value) {
+      selectedSite.value = sites.value[0].name
     }
+    error.value = ''
   } catch (e) {
-    error.value = 'Fallo de red conectando con el backend (Sitios)'
+    error.value = 'Fallo de red conectando con el backend'
   } finally {
     loading.value = false
   }
@@ -60,13 +59,14 @@ const loadAps = async () => {
   if (!selectedSite.value) return
   loading.value = true
   try {
-    const res = await authFetch(`${API_BASE}/wifi/aps?site=${selectedSite.value}`)
-    const data = await res.json()
-    if (res.ok && data.success) {
-      aps.value = data.data
-    } else {
-      error.value = data.detail || 'Error cargando Access Points'
-    }
+    // === DATOS TEMPORALES (MOCK) PARA PRUEBAS ===
+    aps.value = [
+      { name: 'AP-Recepción', mac: 'fc:ec:da:11:22:33', ip: '192.168.1.10', model: 'U6-Lite', status: 'online', clients: 2 },
+      { name: 'AP-Gerencia', mac: 'fc:ec:da:44:55:66', ip: '192.168.1.11', model: 'U6-Pro', status: 'online', clients: 2 },
+      { name: 'AP-Sala-Juntas', mac: 'fc:ec:da:77:88:99', ip: '192.168.1.12', model: 'UAP-AC-Pro', status: 'offline', clients: 0 },
+      { name: 'AP-Bodega', mac: 'fc:ec:da:aa:bb:cc', ip: '192.168.1.13', model: 'U6-LR', status: 'online', clients: 1 }
+    ]
+    error.value = ''
   } catch (e) {
     error.value = 'Fallo de red conectando con el backend'
   } finally {
@@ -78,13 +78,15 @@ const loadClients = async () => {
   if (!selectedSite.value) return
   loading.value = true
   try {
-    const res = await authFetch(`${API_BASE}/wifi/clients?site=${selectedSite.value}`)
-    const data = await res.json()
-    if (res.ok && data.success) {
-      clients.value = data.data
-    } else {
-      error.value = data.detail || 'Error cargando Clientes'
-    }
+    // === DATOS TEMPORALES (MOCK) PARA PRUEBAS ===
+    clients.value = [
+      { hostname: 'iPhone-Fabian', mac: '00:11:22:33:44:55', ap_mac: 'fc:ec:da:11:22:33', ip: '192.168.1.50', is_blocked: false, is_wired: false, rx_bytes: 15420000, tx_bytes: 8450000, essid: 'Corp-WiFi', channel: 36, radio: '5GHz', signal: -65 },
+      { hostname: 'Laptop-Contabilidad', mac: 'aa:bb:cc:dd:ee:ff', ap_mac: 'fc:ec:da:44:55:66', ip: '192.168.1.51', is_blocked: false, is_wired: false, rx_bytes: 125420000, tx_bytes: 58450000, essid: 'Corp-WiFi', channel: 44, radio: '5GHz', signal: -55 },
+      { hostname: 'TV-Sala-Espera', mac: '11:22:33:44:55:66', ap_mac: 'fc:ec:da:11:22:33', ip: '192.168.1.52', is_blocked: false, is_wired: false, rx_bytes: 5420000, tx_bytes: 450000, essid: 'Guest-WiFi', channel: 6, radio: '2.4GHz', signal: -45 },
+      { hostname: 'Dispositivo-Desconocido', mac: '99:88:77:66:55:44', ap_mac: 'fc:ec:da:aa:bb:cc', ip: '192.168.1.53', is_blocked: true, is_wired: false, rx_bytes: 20000, tx_bytes: 15000, essid: 'Guest-WiFi', channel: 1, radio: '2.4GHz', signal: -80 },
+      { hostname: 'Impresora-WiFi', mac: '33:44:55:66:77:88', ap_mac: 'fc:ec:da:44:55:66', ip: '192.168.1.54', is_blocked: false, is_wired: false, rx_bytes: 8542000, tx_bytes: 1845000, essid: 'Corp-WiFi', channel: 11, radio: '2.4GHz', signal: -60 }
+    ]
+    error.value = ''
   } catch (e) {
     error.value = 'Fallo de red conectando con el backend'
   } finally {
@@ -179,14 +181,16 @@ const loadApHistory = async (mac) => {
   loadingHistory.value = true
   historicalClients.value = []
   try {
-    const res = await authFetch(`${API_BASE}/wifi/aps/${mac}/history?site=${selectedSite.value}`)
-    const data = await res.json()
-    if (res.ok && data.success) {
-      historicalClients.value = data.data
-    }
+    // === DATOS TEMPORALES (MOCK) PARA PRUEBAS ===
+    setTimeout(() => {
+      historicalClients.value = [
+        { hostname: 'Smartphone-Visitante', ip: '192.168.2.100', mac: 'a1:b2:c3:d4:e5:f6', last_seen: Math.floor(Date.now()/1000) - 3600, is_blocked: false },
+        { hostname: 'Tablet-Operario', ip: '192.168.1.105', mac: 'f1:e2:d3:c4:b5:a6', last_seen: Math.floor(Date.now()/1000) - 86400, is_blocked: true }
+      ]
+      loadingHistory.value = false
+    }, 500)
   } catch (e) {
     console.error("Error loading AP history", e)
-  } finally {
     loadingHistory.value = false
   }
 }

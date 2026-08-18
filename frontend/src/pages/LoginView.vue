@@ -129,7 +129,7 @@ const handleLogin = async () => {
     const data = await response.json()
     localStorage.setItem('access_token', data.access_token)
     localStorage.setItem('display_name', data.display_name)
-    router.push('/monitoring')
+    router.push('/monitoring-zabbix')
     
   } catch (error) {
     errorMessage.value = error.message

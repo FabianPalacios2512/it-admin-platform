@@ -10,7 +10,7 @@ router = APIRouter()
 
 SECRET_KEY = "key_corporativa_super_secreta"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+ACCESS_TOKEN_EXPIRE_MINUTES = 1440
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
 

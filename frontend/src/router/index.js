@@ -16,6 +16,8 @@ import AuditoriaView from '@/pages/AuditoriaView.vue'
 import TerminalView from '@/pages/TerminalView.vue'
 import CuarentenaView from '@/pages/CuarentenaView.vue'
 import LicenciasInactivasView from '@/pages/LicenciasInactivasView.vue'
+import ZabbixMonitoringView from '@/pages/ZabbixMonitoringView.vue'
+import GpoManagerView from '@/pages/GpoManagerView.vue'
 
 const routes = [
   {
@@ -61,6 +63,11 @@ const routes = [
         component: SecurityView,
       },
       {
+        path: 'gpo-manager',
+        name: 'GpoManager',
+        component: GpoManagerView,
+      },
+      {
         path: 'auditoria',
         name: 'Auditoria',
         component: AuditoriaView,
@@ -89,6 +96,11 @@ const routes = [
         path: 'monitoring',
         name: 'Monitoreo',
         component: MonitoreoView,
+      },
+      {
+        path: 'monitoring-zabbix',
+        name: 'MonitoreoZabbix',
+        component: ZabbixMonitoringView,
       },
       {
         path: 'printers',
@@ -136,7 +148,7 @@ router.beforeEach((to, from, next) => {
   if (to.meta.requiresAuth && !isAuthenticated) {
     next({ name: 'Login' })
   } else if (to.name === 'Login' && isAuthenticated) {
-    next({ name: 'Home' })
+    next({ name: 'MonitoreoZabbix' })
   } else {
     next()
   }

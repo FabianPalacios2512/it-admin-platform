@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
     scheduler = BackgroundScheduler()
     app.state.scheduler = scheduler
     scheduler.add_job(sync_ad_events, 'interval', minutes=3)
-    scheduler.add_job(sync_monitoring_stats, 'interval', minutes=1)
+    # scheduler.add_job(sync_monitoring_stats, 'interval', minutes=1) # Desactivado: ahora usamos Zabbix
     from app.services.exchange_service import revoke_expired_delegations
     scheduler.add_job(revoke_expired_delegations, 'cron', hour=2, minute=0)
     scheduler.start()
@@ -41,7 +41,7 @@ async def lifespan(app: FastAPI):
     # Ejecutar una vez al inicio en el background (no bloqueante)
     import datetime
     scheduler.add_job(sync_ad_events, 'date', run_date=datetime.datetime.now())
-    scheduler.add_job(sync_monitoring_stats, 'date', run_date=datetime.datetime.now())
+    # scheduler.add_job(sync_monitoring_stats, 'date', run_date=datetime.datetime.now()) # Desactivado: ahora usamos Zabbix
     
     yield
     scheduler.shutdown(wait=False)
@@ -76,6 +76,10 @@ from app.api.v1 import delegation
 app.include_router(delegation.router, prefix="/api/v1/delegation", tags=["delegation"])
 from app.api.v1 import diagnostics
 app.include_router(diagnostics.router, prefix="/api/v1/diagnostics", tags=["diagnostics"])
+from app.api.v1 import zabbix
+app.include_router(zabbix.router, prefix="/api/v1/zabbix", tags=["zabbix"])
+from app.api.v1 import gpo
+app.include_router(gpo.router, prefix="/api/v1/gpo", tags=["gpo"])
 
 # ---------------------------------------------------------
 # Integración: Servir Frontend Estático (Vue SPA)

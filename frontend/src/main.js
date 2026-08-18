@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'
 import './assets/main.css'
+import VueApexCharts from 'vue3-apexcharts'
 
 // Global override for window.alert to convert native alerts into beautiful Tailwind toasts
 window.alert = function(message) {
@@ -88,4 +89,9 @@ window.alert = function(message) {
 
 const app = createApp(App)
 app.use(router)
+// Registro global del componente <apexchart>. Sin esto, todas las gráficas
+// (tendencias, sparklines y el panel de detalle) no se resuelven y el
+// dashboard de Zabbix se ve roto ("Failed to resolve component: apexchart").
+app.use(VueApexCharts)
+app.component('apexchart', VueApexCharts)
 app.mount('#app')

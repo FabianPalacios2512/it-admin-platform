@@ -63,7 +63,11 @@ def _get_windows_top_processes(server: ServerConfig) -> list:
     ps_script = """
     $procs = Get-Process | Where-Object {$_.CPU -gt 0} | Sort-Object CPU -Descending | Select-Object -First 5
     $result = $procs | ForEach-Object {
-        $cpuPercent = [math]::Round($_.CPU / [math]::Max(1, ((Get-Date) - $_.StartTime).TotalSeconds) * 100, 1)
+        $uptime = 1
+        if ($_.StartTime) {
+            $uptime = [math]::Max(1, ((Get-Date) - $_.StartTime).TotalSeconds)
+        }
+        $cpuPercent = [math]::Round($_.CPU / $uptime * 100, 1)
         $memMb = [math]::Round($_.WorkingSet64 / 1MB, 1)
         [PSCustomObject]@{
             pid = $_.Id
@@ -93,25 +97,68 @@ def _get_windows_top_processes(server: ServerConfig) -> list:
             )
             raw = res.stdout.strip()
         else:
-            target_smb = f"\\\\{ip}\\IPC$"
-            subprocess.run(["net", "use", target_smb, "/delete", "/y"], capture_output=True)
-            subprocess.run(
-                ["net", "use", target_smb, admin_pass, f"/user:{admin_user}"],
-                capture_output=True, text=True, timeout=10
-            )
+            import uuid
+            import time
+            import base64
+            guid = str(uuid.uuid4())
+            remote_path = f"C:\\Windows\\Temp\\{guid}.json"
+            
+            wrapped_script = f"""
+            $ErrorActionPreference = 'Stop'
+            try {{
+                $result = & {{ {ps_script} }}
+                [System.IO.File]::WriteAllText('{remote_path}', $result)
+            }} catch {{
+                [System.IO.File]::WriteAllText('{remote_path}', "ERROR: " + $_.Exception.Message)
+            }}
+            """
+            
+            encoded = base64.b64encode(wrapped_script.encode('utf-16le')).decode('utf-8')
+            cmd = f"powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand {encoded}"
+            
             wmi_script = f"""
             $password = ConvertTo-SecureString '{safe_pass}' -AsPlainText -Force
             $cred = New-Object System.Management.Automation.PSCredential ('{admin_user}', $password)
-            Invoke-Command -ComputerName '{ip}' -Credential $cred -ScriptBlock {{
-                {ps_script}
-            }}
+            $res = Invoke-WmiMethod -Class Win32_Process -Name Create -ArgumentList '{cmd}' -ComputerName '{ip}' -Credential $cred
+            if ($res.ReturnValue -ne 0) {{ throw "WMI Error: ReturnValue $($res.ReturnValue)" }}
             """
-            res = subprocess.run(
+            
+            target_smb = f"\\\\{ip}\\IPC$"
+            subprocess.run(["net", "use", target_smb, "/delete", "/y"], capture_output=True)
+            smb_conn = subprocess.run(
+                ["net", "use", target_smb, admin_pass, f"/user:{admin_user}"],
+                capture_output=True, text=True, timeout=10
+            )
+            if smb_conn.returncode != 0:
+                logger.warning(f"[Windows Processes] SMB Error {ip}: {smb_conn.stderr}")
+                return []
+                
+            wmi_res = subprocess.run(
                 ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "-"],
                 input=wmi_script, capture_output=True, text=True,
                 encoding="utf-8", errors="replace", timeout=20
             )
-            raw = res.stdout.strip()
+            
+            if wmi_res.returncode != 0:
+                logger.warning(f"[Windows Processes] WMI Error {ip}: {wmi_res.stderr or wmi_res.stdout}")
+                return []
+                
+            unc_file_path = f"\\\\{ip}\\C$\\Windows\\Temp\\{guid}.json"
+            raw = ""
+            for _ in range(15):
+                time.sleep(1)
+                check = subprocess.run(
+                    ["powershell", "-NoProfile", "-NonInteractive", "-Command", 
+                     f"if (Test-Path '{unc_file_path}') {{ Get-Content '{unc_file_path}' -Raw; Remove-Item '{unc_file_path}' -Force }}"], 
+                    capture_output=True, text=True, encoding='utf-8', errors='replace'
+                )
+                if check.returncode == 0 and check.stdout.strip():
+                    raw = check.stdout.strip()
+                    break
+                    
+            if not raw or raw.startswith("ERROR: "):
+                logger.warning(f"[Windows Processes] Fetch Error {ip}: {raw}")
+                return []
 
         if not raw:
             return []
@@ -123,10 +170,10 @@ def _get_windows_top_processes(server: ServerConfig) -> list:
 
         return [
             {
-                "pid": int(item.get("pid", 0)),
-                "name": str(item.get("name", ""))[:30],
-                "cpu_percent": float(item.get("cpu_percent", 0)),
-                "mem_percent": float(item.get("mem_percent", 0)),
+                "pid": int(item.get("pid") or 0),
+                "name": str(item.get("name") or "")[:30],
+                "cpu_percent": float(item.get("cpu_percent") or 0),
+                "mem_percent": float(item.get("mem_percent") or 0),
             }
             for item in data
         ][:5]

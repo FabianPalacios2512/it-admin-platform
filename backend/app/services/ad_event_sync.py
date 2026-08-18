@@ -7,7 +7,7 @@ import datetime
 
 def sync_ad_events():
     db = SessionLocal()
-    print("🔍 [AD Sync] Buscando eventos nativos en el Domain Controller...")
+    print("[AD Sync] Buscando eventos nativos en el Domain Controller...")
     
     # Inicializar el modelo COM en este hilo (requerido para WMI en background/scheduler)
     pythoncom.CoInitialize()
