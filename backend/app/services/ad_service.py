@@ -120,6 +120,7 @@ def search_users(query: str, limit: int = 20) -> list:
             "department": str(entry.department) if entry.department else "",
             "ou": ou_name,
             "status": status,
+            "dn": str(entry.distinguishedName) if entry.distinguishedName else "",
         })
 
     conn.unbind()
@@ -173,7 +174,16 @@ def get_user_profile(username: str) -> dict | None:
     if not flags:
         flags.append("NORMAL_ACCOUNT")
 
-    lockout_time = int(str(entry.lockoutTime)) if entry.lockoutTime else 0
+    try:
+        lockout_time_str = str(entry.lockoutTime) if entry.lockoutTime else "0"
+        # Si ldap3 ya lo parseó como datetime, contendrá '-'
+        if "-" in lockout_time_str:
+            lockout_time = 0 if "1601" in lockout_time_str else 1
+        else:
+            lockout_time = int(lockout_time_str)
+    except ValueError:
+        lockout_time = 0
+
     is_locked = bool(lockout_time >= 1)
     is_disabled = bool(uac & 0x0002)
 
@@ -205,12 +215,12 @@ def get_user_profile(username: str) -> dict | None:
         "firstName": str(entry.givenName) if entry.givenName else "",
         "lastName": str(entry.sn) if entry.sn else "",
         "userPrincipalName": str(entry.userPrincipalName) if entry.userPrincipalName else "",
-        "title": str(entry.title) if entry.title else "Sin cargo asignado",
+        "title": str(entry.title) if entry.title else "",
         "email": str(entry.mail) if entry.mail else "",
-        "department": str(entry.department) if entry.department else "Sin departamento",
+        "department": str(entry.department) if entry.department else "",
         "company": str(entry.company) if entry.company else "",
         "manager": manager_name,
-        "office": str(entry.physicalDeliveryOfficeName) if entry.physicalDeliveryOfficeName else "Sin oficina",
+        "office": str(entry.physicalDeliveryOfficeName) if entry.physicalDeliveryOfficeName else "",
         "phone": str(entry.telephoneNumber) if entry.telephoneNumber else "",
         "mobile": str(entry.mobile) if entry.mobile else "",
         "description": str(entry.description) if entry.description else "",
@@ -427,6 +437,119 @@ try {{
 
 
 # ══════════════════════════════════════════════════════════════
+# GESTIÓN DE GRUPOS AD (PowerShell)
+# ══════════════════════════════════════════════════════════════
+
+def get_ad_groups() -> list:
+    """Obtiene la lista de grupos locales en el AD usando ldap3 (ya que RSAT/Get-ADGroup no está instalado localmente)."""
+    conn = _get_admin_connection()
+    search_base = _get_search_base()
+    
+    # Atributos de grupo
+    attributes = ['cn', 'description', 'groupType', 'member', 'distinguishedName', 'objectGUID', 'isCriticalSystemObject']
+    
+    conn.search(search_base, "(objectClass=group)", SUBTREE, attributes=attributes)
+    
+    groups_list = []
+    for entry in conn.entries:
+        dn = str(entry.distinguishedName)
+        
+        # Ignorar grupos del sistema por defecto (Builtin o marcados como críticos)
+        if "CN=Builtin" in dn:
+            continue
+        if hasattr(entry, 'isCriticalSystemObject') and entry.isCriticalSystemObject:
+            if str(entry.isCriticalSystemObject.value).lower() == 'true':
+                continue
+                
+        # Ignorar algunos grupos conocidos de sistema que a veces residen en Users
+        cn_lower = str(entry.cn).lower()
+        if cn_lower in ["domain computers", "domain controllers", "domain guests", "domain users", "enterprise read-only domain controllers", "group policy creator owners", "read-only domain controllers", "dnsadmins", "dnsupdateproxy", "ras and ias servers", "allowed rodc password replication group", "denied rodc password replication group", "cert publishers"]:
+            continue
+
+        # Extraer OU del DN
+        dn_parts = dn.split(',')
+        ou_parts = [p.replace('OU=', '').replace('DC=', '') for p in dn_parts if p.startswith('OU=') or p.startswith('DC=')]
+        ou_path = "/".join(ou_parts) if ou_parts else "Users (Builtin)"
+        
+        # Determinar Scope y Type del groupType
+        # Referencia groupType:
+        # Security Global = -2147483646
+        # Security Domain Local = -2147483644
+        # Security Universal = -2147483640
+        # Distribution = ... (positivos)
+        gt = entry.groupType.value if entry.groupType else 0
+        
+        is_security = True if gt and gt < 0 else False
+        
+        scope = "Global"
+        if gt in [-2147483644, 4]: scope = "DomainLocal"
+        elif gt in [-2147483640, 8]: scope = "Universal"
+        
+        groups_list.append({
+            "id": str(entry.objectGUID) if entry.objectGUID else "",
+            "name": str(entry.cn),
+            "scope": scope,
+            "type": "Security" if is_security else "Distribution",
+            "description": str(entry.description) if entry.description else "",
+            "membersCount": len(entry.member) if entry.member else 0,
+            "path": ou_path,
+            "dn": dn
+        })
+        
+    conn.unbind()
+    return groups_list
+
+
+def create_ad_group(data: dict) -> dict:
+    """Crea un grupo nativo en el AD usando ldap3."""
+    name = data.get("name", "").strip()
+    description = data.get("description", "").strip()
+    scope = data.get("scope", "Global")
+    category = data.get("type", "Security")
+    path_dn = data.get("path", "").strip()
+
+    if not name or not path_dn:
+        return {"success": False, "error": "Faltan datos obligatorios (name, path)."}
+
+    # Determinar groupType
+    # Valores de groupType:
+    # Security Global = -2147483646
+    # Security DomainLocal = -2147483644
+    # Security Universal = -2147483640
+    # Distribution Global = 2
+    # Distribution DomainLocal = 4
+    # Distribution Universal = 8
+    
+    gt = 2 # Por defecto Global Distribution
+    if category == "Security":
+        if scope == "Global": gt = -2147483646
+        elif scope == "DomainLocal": gt = -2147483644
+        elif scope == "Universal": gt = -2147483640
+    else:
+        if scope == "Global": gt = 2
+        elif scope == "DomainLocal": gt = 4
+        elif scope == "Universal": gt = 8
+
+    # Construir el DN del nuevo grupo
+    group_dn = f"CN={name},{path_dn}"
+    
+    conn = _get_admin_connection()
+    attributes = {
+        'sAMAccountName': name,
+        'groupType': gt,
+        'description': description
+    }
+    
+    if conn.add(group_dn, ['top', 'group'], attributes):
+        conn.unbind()
+        return {"success": True, "message": f"Grupo '{name}' creado correctamente en la OU."}
+    else:
+        error_msg = conn.result.get('description', '')
+        conn.unbind()
+        return {"success": False, "error": f"Error al crear grupo: {error_msg}"}
+
+
+# ══════════════════════════════════════════════════════════════
 # OPCIONES DE CUENTA (userAccountControl bits + pwdLastSet)
 # ══════════════════════════════════════════════════════════════
 # Bits de userAccountControl relevantes
@@ -454,7 +577,14 @@ def get_account_options(username: str) -> dict:
 
     entry = conn.entries[0]
     uac = int(str(entry.userAccountControl)) if 'userAccountControl' in entry else 0
-    lockout_time = int(str(entry.lockoutTime)) if 'lockoutTime' in entry and entry.lockoutTime else 0
+    try:
+        lockout_time_str = str(entry.lockoutTime) if 'lockoutTime' in entry and entry.lockoutTime else "0"
+        if "-" in lockout_time_str:
+            lockout_time = 0 if "1601" in lockout_time_str else 1
+        else:
+            lockout_time = int(lockout_time_str)
+    except ValueError:
+        lockout_time = 0
     
     # pwdLastSet is 0 if user must change password
     pwd_last_set = -1
@@ -729,6 +859,50 @@ def update_attributes_bulk(username: str, updates: dict) -> dict:
 # ══════════════════════════════════════════════════════════════
 # GESTIÓN DE GRUPOS (Miembro de)
 # ══════════════════════════════════════════════════════════════
+def search_ad_objects(query: str, limit: int = 15) -> list:
+    """Busca usuarios y grupos simultáneamente en el AD (Typeahead)."""
+    conn = _get_admin_connection()
+    search_base = _get_search_base()
+
+    safe_query = query.replace("(", "").replace(")", "").replace("*", "").replace("\\", "").strip()
+    if not safe_query:
+        conn.unbind()
+        return []
+
+    search_filter = (
+        f"(&(|(objectClass=user)(objectClass=group))"
+        f"(|(sAMAccountName=*{safe_query}*)(name=*{safe_query}*)(displayName=*{safe_query}*)))"
+    )
+
+    entries = _paged_search(
+        conn=conn,
+        search_base=search_base,
+        search_filter=search_filter,
+        attributes=['sAMAccountName', 'name', 'displayName', 'objectClass', 'userPrincipalName'],
+        limit=limit
+    )
+
+    results = []
+    for entry in entries:
+        classes = [c.lower() for c in entry.objectClass.values] if 'objectClass' in entry else []
+        is_group = 'group' in classes
+        obj_type = "Group" if is_group else "User"
+        
+        display_name = str(entry.displayName) if 'displayName' in entry and entry.displayName else str(entry.name) if 'name' in entry else ""
+        sam = str(entry.sAMAccountName) if 'sAMAccountName' in entry else ""
+        upn = str(entry.userPrincipalName) if 'userPrincipalName' in entry and entry.userPrincipalName else sam
+
+        results.append({
+            "name": display_name,
+            "sAMAccountName": sam,
+            "upn": upn,
+            "type": obj_type
+        })
+    
+    conn.unbind()
+    results.sort(key=lambda x: x['name'])
+    return results
+
 def search_ad_groups(query: str, limit: int = 20) -> list:
     """Busca grupos de seguridad en el AD por nombre, sAMAccountName o descripción."""
     conn = _get_admin_connection()
@@ -767,6 +941,98 @@ def search_ad_groups(query: str, limit: int = 20) -> list:
     conn.unbind()
     results.sort(key=lambda x: x['name'])
     return results
+
+def get_ad_group_members(group_name: str) -> list:
+    """Obtiene los miembros de un grupo (usuarios y/o subgrupos)."""
+    conn = _get_admin_connection()
+    search_base = _get_search_base()
+    conn.search(search_base, f"(sAMAccountName={group_name})", SUBTREE, attributes=['member'])
+    if not conn.entries:
+        conn.unbind()
+        return []
+    
+    group_entry = conn.entries[0]
+    members = []
+    
+    if 'member' in group_entry and group_entry.member:
+        member_dns = group_entry.member
+        for member_dn in member_dns:
+            # Buscar cada miembro para obtener su sAMAccountName, ObjectClass y DisplayName
+            conn.search(str(member_dn), "(objectClass=*)", attributes=['sAMAccountName', 'displayName', 'objectClass'])
+            if conn.entries:
+                entry = conn.entries[0]
+                classes = [c.lower() for c in entry.objectClass.values] if 'objectClass' in entry else []
+                m_type = 'Group' if 'group' in classes else 'User'
+                
+                members.append({
+                    "name": str(entry.displayName) if 'displayName' in entry and entry.displayName else str(entry.sAMAccountName) if 'sAMAccountName' in entry else str(member_dn),
+                    "sAMAccountName": str(entry.sAMAccountName) if 'sAMAccountName' in entry else "",
+                    "type": m_type,
+                    "dn": str(member_dn)
+                })
+    conn.unbind()
+    members.sort(key=lambda x: x['name'])
+    return members
+
+def add_ad_group_member(group_name: str, member_name: str) -> dict:
+    """Agrega un miembro (usuario o grupo) a un grupo del AD."""
+    from ldap3 import MODIFY_ADD
+    conn = _get_admin_connection()
+    search_base = _get_search_base()
+    
+    # 1. Buscar el grupo
+    conn.search(search_base, f"(sAMAccountName={group_name})", SUBTREE, attributes=['distinguishedName'])
+    if not conn.entries:
+        conn.unbind()
+        return {"success": False, "error": f"Grupo '{group_name}' no encontrado."}
+    group_dn = str(conn.entries[0].distinguishedName)
+    
+    # 2. Buscar el miembro
+    conn.search(search_base, f"(sAMAccountName={member_name})", SUBTREE, attributes=['distinguishedName'])
+    if not conn.entries:
+        conn.unbind()
+        return {"success": False, "error": f"Miembro '{member_name}' no encontrado."}
+    member_dn = str(conn.entries[0].distinguishedName)
+    
+    # 3. Agregar
+    result = conn.modify(group_dn, {'member': [(MODIFY_ADD, [member_dn])]})
+    if result:
+        conn.unbind()
+        return {"success": True, "message": "Miembro agregado al grupo correctamente."}
+    else:
+        error = conn.result.get('description', 'Error desconocido')
+        conn.unbind()
+        return {"success": False, "error": f"Error agregando al grupo: {error}"}
+
+def remove_ad_group_member(group_name: str, member_name: str) -> dict:
+    """Quita un miembro (usuario o grupo) de un grupo del AD."""
+    from ldap3 import MODIFY_DELETE
+    conn = _get_admin_connection()
+    search_base = _get_search_base()
+    
+    # 1. Buscar el grupo
+    conn.search(search_base, f"(sAMAccountName={group_name})", SUBTREE, attributes=['distinguishedName'])
+    if not conn.entries:
+        conn.unbind()
+        return {"success": False, "error": f"Grupo '{group_name}' no encontrado."}
+    group_dn = str(conn.entries[0].distinguishedName)
+    
+    # 2. Buscar el miembro
+    conn.search(search_base, f"(sAMAccountName={member_name})", SUBTREE, attributes=['distinguishedName'])
+    if not conn.entries:
+        conn.unbind()
+        return {"success": False, "error": f"Miembro '{member_name}' no encontrado."}
+    member_dn = str(conn.entries[0].distinguishedName)
+    
+    # 3. Remover
+    result = conn.modify(group_dn, {'member': [(MODIFY_DELETE, [member_dn])]})
+    if result:
+        conn.unbind()
+        return {"success": True, "message": "Miembro removido del grupo correctamente."}
+    else:
+        error = conn.result.get('description', 'Error desconocido')
+        conn.unbind()
+        return {"success": False, "error": f"Error removiendo del grupo: {error}"}
 
 
 def add_user_to_group(username: str, group_dn: str) -> dict:
@@ -891,11 +1157,21 @@ def create_ad_user(data: dict) -> dict:
         'givenName': data['firstName'],
         'sn': data['lastName'],
         'displayName': data['fullName'],
-        'description': 'Creado desde IT Admin Platform',
+        'description': data.get('description', 'Creado desde IT Admin Platform'),
+        'mail': data['upn'],
     }
     
     if data.get('initials'):
         attributes['initials'] = data['initials']
+    if data.get('jobTitle'):
+        attributes['title'] = data['jobTitle']
+    if data.get('department'):
+        attributes['department'] = data['department']
+    if data.get('managerDn'):
+        attributes['manager'] = data['managerDn']
+    if data.get('telephoneNumber'):
+        attributes['telephoneNumber'] = data['telephoneNumber']
+        attributes['ipPhone'] = data['telephoneNumber']
         
     # Validar si el dominio es el de la nube para inyectar proxyAddresses
     if data['upn'].lower().endswith('@105code.cloud'):
@@ -1054,3 +1330,50 @@ def manage_proxy_address(username: str, alias: str, action: str) -> dict:
     
     return {"success": True, "message": f"Alias {'agregado' if action == 'add' else 'eliminado'} correctamente."}
 
+def get_all_gpos():
+    """Obtiene todas las directivas de grupo (GPOs) desde Active Directory mediante LDAP."""
+    conn = _get_admin_connection()
+    search_base = "CN=Policies,CN=System," + _get_search_base()
+    search_filter = "(objectClass=groupPolicyContainer)"
+    attributes = ["displayName", "cn", "whenChanged", "flags", "gPCMachineExtensionNames", "gPCUserExtensionNames"]
+    
+    try:
+        entries = _paged_search(conn, search_base, search_filter, attributes)
+        gpos = []
+        for entry in entries:
+            attrs = entry.entry_attributes_as_dict
+            
+            # Determinar tipo
+            has_machine = bool(attrs.get("gPCMachineExtensionNames"))
+            has_user = bool(attrs.get("gPCUserExtensionNames"))
+            if has_machine and has_user:
+                gpo_type = "Equipo y Usuario"
+            elif has_machine:
+                gpo_type = "Equipo"
+            elif has_user:
+                gpo_type = "Usuario"
+            else:
+                gpo_type = "Vacía/Desconocido"
+                
+            # Determinar estado
+            flags = attrs.get("flags", [0])[0]
+            # 0 = Enabled, 1 = User disabled, 2 = Machine disabled, 3 = All disabled
+            if flags == 3:
+                status = "Inactivo"
+            else:
+                status = "Activo"
+                
+            gpos.append({
+                "id": attrs.get("cn", [""])[0],
+                "name": attrs.get("displayName", ["Sin Nombre"])[0],
+                "type": gpo_type,
+                "target": "Varias OUs", # Nota: El alcance real requiere parsear gPLink en las OUs
+                "status": status,
+                "last_modified": _parse_ad_timestamp(attrs.get("whenChanged", [None])[0])
+            })
+        return gpos
+    except Exception as e:
+        print(f"Error getting GPOs: {e}")
+        return []
+    finally:
+        conn.unbind()

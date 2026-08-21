@@ -1,0 +1,30 @@
+=== 1) CONECTIVIDAD TCP AL DC ===
+DC IP: 192.168.20.100
+User: code\administrador
+  puerto 445 (SMB): OPEN
+  puerto 135 (RPC/WMI): OPEN
+  puerto 389 (LDAP): OPEN
+  puerto 5985 (WinRM HTTP): TIMEOUT
+
+=== 2) WALLPAPER UNC ===
+  \\192.168.20.110\Fondos de pantalla\Fondodepantalla.jpg: EXISTE
+
+=== 3) SMB IPC$ / C$ ===
+  net use IPC$: rc=0
+
+=== 4) WMI Win32_Process en el DC ===
+  WMI rc=0
+  STDOUT: PID=4532
+
+=== 5) ESPERANDO RESULTADO EN C$ ===
+  archivo listo en 5s
+  RESULTADO REMOTO:
+    CREATED
+    WALLPAPER_SET
+    GUID=eb2b9711-34d0-4630-b791-b7f40d7c8e59
+    OK
+
+=== VEREDICTO ===
+GPO 'Fondo_Pantalla_AdInfra' creado/actualizado en el DC con wallpaper:
+  \\192.168.20.110\Fondos de pantalla\Fondodepantalla.jpg
+No se vinculo a ninguna OU (eso se hace desde la UI).

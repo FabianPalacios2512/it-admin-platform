@@ -1,8 +1,10 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
+import { useTasks } from '@/composables/useTasks'
 
 const emit = defineEmits(['close'])
 const API_BASE = '/api/v1'
+const { addNotification } = useTasks()
 
 const activeTab = ref('servers') // 'servers' o 'env'
 
@@ -147,7 +149,17 @@ const testConnection = async () => {
     }
     
     const data = await res.json()
-    testResult.value = { success: data.success, message: data.message }
+    if (res.ok && data.success) {
+      addNotification({
+        type: 'info',
+        title: 'Prueba Iniciada',
+        message: `La prueba de conexión con ${formData.value.ip} se ha iniciado en segundo plano.`
+      })
+      // Clear the local testResult so it doesn't show old error
+      testResult.value = null
+    } else {
+      testResult.value = { success: false, message: data.message || 'Error al iniciar prueba' }
+    }
   } catch (err) {
     testResult.value = { success: false, message: 'Error de red.' }
   } finally {

@@ -44,9 +44,22 @@ class ZabbixService {
     return await response.json();
   }
 
-  async getHostDetail(hostId) {
+  async getHostDetail(hostId, time_range = 3600) {
     const token = localStorage.getItem('access_token');
-    const response = await fetch(`${API_BASE}/zabbix/metrics/detail?host_id=${encodeURIComponent(hostId)}`, {
+    const response = await fetch(`${API_BASE}/zabbix/metrics/detail?host_id=${encodeURIComponent(hostId)}&time_range=${time_range}`, {
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+    });
+    if (response.status === 401) {
+      localStorage.removeItem('access_token');
+      window.location.href = '/login';
+    }
+    if (!response.ok) throw new Error(`Error HTTP: ${response.status}`);
+    return await response.json();
+  }
+
+  async getPbxTelephony() {
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(`${API_BASE}/zabbix/pbx`, {
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
     });
     if (response.status === 401) {

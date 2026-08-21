@@ -80,7 +80,10 @@ from app.api.v1 import zabbix
 app.include_router(zabbix.router, prefix="/api/v1/zabbix", tags=["zabbix"])
 from app.api.v1 import gpo
 app.include_router(gpo.router, prefix="/api/v1/gpo", tags=["gpo"])
-
+from app.api.v1 import exchange
+app.include_router(exchange.router, prefix="/api/v1/exchange", tags=["exchange"])
+from app.api.v1 import tasks
+app.include_router(tasks.router, prefix="/api/v1/tasks", tags=["tasks"])
 # ---------------------------------------------------------
 # Integración: Servir Frontend Estático (Vue SPA)
 # ---------------------------------------------------------

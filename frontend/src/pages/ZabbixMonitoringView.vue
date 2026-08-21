@@ -1,47 +1,306 @@
 <template>
-  <div class="zabbix-monitoring-container h-full min-h-0 flex flex-col gap-3 font-sans overflow-hidden">
+  <div class="zabbix-monitoring-container flex flex-col gap-4 font-sans pb-10">
     <!-- Header -->
     <header class="flex justify-between items-center shrink-0">
       <div>
         <h1 class="text-xl font-bold text-slate-800 tracking-tight leading-tight">Monitoreo Zabbix V2</h1>
         <p class="text-xs text-slate-500 mt-0.5">Estado en tiempo real de todos los servidores monitoreados</p>
       </div>
-      <!-- Time Picker -->
-      <div class="flex items-center gap-1 bg-slate-100/80 p-1 rounded-lg border border-slate-200">
-        <button v-for="tr in timeRanges" :key="tr.value" 
-                @click="setTimeRange(tr.value)"
-                class="px-3 py-1 text-xs font-semibold rounded-md transition-all"
-                :class="selectedRange === tr.value ? 'bg-white text-slate-800 shadow-sm ring-1 ring-slate-200/50' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'">
-          {{ tr.label }}
+      <div class="flex items-center gap-4">
+        <!-- Templates Selector (iOS Segmented Control Style) -->
+        <div class="inline-flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200">
+          <button @click="currentTemplate = 'global'" :class="currentTemplate === 'global' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'" class="px-4 py-1.5 text-xs font-bold uppercase tracking-wider rounded-md transition-all whitespace-nowrap">Global</button>
+          <button @click="currentTemplate = 'issabel'" :class="currentTemplate === 'issabel' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'" class="px-4 py-1.5 text-xs font-bold uppercase tracking-wider rounded-md transition-all whitespace-nowrap">PBX Issabel</button>
+          <button @click="currentTemplate = 'fortigate'" :class="currentTemplate === 'fortigate' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'" class="px-4 py-1.5 text-xs font-bold uppercase tracking-wider rounded-md transition-all whitespace-nowrap">FortiGate V2</button>
+        </div>
+
+        <!-- Time Picker (Compact Dropdown) -->
+        <div class="relative flex items-center">
+          <select :value="selectedRange" @change="setTimeRange(Number($event.target.value))" class="appearance-none bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg pl-3 pr-8 py-2 hover:bg-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer">
+            <option v-for="tr in timeRanges" :key="tr.value" :value="tr.value">{{ tr.label }}</option>
+          </select>
+          <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+          </div>
+        </div>
+
+        <button @click="refreshAll" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all flex items-center gap-2">
+          <i class="fas fa-sync-alt" :class="{'animate-spin': loadingTrends || loadingHosts}"></i>
+          Refrescar
         </button>
       </div>
-
-      <button @click="refreshAll" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all flex items-center gap-2">
-        <i class="fas fa-sync-alt" :class="{'animate-spin': loadingTrends || loadingHosts}"></i>
-        Refrescar Todo
-      </button>
     </header>
 
     <!-- Global Trends (Modo Servidores) -->
-    <div v-if="!isSecurityMode" class="grid grid-cols-1 lg:grid-cols-2 gap-3 shrink-0">
-      <div class="trend-chart bg-white px-4 pt-3 pb-2 rounded-xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] relative min-h-[320px]">
+    <div v-if="currentTemplate === 'global'" class="grid grid-cols-1 lg:grid-cols-5 gap-3 shrink-0">
+      <div class="trend-chart lg:col-span-2 bg-white px-4 pt-4 pb-2 rounded-xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] relative min-h-[250px]">
         <div class="flex justify-between items-center mb-1">
-          <h2 class="text-xs font-bold text-slate-700 tracking-wider">CPU GLOBAL TREND (TOP 5)</h2>
+          <h2 class="text-sm font-bold text-slate-800 tracking-wide">CPU GLOBAL TREND (TOP 5)</h2>
         </div>
         <div v-if="loadingTrends" class="absolute inset-0 bg-white/80 flex items-center justify-center z-10 rounded-xl"><div class="spinner"></div></div>
-        <apexchart type="line" height="300" :options="trendOptions('right')" :series="cpuTrendSeries" />
+        <apexchart type="line" height="220" :options="trendOptions('right')" :series="cpuTrendSeries" />
       </div>
-      <div class="trend-chart bg-white px-4 pt-3 pb-2 rounded-xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] relative min-h-[320px]">
+      <div class="trend-chart lg:col-span-2 bg-white px-4 pt-4 pb-2 rounded-xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] relative min-h-[250px]">
         <div class="flex justify-between items-center mb-1">
-          <h2 class="text-xs font-bold text-slate-700 tracking-wider">MEMORY GLOBAL TREND (TOP 5)</h2>
+          <h2 class="text-sm font-bold text-slate-800 tracking-wide">MEMORY GLOBAL TREND (TOP 5)</h2>
         </div>
         <div v-if="loadingTrends" class="absolute inset-0 bg-white/80 flex items-center justify-center z-10 rounded-xl"><div class="spinner"></div></div>
-        <apexchart type="line" height="300" :options="trendOptions('left')" :series="ramTrendSeries" />
+        <apexchart type="line" height="220" :options="trendOptions('left')" :series="ramTrendSeries" />
+      </div>
+      <!-- Resumen PBX (Mini) -->
+      <div class="trend-chart lg:col-span-1 bg-white px-4 pt-4 pb-4 rounded-xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-200 relative min-h-[250px] flex flex-col">
+        
+        <div class="flex justify-between items-center mb-4 border-b pb-2">
+          <h2 class="text-sm font-bold text-slate-800 tracking-wide">PBX STATUS</h2>
+          <span v-if="pbxData.asterisk_down" class="bg-red-50 text-red-700 px-2 py-0.5 rounded-md text-[10px] font-bold border border-red-100 animate-pulse">CAÍDO</span>
+          <span v-else class="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md text-[10px] font-bold border border-emerald-100">ONLINE</span>
+        </div>
+
+        <div class="flex-1 flex flex-col justify-center gap-3">
+          <div class="grid grid-cols-2 gap-2">
+            <div class="col-span-2 bg-slate-50 rounded-md p-3 text-center border border-slate-100 flex flex-col justify-center items-center">
+              <span class="text-[9px] text-slate-400 font-bold uppercase tracking-widest mb-1">Llamadas</span>
+              <transition name="fade" mode="out-in">
+                <span :key="pbxData.asterisk_down ? 'down' : pbxData.llamadas_activas" class="text-4xl font-black tracking-tighter leading-none block" :class="pbxData.asterisk_down ? 'text-red-600' : 'text-slate-800'">
+                  {{ pbxData.asterisk_down ? '--' : pbxData.llamadas_activas }}
+                </span>
+              </transition>
+            </div>
+            
+            <div class="bg-slate-50 rounded-md p-2 text-center border border-slate-100 flex flex-col items-center justify-center">
+              <span class="text-[8px] font-bold uppercase tracking-widest text-slate-500 mb-1 leading-none">IVR</span>
+              <div class="flex items-center gap-1 font-semibold text-[10px]">
+                <span :class="['w-1.5 h-1.5 rounded-full', pbxData.robot_ivr === 1 ? 'bg-emerald-500' : 'bg-red-500']"></span>
+                <span :class="pbxData.robot_ivr === 1 ? 'text-emerald-700' : 'text-red-700'">{{ pbxData.robot_ivr === 1 ? 'OK' : 'ERR' }}</span>
+              </div>
+            </div>
+            
+            <div class="bg-slate-50 rounded-md p-2 text-center border border-slate-100 flex flex-col items-center justify-center">
+              <span class="text-[8px] font-bold uppercase tracking-widest text-slate-500 mb-1 leading-none">Rutas</span>
+              <div class="flex items-center gap-1 font-semibold text-[10px]">
+                <span :class="['w-1.5 h-1.5 rounded-full', (pbxData.ruta_opcion1 === 1 && pbxData.ruta_opcion2 === 1) ? 'bg-emerald-500' : 'bg-red-500']"></span>
+                <span :class="(pbxData.ruta_opcion1 === 1 && pbxData.ruta_opcion2 === 1) ? 'text-emerald-700' : 'text-red-700'">
+                  {{ (pbxData.ruta_opcion1 === 1 && pbxData.ruta_opcion2 === 1) ? 'OK' : 'ERR' }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
+    <!-- Issabel PBX Template -->
+    <div v-if="currentTemplate === 'issabel'" class="flex flex-col gap-4 shrink-0">
+      
+      <!-- Fila 1: Core Metrics (NOC Light Theme) -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Tarjeta 1: Estado del Motor -->
+        <div class="bg-white rounded-md shadow-sm border border-gray-200 p-4 flex flex-col justify-between relative overflow-hidden transition-all">
+          <div class="flex justify-between items-start mb-1">
+            <span class="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500">Estado del Motor</span>
+          </div>
+          <div class="flex items-center gap-3 mt-2">
+            <div class="w-10 h-10 rounded-full flex items-center justify-center shrink-0" :class="pbxData.asterisk_down ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-500'">
+              <i class="fas fa-server text-xl drop-shadow-sm"></i>
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="text-xl font-black tracking-tight truncate" :class="pbxData.asterisk_down ? 'text-red-600' : 'text-slate-800'">
+                {{ pbxData.asterisk_down ? 'CAÍDO' : 'EN LÍNEA' }}
+              </div>
+              <div class="text-[9px] font-semibold text-slate-500 flex items-center gap-1.5 truncate">
+                <span class="w-1.5 h-1.5 rounded-full inline-block shrink-0" :class="pbxData.asterisk_down ? 'bg-red-500' : 'bg-emerald-500'"></span>
+                Asterisk PBX
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tarjeta 2: Llamadas Activas -->
+        <div class="bg-white rounded-md shadow-sm border border-gray-200 p-4 flex flex-col justify-between items-center text-center relative overflow-hidden transition-all">
+          <span class="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-1">Llamadas Activas</span>
+          <div class="flex items-center gap-2 mt-1">
+            <div class="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center shrink-0">
+              <i class="fas fa-phone-alt text-sm text-blue-500 drop-shadow-sm"></i>
+            </div>
+            <div class="text-3xl font-black font-mono tracking-tighter leading-none" :class="pbxData.asterisk_down ? 'text-red-500' : 'text-slate-800'">
+              {{ pbxData.asterisk_down ? '--' : pbxData.llamadas_activas }}
+            </div>
+          </div>
+          <span class="text-[8px] text-slate-400 font-bold uppercase mt-2 tracking-[0.1em]">Conexiones Concurrentes</span>
+        </div>
+
+        <!-- Tarjeta 3: Troncal SIP 101 -->
+        <div class="bg-white rounded-md shadow-sm p-4 flex flex-col justify-between relative overflow-hidden transition-all"
+             :class="(pbxData.troncal_101 === 0 || pbxData.server_down || pbxData.asterisk_down) ? 'bg-red-50 border-l-4 border-y border-r border-red-500' : 'border border-gray-200'">
+          <div class="flex justify-between items-start mb-1">
+            <span class="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500" :class="(pbxData.troncal_101 === 0 || pbxData.server_down || pbxData.asterisk_down) ? 'text-red-600' : ''">Troncal SIP (Claro/Tigo)</span>
+          </div>
+          <div class="flex items-center gap-3 mt-2">
+            <div class="w-10 h-10 rounded-full flex items-center justify-center shrink-0" :class="(pbxData.troncal_101 === 1 && !pbxData.server_down) ? 'bg-emerald-50 text-emerald-500' : ((pbxData.troncal_101 === 0 || pbxData.server_down || pbxData.asterisk_down) ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-slate-50 text-slate-400')">
+              <i class="fas fa-exclamation-triangle text-xl drop-shadow-sm" v-if="pbxData.troncal_101 === 0 || pbxData.server_down || pbxData.asterisk_down"></i>
+              <i class="fas fa-network-wired text-xl drop-shadow-sm" v-else></i>
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="text-xl font-black tracking-tight truncate" :class="(pbxData.troncal_101 === 1 && !pbxData.server_down && !pbxData.asterisk_down) ? 'text-slate-800' : ((pbxData.troncal_101 === 0 || pbxData.server_down || pbxData.asterisk_down) ? 'text-red-700' : 'text-slate-500')">
+                {{ pbxData.server_down ? 'DESCONECT' : (pbxData.asterisk_down ? 'CAÍDO' : (pbxData.troncal_101 === 1 ? 'OK' : (pbxData.troncal_101 === 0 ? 'FALLA' : 'N/A'))) }}
+              </div>
+              <div class="text-[9px] font-semibold flex items-center gap-1.5 truncate" :class="(pbxData.troncal_101 === 0 || pbxData.server_down || pbxData.asterisk_down) ? 'text-red-500' : 'text-slate-500'">
+                <span class="w-1.5 h-1.5 rounded-full inline-block shrink-0" :class="(pbxData.troncal_101 === 1 && !pbxData.server_down && !pbxData.asterisk_down) ? 'bg-emerald-500' : 'bg-red-600'"></span>
+                Enlace [101]
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tarjeta 4: Extensiones Registradas -->
+        <div class="bg-white rounded-md shadow-sm border border-gray-200 p-4 flex flex-col justify-between items-center text-center relative overflow-hidden transition-all">
+          <span class="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-1">Ext. Registradas</span>
+          <div class="flex items-center gap-2 mt-1">
+            <div class="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center shrink-0">
+              <i class="fas fa-users text-sm text-emerald-500 drop-shadow-sm"></i>
+            </div>
+            <div class="text-2xl font-black font-mono tracking-tighter leading-none" :class="pbxData.asterisk_down ? 'text-red-500' : 'text-slate-800'">
+              {{ pbxData.asterisk_down ? '-- / --' : pbxData.extensiones_registradas }}
+            </div>
+          </div>
+          <span class="text-[8px] text-slate-400 font-bold uppercase mt-2 tracking-[0.1em]">Online / Total</span>
+        </div>
+      </div>
+
+      <!-- Fila 2: Auditoría e Infraestructura -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-2">
+        <!-- Columna Izquierda: Auditor Sintético -->
+        <div class="bg-white rounded-md shadow-sm border border-gray-200 p-4 transition-all flex flex-col relative overflow-hidden">
+          <h3 class="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-2 flex items-center gap-2 shrink-0 relative z-10">
+            <i class="fas fa-robot text-blue-500 text-xs"></i> Auditor Sintético IVR
+          </h3>
+          <!-- Ondas de fondo sutiles -->
+          <div class="absolute inset-0 opacity-[0.02] bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiPgo8cGF0aCBkPSJNMCA1MCBRIDI1IDMwIDUwIDUwIFQgMTAwIDUwIiBzdHJva2U9IiMzYjgyZjYiIGZpbGw9Im5vbmUiIHN0cm9rZS13aWR0aD0iMiIgLz4KPHBhdGggZD0iTTAgNTAgUSAyNSA3MCA1MCA1MCBUIDEwMCA1MCIgc3Ryb2tlPSIjM2I4MmY2IiBmaWxsPSJub25lIiBzdHJva2Utd2lkdGg9IjIiIC8+Cjwvc3ZnPg==')] bg-center bg-no-repeat bg-cover"></div>
+          
+          <div class="flex-1 flex flex-row items-center gap-4 py-2 relative z-10">
+            <div class="w-12 h-12 rounded-full flex items-center justify-center shrink-0 border" :class="(pbxData.robot_ivr === 1 && !pbxData.server_down && !pbxData.asterisk_down) ? 'bg-emerald-50 border-emerald-200' : ((pbxData.robot_ivr === 0 || pbxData.server_down || pbxData.asterisk_down) ? 'bg-red-50 border-red-200' : 'bg-slate-100 border-slate-200')">
+              <i class="fas fa-robot text-2xl" :class="(pbxData.robot_ivr === 1 && !pbxData.server_down && !pbxData.asterisk_down) ? 'text-emerald-500' : ((pbxData.robot_ivr === 0 || pbxData.server_down || pbxData.asterisk_down) ? 'text-red-500' : 'text-slate-400')"></i>
+            </div>
+            <div class="flex flex-col justify-center">
+              <div class="text-sm font-black tracking-tight uppercase" :class="(pbxData.robot_ivr === 1 && !pbxData.server_down && !pbxData.asterisk_down) ? 'text-emerald-600' : ((pbxData.robot_ivr === 0 || pbxData.server_down || pbxData.asterisk_down) ? 'text-red-600' : 'text-slate-500')">
+                {{ pbxData.server_down ? 'SERVIDOR DESCONECTADO' : (pbxData.asterisk_down ? 'FALLA (MOTOR CAÍDO)' : (pbxData.robot_ivr === 1 ? 'PASANDO CORRECTAMENTE' : (pbxData.robot_ivr === 0 ? '¡FALLA EN PRUEBA!' : 'SIN DATOS'))) }}
+              </div>
+              <div class="mt-1 flex items-center gap-1.5 text-[9px] font-bold text-slate-500 uppercase tracking-widest">
+                <span class="w-1.5 h-1.5 rounded-full" :class="(pbxData.robot_ivr === 1 && !pbxData.server_down && !pbxData.asterisk_down) ? 'bg-emerald-500' : 'bg-slate-300'"></span>
+                Última ejecución: Hace 1 min
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Columna Central: Opciones de Menú (Píldoras) -->
+        <div class="bg-white rounded-md shadow-sm border border-gray-200 p-4 transition-all flex flex-col relative overflow-hidden">
+          <h3 class="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-2 flex items-center gap-2">
+            <i class="fas fa-sitemap text-blue-500 text-xs"></i> Opciones de Menú
+          </h3>
+          <div class="flex flex-wrap gap-2 mt-1">
+            <div v-for="i in 9" :key="i" class="px-2 py-1 rounded-full border flex items-center shadow-sm"
+                 :class="(pbxData.ivr_options?.[i]?.value === 1) ? 'bg-white border-emerald-200 text-slate-700' : 'bg-slate-50 border-slate-200 text-slate-400'">
+              <span class="w-1.5 h-1.5 rounded-full inline-block mr-1.5" :class="(pbxData.ivr_options?.[i]?.value === 1) ? 'bg-emerald-500' : 'bg-red-400'"></span>
+              <span class="text-xs font-mono font-semibold">{{ getOptionName(i, pbxData.ivr_options?.[i]?.name) }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Columna Derecha: Almacenamiento PBX -->
+        <div class="bg-white rounded-md shadow-sm border border-gray-200 p-4 transition-all flex flex-col justify-center relative">
+          <h3 class="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-2 flex items-center gap-2">
+            <i class="fas fa-hdd text-blue-500 text-xs"></i> Almacenamiento PBX
+          </h3>
+          <div class="flex flex-col gap-2 mt-1">
+            <div class="flex justify-between items-end">
+              <div class="flex flex-col">
+                <span class="text-xs font-semibold text-slate-700">Ruta de Grabaciones</span>
+                <span class="text-[9px] font-mono text-slate-400">/var/spool/asterisk/monitor</span>
+              </div>
+              <span class="text-lg font-bold font-mono" :class="pbxData.almacenamiento_pbx > 80 ? 'text-red-600' : 'text-slate-600'">
+                {{ pbxData.almacenamiento_pbx }}%
+              </span>
+            </div>
+            <div class="h-2.5 w-full bg-slate-100 rounded-sm overflow-hidden border border-slate-200">
+              <div class="h-full transition-all duration-500"
+                   :class="pbxData.almacenamiento_pbx > 80 ? 'bg-red-500' : (pbxData.almacenamiento_pbx > 60 ? 'bg-amber-400' : 'bg-emerald-500')"
+                   :style="`width: ${pbxData.almacenamiento_pbx}%`">
+              </div>
+            </div>
+            <div class="text-[9px] text-slate-400 font-medium text-right mt-0.5 uppercase tracking-widest">
+              Uso de Disco Crítico > 80%
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fila 3: Gráfico de Red (Prioridad) -->
+      <div v-if="issabelHostId && comparisonData[issabelHostId]" class="grid grid-cols-1 gap-4 mt-2">
+        <div class="bg-white p-4 rounded-md shadow-sm border border-gray-200 transition-all flex flex-col">
+          <span class="text-[11px] font-bold text-slate-700 tracking-[0.1em] uppercase flex items-center gap-2 mb-2">
+            <i class="fas fa-network-wired text-blue-500 text-sm"></i> TRÁFICO DE RED (IN/OUT)
+          </span>
+          <div class="flex-1 min-h-[220px]">
+            <apexchart type="area" height="220" :options="netTrafficOptions" :series="getIssabelSeries('net')" />
+          </div>
+          <!-- Zabbix Style Data Table -->
+          <div class="mt-0 pt-2 border-t border-gray-100 font-mono text-xs text-gray-600">
+            <div class="grid grid-cols-5 gap-2 px-2 pb-1.5 text-[10px] uppercase text-gray-400 font-bold border-b border-gray-50">
+              <div class="col-span-1">Métrica</div>
+              <div class="text-right">Last</div>
+              <div class="text-right">Min</div>
+              <div class="text-right">Avg</div>
+              <div class="text-right">Max</div>
+            </div>
+            <div class="grid grid-cols-5 gap-2 px-2 py-1.5 hover:bg-gray-50 items-center">
+              <div class="col-span-1 flex items-center gap-2">
+                <span class="w-2.5 h-2.5 bg-[#22C55E] inline-block shadow-sm"></span> Tráfico de Entrada (In)
+              </div>
+              <div class="text-right font-medium">{{ networkStats.in.last }}</div>
+              <div class="text-right text-gray-500">{{ networkStats.in.min }}</div>
+              <div class="text-right text-gray-500">{{ networkStats.in.avg }}</div>
+              <div class="text-right font-bold text-gray-800">{{ networkStats.in.max }}</div>
+            </div>
+            <div class="grid grid-cols-5 gap-2 px-2 py-1.5 hover:bg-gray-50 items-center">
+              <div class="col-span-1 flex items-center gap-2">
+                <span class="w-2.5 h-2.5 bg-[#EF4444] inline-block shadow-sm"></span> Tráfico de Salida (Out)
+              </div>
+              <div class="text-right font-medium">{{ networkStats.out.last }}</div>
+              <div class="text-right text-gray-500">{{ networkStats.out.min }}</div>
+              <div class="text-right text-gray-500">{{ networkStats.out.avg }}</div>
+              <div class="text-right font-bold text-gray-800">{{ networkStats.out.max }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fila 4: Gráficos de Hardware (CPU y RAM) -->
+      <div v-if="issabelHostId && comparisonData[issabelHostId]" class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+        <!-- CPU Issabel -->
+        <div class="bg-white p-4 rounded-md shadow-sm border border-gray-200 transition-all flex flex-col">
+          <span class="text-[11px] font-bold text-slate-700 tracking-[0.1em] uppercase flex items-center gap-2 mb-2">
+            <i class="fas fa-microchip text-blue-500 text-sm"></i> CONSUMO DE CPU (%)
+          </span>
+          <div class="flex-1 min-h-[256px]">
+            <apexchart type="area" height="256" :options="{ ...detailAreaOptions, colors: ['#3b82f6'] }" :series="getIssabelSeries('cpu')" />
+          </div>
+        </div>
+        <!-- RAM Issabel -->
+        <div class="bg-white p-4 rounded-md shadow-sm border border-gray-200 transition-all flex flex-col">
+          <span class="text-[11px] font-bold text-slate-700 tracking-[0.1em] uppercase flex items-center gap-2 mb-2">
+            <i class="fas fa-memory text-purple-500 text-sm"></i> CONSUMO DE RAM (%)
+          </span>
+          <div class="flex-1 min-h-[256px]">
+            <apexchart type="area" height="256" :options="{ ...detailAreaOptions, colors: ['#a855f7'] }" :series="getIssabelSeries('ram')" />
+          </div>
+        </div>
+      </div>
+
+    </div>
+
     <!-- Global Trends (Modo Seguridad) -->
-    <div v-if="isSecurityMode" class="grid grid-cols-1 lg:grid-cols-3 gap-3 shrink-0">
+    <div v-if="currentTemplate === 'fortigate'" class="grid grid-cols-1 lg:grid-cols-3 gap-3 shrink-0">
       <div class="bg-slate-800 text-white px-5 py-4 rounded-xl shadow-lg relative flex flex-col justify-between">
         <h2 class="text-xs font-bold text-slate-300 tracking-wider">TOTAL SESSIONS (ACTIVES)</h2>
         <div class="text-4xl font-black tracking-tight mt-2 text-purple-400">{{ globalFirewallSessions.toLocaleString() }}</div>
@@ -60,7 +319,7 @@
     </div>
 
     <!-- Data Table -->
-    <div class="bg-white rounded-xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] flex-1 min-h-0 flex flex-col overflow-hidden relative">
+    <div v-if="currentTemplate !== 'issabel'" class="bg-white rounded-xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] relative">
       <div v-if="loadingHosts" class="absolute inset-0 bg-white/80 flex items-center justify-center z-10 rounded-xl"><div class="spinner"></div></div>
       
       <!-- Toolbar -->
@@ -80,28 +339,17 @@
             <option value="linux">Linux</option>
           </select>
         </div>
-        <!-- Right Section: Toggle -->
-        <div class="flex items-center gap-4">
-          <label class="flex items-center cursor-pointer group">
-            <div class="relative">
-              <input type="checkbox" v-model="isSecurityMode" class="sr-only">
-              <div class="block w-10 h-6 rounded-full transition-colors" :class="isSecurityMode ? 'bg-red-500' : 'bg-slate-300'"></div>
-              <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform" :class="isSecurityMode ? 'transform translate-x-4' : ''"></div>
-            </div>
-            <span class="ml-3 text-[12px] font-bold" :class="isSecurityMode ? 'text-red-600' : 'text-slate-500 group-hover:text-slate-700'">FortiGate V2</span>
-          </label>
-        </div>
       </div>
 
-      <div class="overflow-auto flex-1 min-h-0">
+      <div class="w-full">
         <table class="w-full text-left border-collapse">
           <thead class="sticky top-0 bg-white z-[1]">
             <tr class="border-b border-slate-100 shadow-[0_2px_3px_-2px_rgba(0,0,0,0.05)]">
+              <th class="py-2.5 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-50 text-center w-16">Estado</th>
               <th class="py-2.5 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-50">Servidor</th>
               <th class="py-2.5 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-50">IP</th>
-              <th class="py-2.5 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-50">OS / INFO</th>
-              <th class="py-2.5 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-50">Estado</th>
-              <template v-if="!isSecurityMode">
+              <th class="py-2.5 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-50 text-center">OS</th>
+              <template v-if="currentTemplate === 'global'">
                 <th class="py-2.5 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-50">CPU (%)</th>
                 <th class="py-2.5 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-50">RAM Usada (%)</th>
                 <th class="py-2.5 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-50">RED (IN / OUT)</th>
@@ -115,37 +363,40 @@
           </thead>
           <tbody>
             <tr v-for="host in filteredHosts" :key="host.hostid" 
-                class="border-b transition-colors cursor-pointer"
-                :class="host.status === 'Offline' ? 'bg-red-50/40 hover:bg-red-100/50 animate-[pulse_3s_ease-in-out_infinite]' : 'border-slate-50 hover:bg-blue-50/40'" 
+                class="transition-colors cursor-pointer"
+                :class="host.status === 'Offline' ? 'bg-red-50 border-l-4 border-red-500 hover:bg-red-100/50' : 'border-b border-slate-50 hover:bg-blue-50/40'" 
                 @click="openDetail(host)">
+              <td class="py-2 px-4">
+                <div class="flex items-center justify-center">
+                  <span class="relative flex h-2.5 w-2.5" :title="statusMeta(host.status).label">
+                    <span v-if="host.status === 'Online'" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2.5 w-2.5" :class="statusMeta(host.status).dotClass"></span>
+                  </span>
+                </div>
+              </td>
               <td class="py-2 px-4 font-semibold text-[13px] whitespace-nowrap"
                   :class="host.status === 'Offline' ? 'text-red-700' : 'text-slate-700'">
                 {{ parseHostname(host.hostname).main }}
                 <span v-if="parseHostname(host.hostname).tag" class="ml-1.5 align-middle text-[9px] font-bold text-slate-400 tracking-wider">{{ parseHostname(host.hostname).tag }}</span>
               </td>
-              <td class="py-2 px-4 text-slate-500 font-mono text-[11px] font-medium tracking-tight">{{ host.ip }}</td>
-              <td class="py-2 px-4 whitespace-nowrap">
-                <div class="flex items-center gap-2">
-                  <!-- Ícono SVGs para OS -->
-                  <svg v-if="getDetectedOS(host).osName.includes('Windows')" class="w-3.5 h-3.5 text-blue-500" viewBox="0 0 88 88" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M0 12.402l35.687-4.86.016 34.423L0 41.965v-29.563zm35.67 33.529l.016 34.453L0 75.485V46.068l35.67-4.137zm4.326-39.011L87.314 0v41.26L39.996 41.95V6.92zm47.318 39.011V87.31l-47.318-6.66.015-34.72 47.303-4.009z"/></svg>
-                  <svg v-else-if="getDetectedOS(host).osName.includes('Linux')" class="w-3.5 h-3.5 text-slate-600" viewBox="0 0 448 512" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M220.8 123.3c1 .5 1.8 1.7 3 1.7 1.1 0 2.8-.4 2.9-1.5.2-1.4-1.9-2.3-3.2-2.9-1.7-.7-3.9-1-5.5-.1-.4.2-.8.7-.6 1.1.3 1.3 2.3 1.1 3.4 1.7zm-21.9 1.7c1.2 0 2-1.2 3-1.7 1.1-.6 3.1-.4 3.5-1.7.2-.4-.2-.9-.6-1.1-1.6-.9-3.8-.6-5.5.1-1.3.6-3.4 1.5-3.2 2.9.1 1 1.8 1.5 2.8 1.5zM420.2 392.5c-5.1-9.7-16.3-15.4-30.8-19.1-14.9-3.9-29.1-8-36.8-14.8-17.6-15.5-27.1-39.3-35.3-60.6-2.6-6.7-5.1-13.4-7.8-20.1C333.1 230 352 178.6 352 144 352 64.2 293 0 224 0 154.9 0 96 64.2 96 144c0 34.6 18.9 86 42.5 133.9-2.7 6.7-5.2 13.4-7.8 20.1-8.3 21.3-17.7 45.1-35.3 60.6-7.8 6.8-21.9 10.9-36.8 14.8-14.5 3.7-25.7 9.4-30.8 19.1C8.7 428.8 28.5 487.6 28.5 487.6c1 2.3 3.3 3.8 5.8 4.1l2.4.2c.4 0 1 .1 1.4.1 48 4 96.5 15.6 144.1 19.8 11.2 1 22.3 1.7 33.5 1.7s22.3-.7 33.5-1.7c47.7-4.2 96.1-15.8 144.1-19.8.5 0 1-.1 1.4-.1l2.4-.2c2.5-.3 4.8-1.9 5.8-4.1 0 0 19.8-58.8.8-95.1zM224 496c-27 0-54.6-2-83.3-4.6l-50.6-3.8c-24.1-1.6-47-2.6-70-3.3 5.4-9.9 16.4-18.7 32-23.3 12.3-3.6 28-7.3 36.1-12 18-10.4 28.6-33.1 36.9-57 5.1-14.7 9.8-29.3 14.7-43.2.1 0 .2-.1.3-.1 1.7-4.9 3.5-9.8 5.3-14.7 13.2-36.7 26.2-72.9 26.2-120.2V112.5c0-1.8.2-3.4.6-5 .6 0 1.2.1 1.8.1h30.2c.6 0 1.2-.1 1.8-.1.4 1.6.6 3.2.6 5v121.2c0 47.3 13 83.5 26.2 120.2 1.8 4.9 3.6 9.8 5.3 14.7.1 0 .2.1.3.1 4.9 13.9 9.6 28.5 14.7 43.2 8.3 23.9 18.9 46.5 36.9 57 8.1 4.7 23.8 8.4 36.1 12 15.6 4.6 26.6 13.3 32 23.3-23 1-45.9 2-70 3.3l-50.6 3.8C278.6 494 251 496 224 496z" /></svg>
-                  <svg v-else-if="getDetectedOS(host).osName.includes('FortiOS')" class="w-3.5 h-3.5 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                  <svg v-else class="w-3.5 h-3.5 text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10" stroke-width="2"/></svg>
-                  <span class="text-[11px] font-medium text-slate-600 truncate max-w-[140px]" :title="getDetectedOS(host).osName">{{ getDetectedOS(host).osName }}</span>
-                </div>
-              </td>
               <td class="py-2 px-4">
-                <div class="flex items-center gap-2">
-                  <span class="relative flex h-2.5 w-2.5">
-                    <span v-if="host.status === 'Online'" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span class="relative inline-flex rounded-full h-2.5 w-2.5" :class="statusMeta(host.status).dotClass"></span>
-                  </span>
-                  <span class="text-[11px] font-semibold tracking-tight" :class="statusMeta(host.status).textClass">
-                    {{ statusMeta(host.status).label }}
-                  </span>
+                <div class="flex items-center gap-2 group">
+                  <span class="text-slate-800 font-mono text-[11px] font-bold tracking-tight">{{ host.ip }}</span>
+                  <button @click.stop="copyToClipboard(host.ip)" class="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-blue-600 focus:outline-none" title="Copiar IP">
+                    <i class="far fa-copy text-[10px]"></i>
+                  </button>
                 </div>
               </td>
-              <template v-if="!isSecurityMode">
+              <td class="py-2 px-4 text-center">
+                <div class="flex items-center justify-center" :title="getDetectedOS(host).osName">
+                  <!-- Ícono SVGs para OS -->
+                  <svg v-if="getDetectedOS(host).osName.includes('Windows')" class="w-4 h-4 text-blue-500" viewBox="0 0 88 88" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M0 12.402l35.687-4.86.016 34.423L0 41.965v-29.563zm35.67 33.529l.016 34.453L0 75.485V46.068l35.67-4.137zm4.326-39.011L87.314 0v41.26L39.996 41.95V6.92zm47.318 39.011V87.31l-47.318-6.66.015-34.72 47.303-4.009z"/></svg>
+                  <svg v-else-if="getDetectedOS(host).osName.includes('Linux')" class="w-4 h-4 text-slate-500" viewBox="0 0 448 512" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M220.8 123.3c1 .5 1.8 1.7 3 1.7 1.1 0 2.8-.4 2.9-1.5.2-1.4-1.9-2.3-3.2-2.9-1.7-.7-3.9-1-5.5-.1-.4.2-.8.7-.6 1.1.3 1.3 2.3 1.1 3.4 1.7zm-21.9 1.7c1.2 0 2-1.2 3-1.7 1.1-.6 3.1-.4 3.5-1.7.2-.4-.2-.9-.6-1.1-1.6-.9-3.8-.6-5.5.1-1.3.6-3.4 1.5-3.2 2.9.1 1 1.8 1.5 2.8 1.5zM420.2 392.5c-5.1-9.7-16.3-15.4-30.8-19.1-14.9-3.9-29.1-8-36.8-14.8-17.6-15.5-27.1-39.3-35.3-60.6-2.6-6.7-5.1-13.4-7.8-20.1C333.1 230 352 178.6 352 144 352 64.2 293 0 224 0 154.9 0 96 64.2 96 144c0 34.6 18.9 86 42.5 133.9-2.7 6.7-5.2 13.4-7.8 20.1-8.3 21.3-17.7 45.1-35.3 60.6-7.8 6.8-21.9 10.9-36.8 14.8-14.5 3.7-25.7 9.4-30.8 19.1C8.7 428.8 28.5 487.6 28.5 487.6c1 2.3 3.3 3.8 5.8 4.1l2.4.2c.4 0 1 .1 1.4.1 48 4 96.5 15.6 144.1 19.8 11.2 1 22.3 1.7 33.5 1.7s22.3-.7 33.5-1.7c47.7-4.2 96.1-15.8 144.1-19.8.5 0 1-.1 1.4-.1l2.4-.2c2.5-.3 4.8-1.9 5.8-4.1 0 0 19.8-58.8.8-95.1zM224 496c-27 0-54.6-2-83.3-4.6l-50.6-3.8c-24.1-1.6-47-2.6-70-3.3 5.4-9.9 16.4-18.7 32-23.3 12.3-3.6 28-7.3 36.1-12 18-10.4 28.6-33.1 36.9-57 5.1-14.7 9.8-29.3 14.7-43.2.1 0 .2-.1.3-.1 1.7-4.9 3.5-9.8 5.3-14.7 13.2-36.7 26.2-72.9 26.2-120.2V112.5c0-1.8.2-3.4.6-5 .6 0 1.2.1 1.8.1h30.2c.6 0 1.2-.1 1.8-.1.4 1.6.6 3.2.6 5v121.2c0 47.3 13 83.5 26.2 120.2 1.8 4.9 3.6 9.8 5.3 14.7.1 0 .2.1.3.1 4.9 13.9 9.6 28.5 14.7 43.2 8.3 23.9 18.9 46.5 36.9 57 8.1 4.7 23.8 8.4 36.1 12 15.6 4.6 26.6 13.3 32 23.3-23 1-45.9 2-70 3.3l-50.6 3.8C278.6 494 251 496 224 496z" /></svg>
+                  <svg v-else-if="getDetectedOS(host).osName.includes('FortiOS')" class="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  <svg v-else class="w-4 h-4 text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10" stroke-width="2"/></svg>
+                </div>
+              </td>
+              <template v-if="currentTemplate === 'global'">
                 <td class="py-1.5 px-4">
                   <div class="flex items-center gap-2">
                     <span class="w-12 shrink-0 text-xs font-semibold text-slate-700 tabular-nums">{{ formatPct(host.cpu) }}</span>
@@ -158,22 +409,66 @@
                   <div class="flex items-center gap-2">
                     <span class="w-12 shrink-0 text-xs font-semibold text-slate-700 tabular-nums">{{ formatPct(host.ram) }}</span>
                     <div class="sparkline-wrap w-[100px] h-[30px] overflow-hidden shrink-0">
-                      <apexchart type="area" width="100" height="30" :options="sparklineOptions(getStatusColor(host.ram))" :series="[{ data: host.ram_history }]" />
+                      <apexchart type="area" width="100" height="30" :options="sparklineRamOptions(host.ram)" :series="[{ data: host.ram_history }]" />
                     </div>
                   </div>
                 </td>
                 <td class="py-1.5 px-4">
-                  <div class="flex items-center gap-2">
-                    <div v-if="(host.net_in === 0 && host.net_out === 0) || host.status === 'Offline'" class="flex flex-col text-red-400 text-[11px] font-semibold w-20 shrink-0">
+                  <!-- Error Badge (Offline/Warning) -->
+                  <div v-if="host.status === 'Offline' && host.last_problem" 
+                       class="bg-red-50 text-red-700 border-red-200 flex items-center px-2 py-1 rounded text-[10px] font-medium border max-w-[200px]"
+                       :title="host.last_problem">
+                    <span class="truncate w-full block">{{ host.last_problem }}</span>
+                  </div>
+                  <!-- Proactive CPU Critical -->
+                  <div v-else-if="host.cpu >= 90" class="flex items-center gap-2 text-red-500">
+                    <i class="fas fa-fire text-sm animate-pulse"></i>
+                    <div class="flex flex-col leading-tight">
+                      <span class="text-[11px] font-black uppercase tracking-wider">CPU Crítica</span>
+                      <span class="text-[9px] font-bold text-slate-400">Pico de {{ formatPct(host.cpu) }}</span>
+                    </div>
+                  </div>
+                  <!-- Proactive RAM Critical -->
+                  <div v-else-if="host.ram >= 90" class="flex items-center gap-2 text-red-500">
+                    <i class="fas fa-memory text-sm animate-pulse"></i>
+                    <div class="flex flex-col leading-tight">
+                      <span class="text-[11px] font-black uppercase tracking-wider">RAM Crítica</span>
+                      <span class="text-[9px] font-bold text-slate-400">Consumo {{ formatPct(host.ram) }}</span>
+                    </div>
+                  </div>
+                  <!-- Proactive CPU Alta -->
+                  <div v-else-if="host.cpu >= 80" class="flex items-center gap-2 text-orange-500">
+                    <i class="fas fa-microchip text-sm"></i>
+                    <div class="flex flex-col leading-tight">
+                      <span class="text-[11px] font-bold uppercase tracking-wider">CPU Elevada</span>
+                      <span class="text-[9px] font-semibold text-slate-400">Uso al {{ formatPct(host.cpu) }}</span>
+                    </div>
+                  </div>
+                  <!-- Proactive RAM Alta -->
+                  <div v-else-if="host.ram >= 85" class="flex items-center gap-2 text-orange-500">
+                    <i class="fas fa-memory text-sm"></i>
+                    <div class="flex flex-col leading-tight">
+                      <span class="text-[11px] font-bold uppercase tracking-wider">RAM Elevada</span>
+                      <span class="text-[9px] font-semibold text-slate-400">Uso al {{ formatPct(host.ram) }}</span>
+                    </div>
+                  </div>
+                  <!-- Proactive Red Saturada (> 100 Mbps) -->
+                  <div v-else-if="host.net_in >= 100000000 || host.net_out >= 100000000" class="flex items-center gap-2 text-amber-500">
+                    <i class="fas fa-network-wired text-sm animate-pulse"></i>
+                    <div class="flex flex-col leading-tight">
+                      <span class="text-[11px] font-black uppercase tracking-wider">Red Saturada</span>
+                      <span class="text-[9px] font-bold text-slate-400">Tráfico > 100 Mbps</span>
+                    </div>
+                  </div>
+                  <!-- Normal Network Graph (Active/Online) -->
+                  <div v-else class="flex items-center gap-2">
+                    <div v-if="(host.net_in === 0 && host.net_out === 0) || host.status === 'Offline'" class="flex flex-col text-slate-400 text-[11px] font-semibold w-24 shrink-0">
                       <span>↓ 0 Kbps</span>
                       <span>↑ 0 Kbps</span>
                     </div>
-                    <div v-else class="flex flex-col text-[11px] font-semibold w-20 shrink-0">
-                      <span class="text-emerald-500">↓ {{ formatNetworkTraffic(host.net_in) }}</span>
-                      <span class="text-blue-500">↑ {{ formatNetworkTraffic(host.net_out) }}</span>
-                    </div>
-                    <div class="sparkline-wrap w-[100px] h-[30px] overflow-hidden shrink-0">
-                      <apexchart type="area" width="100" height="30" :options="sparklineOptions('#3b82f6')" :series="[{ data: host.net_in_history }]" />
+                    <div v-else class="flex flex-col text-[11px] font-semibold w-24 shrink-0 gap-0.5">
+                      <span class="text-slate-700"><span class="text-emerald-700">↓</span> {{ formatNetworkTraffic(host.net_in) }}</span>
+                      <span class="text-slate-700"><span class="text-blue-700">↑</span> {{ formatNetworkTraffic(host.net_out) }}</span>
                     </div>
                   </div>
                 </td>
@@ -233,114 +528,169 @@
             <div class="spinner"></div>
             <p class="mt-4 text-sm font-medium text-slate-500">Cargando métricas...</p>
           </div>
-          <div v-if="Object.keys(comparisonData).length > 0" class="grid grid-cols-2 gap-3">
-            <!-- CPU Detail Chart -->
-            <div class="bg-white p-4 rounded-xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-200 relative group">
-              <div class="flex justify-between items-center mb-2 pr-6">
-                <span class="text-[11px] font-bold text-slate-500 tracking-widest">CPU (%)</span>
-                <span class="text-[10px] text-slate-400 font-medium">Última 1 hora</span>
+          <div v-if="Object.keys(comparisonData).length > 0" class="flex flex-col gap-4">
+            
+            <!-- KPIs Header Row -->
+            <div v-if="overviewKpis" class="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div class="bg-white p-3 rounded-lg shadow-sm border border-slate-100 flex flex-col justify-center">
+                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Uptime</span>
+                <span class="text-xl font-bold text-slate-800">{{ overviewKpis.uptime }}</span>
               </div>
-              <button @click="expandChart('cpu')" class="absolute top-3 right-3 text-slate-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity p-1 bg-slate-50 hover:bg-blue-50 rounded" title="Ampliar Gráfica">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
-              </button>
-              <apexchart type="line" height="180" :options="detailAreaOptions" :series="cpuSeries" />
+              <div class="bg-white p-3 rounded-lg shadow-sm border border-slate-100 flex flex-col justify-center">
+                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Carga de CPU</span>
+                <span class="text-xl font-bold text-blue-600">{{ overviewKpis.cpuLoad }}</span>
+              </div>
+              <div class="bg-white p-3 rounded-lg shadow-sm border border-slate-100 flex flex-col justify-center">
+                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Memoria Disp.</span>
+                <span class="text-xl font-bold text-blue-600">{{ overviewKpis.availableMem }}</span>
+              </div>
+              <div class="bg-white p-3 rounded-lg shadow-sm border border-slate-100 flex flex-col justify-center">
+                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Tráfico Total</span>
+                <span class="text-xl font-bold text-blue-600">{{ overviewKpis.totalTraffic }}</span>
+              </div>
             </div>
 
-            <!-- RAM Detail Chart -->
-            <div class="bg-white p-4 rounded-xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-200 relative group">
-              <div class="flex justify-between items-center mb-2 pr-6">
-                <span class="text-[11px] font-bold text-slate-500 tracking-widest">RAM (%)</span>
-                <span class="text-[10px] text-slate-400 font-medium">Última 1 hora</span>
+            <!-- Main Charts Row -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <!-- CPU Detail Chart -->
+              <div class="bg-white p-4 rounded-xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-200 relative group">
+                <div class="flex justify-between items-center mb-2 pr-6">
+                  <span class="text-[11px] font-bold text-slate-500 tracking-widest">CPU (%)</span>
+                  <span class="text-[10px] text-slate-400 font-medium">{{ selectedRangeLabel }}</span>
+                </div>
+                <button @click="expandChart('cpu')" class="absolute top-3 right-3 text-slate-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity p-1 bg-slate-50 hover:bg-blue-50 rounded" title="Ampliar Gráfica">
+                  <i class="fas fa-expand text-[10px]"></i>
+                </button>
+                <apexchart type="area" height="150" :options="detailAreaOptions" :series="cpuSeries" />
               </div>
-              <button @click="expandChart('ram')" class="absolute top-3 right-3 text-slate-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity p-1 bg-slate-50 hover:bg-blue-50 rounded" title="Ampliar Gráfica">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
-              </button>
-              <apexchart type="line" height="180" :options="detailAreaOptions" :series="ramSeries" />
-            </div>
 
-            <!-- Disks Usage (Pie Chart) -->
-            <div v-show="!isFortiGateSelected" class="bg-white p-4 rounded-xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-200 flex flex-col relative">
-              <span class="text-[11px] font-bold text-slate-500 tracking-widest block mb-1">DISK USAGE</span>
-              <div class="flex-1 flex flex-wrap items-center justify-center gap-4 -my-4 overflow-y-auto">
-                <div v-for="h in selectedHosts" :key="h.hostid" class="flex flex-col items-center">
-                  <span class="text-[10px] font-bold text-slate-500 mb-1 truncate w-24 text-center" :title="h.hostname">{{ h.hostname }}</span>
-                  <apexchart v-if="comparisonData[h.hostid]?.disks?.length" type="donut" width="130" :options="diskPieOptions" :series="[comparisonData[h.hostid].disks[0].value, 100 - comparisonData[h.hostid].disks[0].value]" />
-                  <div v-else class="text-[10px] text-slate-400 italic">No data</div>
-                  <span class="text-[9px] font-medium text-slate-400 mt-1">Espacio Usado</span>
+              <!-- RAM Detail Chart -->
+              <div class="bg-white p-4 rounded-xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-200 relative group">
+                <div class="flex justify-between items-center mb-2 pr-6">
+                  <span class="text-[11px] font-bold text-slate-500 tracking-widest">RAM (%)</span>
+                  <span class="text-[10px] text-slate-400 font-medium">{{ selectedRangeLabel }}</span>
+                </div>
+                <button @click="expandChart('ram')" class="absolute top-3 right-3 text-slate-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity p-1 bg-slate-50 hover:bg-blue-50 rounded" title="Ampliar Gráfica">
+                  <i class="fas fa-expand text-[10px]"></i>
+                </button>
+                <apexchart type="area" height="150" :options="detailAreaOptions" :series="ramSeries" />
+              </div>
+              
+              <!-- Network Traffic -->
+              <div class="bg-white p-4 rounded-xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-200 relative group flex flex-col">
+                <div class="flex justify-between items-center mb-2 pr-6">
+                  <span class="text-[11px] font-bold text-slate-500 tracking-widest block mb-2">NET TRAFFIC</span>
+                  <select v-if="availableInterfaces.length > 0" v-model="selectedInterface" class="text-[10px] border border-slate-200 rounded px-1.5 py-0.5 bg-slate-50 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                    <option v-for="iface in availableInterfaces" :key="iface" :value="iface">{{ iface }}</option>
+                  </select>
+                </div>
+                <button @click="expandChart('net')" class="absolute top-3 right-3 text-slate-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity p-1 bg-slate-50 hover:bg-blue-50 rounded" title="Ampliar Gráfica">
+                  <i class="fas fa-expand text-[10px]"></i>
+                </button>
+                <div class="flex-1 min-h-0">
+                  <apexchart type="area" height="150" :options="netTrafficOptions" :series="netSeries" />
+                </div>
+              </div>
+
+              <!-- Disk Latency -->
+              <div v-show="!isFortiGateSelected" class="bg-white p-4 rounded-xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-200 relative group">
+                <div class="flex justify-between items-center mb-2 pr-6">
+                  <span class="text-[11px] font-bold text-slate-500 tracking-widest block mb-2">DISK QUEUE LENGTH LATENCY</span>
+                </div>
+                <button @click="expandChart('latency')" class="absolute top-3 right-3 text-slate-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity p-1 bg-slate-50 hover:bg-blue-50 rounded" title="Ampliar Gráfica">
+                  <i class="fas fa-expand text-[10px]"></i>
+                </button>
+                <apexchart type="line" height="150" :options="latencyOptions" :series="latencySeries" />
+              </div>
+
+              <!-- Ping Latency -->
+              <div v-show="!isFortiGateSelected" class="bg-white p-4 rounded-xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-200 relative group">
+                <div class="flex justify-between items-center mb-2 pr-6">
+                  <span class="text-[11px] font-bold text-slate-500 tracking-widest block mb-2">PING LATENCY (ms)</span>
+                </div>
+                <button @click="expandChart('ping')" class="absolute top-3 right-3 text-slate-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity p-1 bg-slate-50 hover:bg-blue-50 rounded" title="Ampliar Gráfica">
+                  <i class="fas fa-expand text-[10px]"></i>
+                </button>
+                <apexchart type="line" height="150" :options="pingOptions" :series="pingSeries" />
+              </div>
+
+              <!-- Top Processes (Movido para llenar espacio) -->
+              <div class="bg-white p-4 rounded-xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-200 flex flex-col">
+                <span class="text-[11px] font-bold text-slate-500 tracking-widest block mb-2">TOP PROCESOS</span>
+                <div class="overflow-y-auto h-[160px] pr-1 custom-scrollbar">
+                  <table class="w-full text-left border-collapse">
+                    <thead>
+                      <tr class="border-b border-slate-100">
+                        <th class="py-2 text-[10px] font-bold text-slate-400">NOMBRE</th>
+                        <th class="py-2 text-[10px] font-bold text-slate-400">PID</th>
+                        <th class="py-2 text-[10px] font-bold text-slate-400">CPU</th>
+                        <th class="py-2 text-[10px] font-bold text-slate-400">RAM</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="proc in topProcesses" :key="proc.pid" class="border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors">
+                        <td class="py-1.5 text-[11px] font-semibold text-slate-700">{{ proc.name }}</td>
+                        <td class="py-1.5 text-[10px] text-slate-400 font-mono">{{ proc.pid }}</td>
+                        <td class="py-1.5 text-[11px] font-bold text-blue-600">{{ proc.cpu }}</td>
+                        <td class="py-1.5 text-[11px] font-bold text-slate-600">{{ proc.ram }}</td>
+                      </tr>
+                      <tr v-if="!topProcesses.length">
+                        <td colspan="4" class="py-4 text-center text-xs text-slate-400 italic">No hay procesos disponibles</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
 
-            <!-- Network Traffic -->
-            <div class="bg-white p-4 rounded-xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-200 relative group flex flex-col">
-              <div class="flex justify-between items-center mb-2 pr-6">
-                <span class="text-[11px] font-bold text-slate-500 tracking-widest block mb-2">NET TRAFFIC</span>
-                <select v-if="availableInterfaces.length > 0" v-model="selectedInterface" class="text-[10px] border border-slate-200 rounded px-1.5 py-0.5 bg-slate-50 focus:outline-none focus:ring-1 focus:ring-blue-500">
-                  <option v-for="iface in availableInterfaces" :key="iface" :value="iface">{{ iface }}</option>
-                </select>
-              </div>
-              <button @click="expandChart('net')" class="absolute top-3 right-3 text-slate-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity p-1 bg-slate-50 hover:bg-blue-50 rounded" title="Ampliar Gráfica">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
-              </button>
-              <div class="flex-1 min-h-0">
-                <apexchart type="line" height="170" :options="netTrafficOptions" :series="netSeries" />
-              </div>
-            </div>
-
-            <!-- Disk Latency -->
-            <div v-show="!isFortiGateSelected" class="bg-white p-4 rounded-xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-200 relative group">
-              <div class="flex justify-between items-center mb-2 pr-6">
-                <span class="text-[11px] font-bold text-slate-500 tracking-widest block mb-2">DISK QUEUE LENGTH LATENCY</span>
-              </div>
-              <button @click="expandChart('latency')" class="absolute top-3 right-3 text-slate-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity p-1 bg-slate-50 hover:bg-blue-50 rounded" title="Ampliar Gráfica">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
-              </button>
-              <apexchart type="line" height="160" :options="latencyOptions" :series="latencySeries" />
-            </div>
-
-            <!-- Firewall Sessions (Dinámico) -->
-            <div v-if="hasFirewallSessions" class="bg-white p-4 rounded-xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-200 relative group">
-              <div class="flex justify-between items-center mb-2 pr-6">
-                <span class="text-[11px] font-bold text-slate-500 tracking-widest block mb-2">FIREWALL SESSIONS & SECURITY</span>
-              </div>
-              <button @click="expandChart('sessions')" class="absolute top-3 right-3 text-slate-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity p-1 bg-slate-50 hover:bg-blue-50 rounded" title="Ampliar Gráfica">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
-              </button>
-              <div class="flex flex-col h-full">
-                <div class="text-3xl font-black text-slate-800 tracking-tight mt-2 text-center" v-if="selectedHosts.length === 1">
-                  {{ comparisonData[selectedHosts[0].hostid]?.sessions?.value?.toLocaleString() || 0 }}
-                </div>
-                <apexchart class="mt-auto" type="area" height="120" :options="sessionOptions" :series="sessionSeries" />
-              </div>
-            </div>
-
-            <!-- Critical Log -->
-            <div class="bg-white p-4 rounded-xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-200 flex flex-col">
-              <span class="text-[11px] font-bold text-slate-500 tracking-widest block mb-3">CRÍTICO LOG</span>
-              <div class="flex flex-col gap-2 overflow-y-auto h-[160px] pr-2 custom-scrollbar flex-1">
-                <div v-for="prob in combinedLogs" :key="prob.eventid" 
-                     class="border border-slate-100 rounded-lg p-2.5 bg-slate-50 hover:bg-white transition-colors group cursor-pointer shadow-sm"
-                     @click="toggleLog(prob.eventid)">
-                  <div class="flex items-start gap-2">
-                    <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-200 text-slate-600 mt-0.5 shrink-0">{{ formatTime(prob.clock) }}</span>
-                    <span :class="prob.severity === '5' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'" class="px-1.5 py-0.5 rounded text-[9px] font-bold mt-0.5 shrink-0 whitespace-nowrap">{{ prob.severity === '5' ? '🔴 Critical' : '🟡 Warning' }}</span>
-                    <div class="flex-1 min-w-0">
-                      <p class="text-xs font-semibold text-slate-700 truncate group-hover:text-blue-600 transition-colors">[{{ prob._hostname }}] {{ prob.name }}</p>
-                      
-                      <!-- Expanded Details -->
-                      <div v-if="expandedLogs.has(prob.eventid)" class="mt-2 text-[10px] text-slate-500 whitespace-pre-wrap font-mono bg-white p-2 border border-slate-100 rounded">
-                        <strong>Evento Completo:</strong><br/>
-                        {{ prob.name }}<br/>
-                        <strong>ID Evento:</strong> {{ prob.eventid }}
+            <!-- Bottom Widgets Row: Disk Progress, Alerts -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-2">
+              
+              <!-- Disk Usage (Linear Progress) -->
+              <div v-show="!isFortiGateSelected" class="bg-white p-4 rounded-xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-200 flex flex-col">
+                <span class="text-[11px] font-bold text-slate-500 tracking-widest block mb-4">ALMACENAMIENTO (DISKS)</span>
+                <div class="flex flex-col gap-4 overflow-y-auto h-[160px] pr-2 custom-scrollbar flex-1">
+                  <div v-for="h in selectedHosts" :key="h.hostid">
+                    <div v-if="comparisonData[h.hostid]?.disks?.length" class="flex flex-col gap-1.5">
+                      <div class="flex justify-between items-end">
+                        <span class="text-xs font-semibold text-slate-700 truncate w-32" :title="h.hostname">{{ h.hostname }}</span>
+                        <span class="text-xs font-bold text-slate-500">{{ comparisonData[h.hostid].disks[0].value }}% Usado</span>
+                      </div>
+                      <div class="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                        <div class="h-full rounded-full transition-all duration-500"
+                             :class="comparisonData[h.hostid].disks[0].value > 85 ? 'bg-red-500' : comparisonData[h.hostid].disks[0].value > 70 ? 'bg-amber-400' : 'bg-blue-600'"
+                             :style="`width: ${comparisonData[h.hostid].disks[0].value}%`">
+                        </div>
                       </div>
                     </div>
-                    <button class="text-slate-400 shrink-0 hover:text-blue-500">
-                      <svg class="w-4 h-4 transform transition-transform" :class="{'rotate-180': expandedLogs.has(prob.eventid)}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
-                    </button>
                   </div>
                 </div>
-                <div v-if="!combinedLogs.length" class="text-slate-400 italic text-center py-6 text-sm">No critical events</div>
               </div>
+
+
+
+              <!-- Active Alerts (Triggers) -->
+              <div class="bg-white p-4 rounded-xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-200 flex flex-col">
+                <span class="text-[11px] font-bold text-slate-500 tracking-widest block mb-2">ALERTAS ACTIVAS</span>
+                <div class="flex flex-col gap-2 overflow-y-auto h-[160px] pr-2 custom-scrollbar flex-1">
+                  <div v-for="prob in activeTriggers" :key="prob.eventid" 
+                       class="flex gap-2 items-start p-2 border border-slate-100 rounded-lg bg-slate-50">
+                    <div class="mt-0.5 shrink-0">
+                      <i v-if="prob.severity === '5'" class="fas fa-exclamation-circle text-red-500 text-sm"></i>
+                      <i v-else class="fas fa-exclamation-triangle text-amber-500 text-sm"></i>
+                    </div>
+                    <div class="flex flex-col min-w-0">
+                      <span class="text-[11px] font-semibold text-slate-700 leading-tight truncate" :title="prob.name">{{ prob.name }}</span>
+                      <span class="text-[9px] font-bold text-slate-400 mt-1">{{ formatTime(prob.clock) }}</span>
+                    </div>
+                  </div>
+                  <div v-if="!activeTriggers.length" class="flex flex-col items-center justify-center h-full text-slate-400">
+                    <i class="fas fa-check-circle text-green-400 text-xl mb-1"></i>
+                    <span class="text-[11px] font-medium">Sistemas estables</span>
+                  </div>
+                </div>
+              </div>
+
             </div>
           </div>
         </div>
@@ -352,12 +702,35 @@
       <div class="bg-white w-full max-w-6xl h-[85vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden relative animate-fade-in-up">
         <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
           <h3 class="font-bold text-lg text-slate-800 tracking-tight">{{ expandedTitle }}</h3>
-          <button @click="expandedChart = null" class="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-full transition-colors flex items-center justify-center">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-          </button>
+          <div class="flex items-center gap-4">
+            <select :value="selectedModalRange" @change="updateModalRange(Number($event.target.value))" class="appearance-none bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-lg pl-3 pr-8 py-1.5 hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-sm">
+              <option v-for="tr in timeRanges" :key="tr.value" :value="tr.value">{{ tr.label }}</option>
+            </select>
+            <button @click="expandedChart = null" class="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-full transition-colors flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
         </div>
         <div class="flex-1 p-6 min-h-0 bg-white">
           <apexchart type="line" width="100%" height="100%" :options="expandedOptions" :series="expandedSeries" />
+        </div>
+        <div v-if="expandedStats" class="px-6 py-3 bg-slate-50 border-t border-slate-200 grid grid-cols-4 gap-4 text-center rounded-b-2xl">
+          <div>
+            <div class="text-[10px] text-slate-400 font-bold tracking-wider uppercase mb-0.5">Último Valor</div>
+            <div class="text-sm font-bold text-blue-600">{{ expandedStats.last }}</div>
+          </div>
+          <div>
+            <div class="text-[10px] text-slate-400 font-bold tracking-wider uppercase mb-0.5">Promedio</div>
+            <div class="text-sm font-bold text-slate-700">{{ expandedStats.avg }}</div>
+          </div>
+          <div>
+            <div class="text-[10px] text-slate-400 font-bold tracking-wider uppercase mb-0.5">Máximo</div>
+            <div class="text-sm font-bold text-red-500">{{ expandedStats.max }}</div>
+          </div>
+          <div>
+            <div class="text-[10px] text-slate-400 font-bold tracking-wider uppercase mb-0.5">Mínimo</div>
+            <div class="text-sm font-bold text-emerald-500">{{ expandedStats.min }}</div>
+          </div>
         </div>
       </div>
     </div>
@@ -367,6 +740,95 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import zabbixService from '../services/zabbix.service';
+
+const pbxData = ref({
+  loading: false,
+  asterisk_down: false,
+  server_down: false,
+  llamadas_activas: 0,
+  robot_ivr: -1,
+  ruta_opcion1: -1,
+  ruta_opcion2: -1,
+  troncal_101: -1,
+  extensiones_registradas: '112 / 120', // Mock data
+  almacenamiento_pbx: 45, // Mock data (%)
+  ivr_options: {}
+});
+
+// Helper functions para el diseño NOC de opciones
+const ivrOptionNames = {
+  1: 'Ventas',
+  2: 'Soporte',
+  3: 'Cartera'
+};
+
+const getOptionName = (i, dynamicName) => {
+  if (dynamicName && dynamicName !== `Opción ${i}`) return dynamicName;
+  return ivrOptionNames[i] || `Opción ${i}`;
+};
+
+const getOptionClass = (val) => {
+  if (pbxData.value.server_down) return 'bg-white border-slate-100 opacity-60';
+  if (pbxData.value.asterisk_down) return 'bg-white border-red-100 opacity-60';
+  if (val === 1) return 'bg-emerald-50/30 border-emerald-200';
+  if (val === 0) return 'bg-red-50/30 border-red-200';
+  return 'bg-white border-slate-100 shadow-sm opacity-80';
+};
+
+const getOptionLabelClass = (val) => {
+  if (pbxData.value.server_down) return 'text-slate-400';
+  if (pbxData.value.asterisk_down) return 'text-red-300';
+  if (val === 1) return 'text-slate-600';
+  if (val === 0) return 'text-slate-600';
+  return 'text-slate-400';
+};
+
+const getOptionIconClass = (val) => {
+  if (pbxData.value.server_down || pbxData.value.asterisk_down) return 'fas fa-minus-circle text-slate-300';
+  if (val === 1) return 'far fa-check-circle text-emerald-500';
+  if (val === 0) return 'fas fa-exclamation-triangle text-red-500';
+  return 'fas fa-minus-circle text-slate-300';
+};
+
+const getOptionTextClass = (val) => {
+  if (pbxData.value.server_down) return 'text-slate-400';
+  if (pbxData.value.asterisk_down) return 'text-red-400 line-through';
+  if (val === 1) return 'text-emerald-700';
+  if (val === 0) return 'text-red-700';
+  return 'text-slate-400';
+};
+
+const fetchPbxStats = async () => {
+  pbxData.value.loading = true;
+  try {
+    const res = await zabbixService.getPbxTelephony();
+    if (res.status === 'success') {
+      const wasDown = pbxData.value.asterisk_down;
+      pbxData.value = {
+        loading: false,
+        asterisk_down: res.data.asterisk_down,
+        server_down: res.data.server_down,
+        llamadas_activas: res.data.llamadas_activas,
+        robot_ivr: res.data.robot_ivr,
+        ruta_opcion1: res.data.ruta_opcion1,
+        ruta_opcion2: res.data.ruta_opcion2,
+        troncal_101: res.data.troncal_101,
+        ivr_options: res.data.ivr_options || {}
+      };
+      
+      if (res.data.asterisk_down && !wasDown) {
+        playAlertSound();
+      }
+    } else {
+      console.error(res.message);
+      pbxData.value.loading = false;
+    }
+  } catch (e) {
+    console.error("Error fetching PBX stats", e);
+    pbxData.value.loading = false;
+  }
+};
+// -----------------------
 
 const hosts = ref([]);
 const cpuTrendSeries = ref([]);
@@ -381,8 +843,17 @@ const loadingTrends = ref(true);
 const showDetail = ref(false);
 const selectedHost = ref(null);
 const selectedHosts = ref([]);
+const detailTimeRange = ref('1h');
 const comparisonData = ref({});
 const loadingDetail = ref(false);
+
+const copyToClipboard = async (text) => {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (err) {
+    console.error('Error al copiar: ', err);
+  }
+};
 
 const expandedChart = ref(null);
 const expandedLogs = ref(new Set());
@@ -394,17 +865,32 @@ const toggleLog = (eventId) => {
   expandedLogs.value = newSet;
 };
 
+const selectedModalRange = ref(3600);
+
 const expandChart = (type) => {
   expandedChart.value = type;
+  selectedModalRange.value = selectedRange.value;
+};
+
+const updateModalRange = async (seconds) => {
+  if (selectedModalRange.value === seconds) return;
+  selectedModalRange.value = seconds;
+  loadingDetail.value = true;
+  await Promise.all(selectedHosts.value.map(h => fetchDetailForHost(h, selectedModalRange.value)));
+  loadingDetail.value = false;
 };
 
 const expandedTitle = computed(() => {
-  if (expandedChart.value === 'cpu') return 'Histórico Detallado: CPU (%)';
-  if (expandedChart.value === 'ram') return 'Histórico Detallado: RAM Usada (%)';
-  if (expandedChart.value === 'net') return 'Histórico Detallado: Tráfico de Red (Kbps/Mbps)';
-  if (expandedChart.value === 'latency') return 'Histórico Detallado: Latencia de Disco (Queue Length)';
-  if (expandedChart.value === 'sessions') return 'Histórico Detallado: Firewall Sessions';
-  return '';
+  let base = '';
+  if (expandedChart.value === 'cpu') base = 'Histórico Detallado: CPU (%)';
+  if (expandedChart.value === 'ram') base = 'Histórico Detallado: RAM Usada (%)';
+  if (expandedChart.value === 'net') base = 'Histórico Detallado: Tráfico de Red (Kbps/Mbps)';
+  if (expandedChart.value === 'latency') base = 'Histórico Detallado: Latencia de Disco (Queue Length)';
+  if (expandedChart.value === 'ping') base = 'Histórico Detallado: Latencia de Red Ping (ms)';
+  if (expandedChart.value === 'sessions') base = 'Histórico Detallado: Firewall Sessions';
+  const r = timeRanges.find(tr => tr.value === selectedModalRange.value);
+  const rLabel = r ? r.label : '1 Hora';
+  return base ? `${base} (Últimas ${rLabel})` : '';
 });
 
 const expandedSeries = computed(() => {
@@ -412,31 +898,138 @@ const expandedSeries = computed(() => {
   if (expandedChart.value === 'ram') return ramSeries.value;
   if (expandedChart.value === 'net') return netSeries.value;
   if (expandedChart.value === 'latency') return latencySeries.value;
+  if (expandedChart.value === 'ping') return pingSeries.value;
   if (expandedChart.value === 'sessions') return sessionSeries.value;
   return [];
 });
 
+const expandedStats = computed(() => {
+  if (!expandedSeries.value || expandedSeries.value.length === 0) return null;
+  // Combine all series for accurate min/max if there are multiple lines, or just take the first
+  const allValues = [];
+  expandedSeries.value.forEach(s => {
+    if (s.data) s.data.forEach(p => { if (p[1] != null && !isNaN(p[1])) allValues.push(p[1]); });
+  });
+  if (allValues.length === 0) return null;
+  const min = Math.min(...allValues);
+  const max = Math.max(...allValues);
+  const avg = allValues.reduce((a,b) => a+b, 0) / allValues.length;
+  // Get last value of the primary series
+  const series = expandedSeries.value[0];
+  const last = (series.data && series.data.length > 0) ? series.data[series.data.length - 1][1] : 0;
+
+  let formatFn = (v) => v.toFixed(2);
+  if (expandedChart.value === 'net') formatFn = formatNetAxisLabel;
+  else if (expandedChart.value === 'ping') formatFn = (v) => v.toFixed(1) + ' ms';
+  else if (expandedChart.value === 'cpu' || expandedChart.value === 'ram') formatFn = (v) => v.toFixed(1) + '%';
+  else if (expandedChart.value === 'sessions') formatFn = (v) => Math.round(v).toLocaleString();
+
+  return { min: formatFn(min), max: formatFn(max), avg: formatFn(avg), last: formatFn(last) };
+});
+
 const expandedOptions = computed(() => {
-  let base = {};
-  if (expandedChart.value === 'cpu' || expandedChart.value === 'ram') base = detailAreaOptions;
-  else if (expandedChart.value === 'net') base = netTrafficOptions;
-  else if (expandedChart.value === 'latency') base = latencyOptions;
-  else if (expandedChart.value === 'sessions') base = { ...sessionOptions, chart: { ...sessionOptions.chart, sparkline: { enabled: false } }, stroke: { width: 2 }, xaxis: { type: 'datetime', labels: { style: { fontSize: '9px', colors: '#94a3b8' } } }, grid: { borderColor: '#f1f5f9' }, yaxis: { labels: { style: { fontSize: '9px', colors: '#94a3b8' } } } };
+  let baseObj = {};
+  if (expandedChart.value === 'cpu' || expandedChart.value === 'ram') baseObj = detailAreaOptions.value;
+  else if (expandedChart.value === 'net') baseObj = netTrafficOptions.value;
+  else if (expandedChart.value === 'latency') baseObj = latencyOptions.value;
+  else if (expandedChart.value === 'ping') baseObj = pingOptions.value;
+  else if (expandedChart.value === 'sessions') baseObj = { ...sessionOptions, chart: { ...sessionOptions.chart, sparkline: { enabled: false } }, stroke: { width: 2 }, xaxis: { type: 'datetime', labels: { style: { fontSize: '9px', colors: '#94a3b8' } } }, grid: { borderColor: '#f1f5f9' }, yaxis: { labels: { style: { fontSize: '9px', colors: '#94a3b8' } } } };
 
   // Modificar base clone para resolución más alta
   return {
-    ...base,
-    chart: { ...base.chart, toolbar: { show: true }, zoom: { enabled: true } },
-    legend: { ...base.legend, fontSize: '13px' },
-    xaxis: { ...base.xaxis, labels: { ...base.xaxis?.labels, style: { fontSize: '11px', colors: '#64748b' } } },
-    yaxis: { ...base.yaxis, labels: { ...base.yaxis?.labels, style: { fontSize: '11px', colors: '#64748b' }, formatter: base.yaxis?.labels?.formatter } }
+    ...baseObj,
+    chart: { ...baseObj.chart, toolbar: { show: true }, zoom: { enabled: true } },
+    legend: { ...baseObj.legend, fontSize: '13px' },
+    xaxis: { ...baseObj.xaxis, labels: { ...baseObj.xaxis?.labels, style: { fontSize: '11px', colors: '#64748b' } } },
+    yaxis: { ...baseObj.yaxis, labels: { ...baseObj.yaxis?.labels, style: { fontSize: '11px', colors: '#64748b' }, formatter: baseObj.yaxis?.labels?.formatter } },
+    grid: { show: true, borderColor: '#e2e8f0', strokeDashArray: 4, position: 'back', xaxis: { lines: { show: false } }, yaxis: { lines: { show: true } }, padding: { left: 10, right: 10 } },
+    tooltip: { 
+      theme: 'dark',
+      shared: false,
+      intersect: true,
+      fixed: { enabled: true, position: 'topRight', offsetX: -20, offsetY: 20 },
+      custom: function({series, seriesIndex, dataPointIndex, w}) {
+        let hoverTs = w.globals.seriesX?.[seriesIndex]?.[dataPointIndex];
+        if (!hoverTs) return '';
+        let d = new Date(hoverTs);
+        let title = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+        
+        let name = w.globals.seriesNames[seriesIndex];
+        let val = series[seriesIndex][dataPointIndex];
+        if (val == null) return '';
+        let color = w.globals.colors[seriesIndex];
+        let formatter = baseObj.yaxis?.labels?.formatter || (v => v);
+        let formattedVal = formatter(val);
+        
+        let row = `<div style="display:flex;justify-content:space-between;align-items:center;gap:16px;margin-top:6px;">
+                    <div style="display:flex;align-items:center;gap:6px;">
+                      <span style="width:10px;height:10px;border-radius:50%;background:${color};display:inline-block;"></span>
+                      <span style="color:#cbd5e1;font-size:11px;">${name}</span>
+                    </div>
+                    <span style="color:#fff;font-weight:bold;font-size:12px;">${formattedVal}</span>
+                  </div>`;
+        
+        return `<div style="background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.3);min-width:140px;font-family:inherit;">
+                  <div style="color:#94a3b8;font-size:11px;font-weight:bold;border-bottom:1px solid #334155;padding-bottom:4px;margin-bottom:4px;">${title}</div>
+                  ${row}
+                </div>`;
+      }
+    }
   };
 });
 
 let globalTimer = null;
 let detailTimer = null;
 
-const isSecurityMode = ref(false);
+const currentTemplate = ref('global'); // 'global', 'fortigate', 'issabel'
+const issabelHostId = ref(null);
+const loadingIssabelDetail = ref(false);
+
+const getIssabelSeries = (type) => {
+  if (!issabelHostId.value || !comparisonData.value[issabelHostId.value]) return [];
+  const comp = comparisonData.value[issabelHostId.value];
+  if (type === 'cpu') return [{ name: 'CPU (%)', data: comp.cpu?.history || [] }];
+  if (type === 'ram') return [{ name: 'RAM (%)', data: comp.ram?.history || [] }];
+  if (type === 'net') {
+    const ifaceNames = Object.keys(comp.interfaces || {});
+    if (ifaceNames.length > 0) {
+      // Find the main interface, prefer eth*, ens*, eno*, lan*
+      let bestIface = ifaceNames[0];
+      for (const name of ifaceNames) {
+        const lower = name.toLowerCase();
+        if (lower.startsWith('eth') || lower.startsWith('ens') || lower.startsWith('eno') || lower.startsWith('lan')) {
+          bestIface = name;
+          break;
+        }
+      }
+      return [
+        { name: 'Tráfico de Entrada (In)', type: 'area', data: mapTraffic(comp.interfaces[bestIface].in?.history, true) },
+        { name: 'Tráfico de Salida (Out)', type: 'line', data: mapTraffic(comp.interfaces[bestIface].out?.history, false) }
+      ];
+    }
+    return [];
+  }
+  return [];
+};
+
+watch(currentTemplate, async (newVal) => {
+  if (newVal === 'issabel') {
+    // Buscar hostid de Issabel
+    const h = hosts.value.find(h => h.hostname.toLowerCase().includes('issabel') || h.hostname.toLowerCase().includes('pbx'));
+    if (h) {
+      issabelHostId.value = h.hostid;
+      if (!comparisonData.value[h.hostid]) {
+        loadingIssabelDetail.value = true;
+        // Inyectar en hosts temporalmente si no estaba en selectedHosts
+        if (!selectedHosts.value.find(sh => sh.hostid === h.hostid)) {
+           // Si se necesita para fetchDetailForHost
+        }
+        await fetchDetailForHost(h);
+        loadingIssabelDetail.value = false;
+      }
+    }
+  }
+});
 
 const timeRanges = [
   { label: '10 Min', value: 600 },
@@ -450,6 +1043,10 @@ const timeRanges = [
   { label: '7d', value: 604800 }
 ];
 const selectedRange = ref(3600);
+const selectedRangeLabel = computed(() => {
+  const r = timeRanges.find(tr => tr.value === selectedRange.value);
+  return r ? r.label : '1 Hora';
+});
 
 const setTimeRange = (seconds) => {
   if (selectedRange.value === seconds) return;
@@ -477,7 +1074,7 @@ const generateMockData = (baseVal, volatility) => {
   return data;
 };
 
-const sanitizeHistory = (data, isPercentage = true, gapThresholdMs = 240000) => {
+const sanitizeHistory = (data, isPercentage = true) => {
   if (!Array.isArray(data)) return [];
   
   // Filtrar, parsear y ordenar los puntos base
@@ -494,28 +1091,10 @@ const sanitizeHistory = (data, isPercentage = true, gapThresholdMs = 240000) => 
     .filter(Boolean)
     .sort((a, b) => a[0] - b[0]);
     
-  if (cleanData.length <= 1) return cleanData;
-  
-  // Inyectar ceros en huecos grandes para evitar interpolación (trazado de líneas en diagonal largas)
-  const gapFilledData = [];
-  gapFilledData.push(cleanData[0]);
-  
-  for (let i = 1; i < cleanData.length; i++) {
-    const prev = cleanData[i - 1];
-    const curr = cleanData[i];
-    
-    // Si la diferencia de tiempo entre dos puntos excede el umbral (ej. 4 minutos)
-    if (curr[0] - prev[0] > gapThresholdMs) {
-      // Inyectamos un 0 un milisegundo después del último dato conocido
-      gapFilledData.push([prev[0] + 1000, 0]);
-      // Y otro 0 un milisegundo antes del nuevo dato que acaba de llegar
-      gapFilledData.push([curr[0] - 1000, 0]);
-    }
-    
-    gapFilledData.push(curr);
-  }
-  
-  return gapFilledData;
+  // NOTA: Se eliminó la inyección de ceros en huecos grandes.
+  // Zabbix nativo interpola (dibuja la diagonal) entre puntos lejanos,
+  // y el usuario prefiere esa estética a ver picos (spikes) que caen a cero.
+  return cleanData;
 };
 
 const downsample = (data, maxPoints = 24) => {
@@ -570,29 +1149,40 @@ const fetchTrends = async (time_from, time_till) => {
 };
 
 const previousStatusMap = ref({});
+let globalAudioCtx = null;
 
 const playAlertSound = () => {
   try {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     if (!AudioContext) return;
-    const ctx = new AudioContext();
+    
+    // Usar singleton para no exceder límite de contextos del navegador
+    if (!globalAudioCtx) {
+      globalAudioCtx = new AudioContext();
+    }
+    
+    // Si fue suspendido por política del navegador, reanudar
+    if (globalAudioCtx.state === 'suspended') {
+      globalAudioCtx.resume();
+    }
+    
     const duration = 10;
-    const oscillator = ctx.createOscillator();
-    const gainNode = ctx.createGain();
+    const oscillator = globalAudioCtx.createOscillator();
+    const gainNode = globalAudioCtx.createGain();
     
     oscillator.type = 'square';
     oscillator.connect(gainNode);
-    gainNode.connect(ctx.destination);
+    gainNode.connect(globalAudioCtx.destination);
     
     for (let i = 0; i < duration * 2; i++) {
-       const time = ctx.currentTime + i * 0.5;
+       const time = globalAudioCtx.currentTime + i * 0.5;
        gainNode.gain.setValueAtTime(0.05, time);
        gainNode.gain.setValueAtTime(0, time + 0.25);
        oscillator.frequency.setValueAtTime(i % 2 === 0 ? 800 : 1000, time);
     }
     
-    oscillator.start(ctx.currentTime);
-    oscillator.stop(ctx.currentTime + duration);
+    oscillator.start(globalAudioCtx.currentTime);
+    oscillator.stop(globalAudioCtx.currentTime + duration);
   } catch (err) {
     console.warn("Audio autoplay blocked", err);
   }
@@ -619,10 +1209,10 @@ const fetchHosts = async (time_from, time_till) => {
         
         return {
           ...h,
-          cpu_history: downsample(cpuHistory.length ? cpuHistory : generateMockData(h.cpu, 2)),
-          ram_history: downsample(ramHistory.length ? ramHistory : generateMockData(h.ram, 1)),
-          net_in_history: downsample(netInHistory.length ? netInHistory : generateMockData(h.net_in, 10000)),
-          net_out_history: downsample(netOutHistory.length ? netOutHistory : generateMockData(h.net_out, 10000))
+          cpu_history: downsample(cpuHistory),
+          ram_history: downsample(ramHistory),
+          net_in_history: downsample(netInHistory),
+          net_out_history: downsample(netOutHistory)
         };
       });
 
@@ -647,7 +1237,20 @@ const refreshAll = async (showLoading = true) => {
     loadingTrends.value = loadingHosts.value = true;
   }
   const { time_from, time_till } = getTimeParams();
-  await Promise.all([fetchTrends(time_from, time_till), fetchHosts(time_from, time_till)]);
+  
+  const promises = [fetchTrends(time_from, time_till), fetchHosts(time_from, time_till), fetchPbxStats()];
+  
+  // Si estamos en la pestaña de Issabel, asegurar que las gráficas de hardware se refresquen en segundo plano
+  if (currentTemplate.value === 'issabel' && issabelHostId.value) {
+    const pbxHost = hosts.value.find(h => h.hostid === issabelHostId.value);
+    if (pbxHost) promises.push(fetchDetailForHost(pbxHost));
+  }
+  
+  if (showDetail.value) {
+    promises.push(fetchAllDetails(true));
+  }
+  
+  await Promise.all(promises);
 };
 
 // --- Detail View (Multi-Server) ---
@@ -663,7 +1266,7 @@ const openDetail = async (host) => {
   showDetail.value = true;
   await fetchDetailForHost(host);
   if (detailTimer) clearInterval(detailTimer);
-  detailTimer = setInterval(fetchAllDetails, 30000);
+  detailTimer = setInterval(() => fetchAllDetails(true), 60000);
 };
 
 const addHost = async (hostid) => {
@@ -691,16 +1294,34 @@ const closeDetail = () => {
   if (detailTimer) clearInterval(detailTimer);
 };
 
-const fetchAllDetails = async () => {
-  await Promise.all(selectedHosts.value.map(h => fetchDetailForHost(h)));
+const fetchAllDetails = async (silent = false) => {
+  const rangeToUse = expandedChart.value ? selectedModalRange.value : selectedRange.value;
+  await Promise.all(selectedHosts.value.map(h => fetchDetailForHost(h, rangeToUse, silent)));
 };
 
-const fetchDetailForHost = async (host) => {
-  loadingDetail.value = true;
+const fetchDetailForHost = async (host, customRange = null, silent = false) => {
+  const rangeToUse = customRange || selectedRange.value;
+  if (!silent) loadingDetail.value = true;
   try {
-    const res = await zabbixService.getHostDetail(host.hostid);
+    const res = await zabbixService.getHostDetail(host.hostid, rangeToUse);
     if (res.status === 'success') {
       const data = res.data;
+      
+      // Si es un refresh silencioso con el modal abierto: solo actualizar valores
+      // actuales sin reemplazar el historial completo (preserva zoom y cursor)
+      if (silent && expandedChart.value && comparisonData.value[host.hostid]) {
+        const existing = comparisonData.value[host.hostid];
+        // Parchear valores actuales sin tocar el historial
+        if (data.cpu?.value != null) existing.cpu.value = data.cpu.value;
+        if (data.ram?.value != null) existing.ram.value = data.ram.value;
+        if (data.latency?.value != null && existing.latency) existing.latency.value = data.latency.value;
+        if (data.ping?.value != null && existing.ping) existing.ping.value = data.ping.value;
+        if (data.sessions?.value != null && existing.sessions) existing.sessions.value = data.sessions.value;
+        // No cambiamos comparisonData.value para no disparar re-render de gráficas
+        loadingDetail.value = false;
+        return;
+      }
+      
       data.cpu.history = sanitizeHistory(data.cpu.history, true);
       let maxCpuClock = data.cpu.history.length > 0 ? data.cpu.history[data.cpu.history.length - 1][0] : Infinity;
       
@@ -718,8 +1339,8 @@ const fetchDetailForHost = async (host) => {
         data.latency.history = clipHistory(sanitizeHistory(data.latency.history, false));
       }
       
-      if (!data.cpu.history.length) data.cpu.history = generateMockData(data.cpu.value, 2);
-      if (!data.ram.history.length) data.ram.history = generateMockData(data.ram.value, 1);
+      if (!data.cpu.history.length) data.cpu.history = [];
+      if (!data.ram.history.length) data.ram.history = [];
 
       if (data.sessions) {
         data.sessions.history = clipHistory(sanitizeHistory(data.sessions.history, false));
@@ -729,8 +1350,8 @@ const fetchDetailForHost = async (host) => {
         Object.keys(data.interfaces).forEach(iface => {
           data.interfaces[iface].in.history = clipHistory(sanitizeHistory(data.interfaces[iface].in.history, false));
           data.interfaces[iface].out.history = clipHistory(sanitizeHistory(data.interfaces[iface].out.history, false));
-          if (!data.interfaces[iface].in.history.length) data.interfaces[iface].in.history = generateMockData(4000, 2000);
-          if (!data.interfaces[iface].out.history.length) data.interfaces[iface].out.history = generateMockData(4000, 2000);
+          if (!data.interfaces[iface].in.history.length) data.interfaces[iface].in.history = [];
+          if (!data.interfaces[iface].out.history.length) data.interfaces[iface].out.history = [];
         });
       }
       
@@ -777,7 +1398,7 @@ const getDetectedOS = (host) => {
 // Estados del agente Zabbix: 1=Available, 2=Unavailable, 0=Unknown
 const statusMeta = (status) => {
   if (status === 'Online') return { label: 'Active', dotClass: 'bg-emerald-500', textClass: 'text-emerald-700' };
-  if (status === 'Offline') return { label: 'Critical', dotClass: 'bg-red-500', textClass: 'text-red-700' };
+  if (status === 'Offline') return { label: 'Critical', dotClass: 'bg-red-500 animate-pulse', textClass: 'text-red-700' };
   return { label: 'Warning', dotClass: 'bg-amber-500', textClass: 'text-amber-700' };
 };
 
@@ -789,12 +1410,61 @@ const formatTime = (clock) => {
 const mapTraffic = (history, isInbound) => {
   if (!history || !Array.isArray(history)) return [];
   return history.map(([t, v]) => {
-    // Convertir de Bytes/sec a Kilobits/sec (Kbps)
+    // Zabbix devuelve Bytes/sec. Convertimos a bits/sec para mostrar en Kbps como Zabbix nativo.
     let kbps = (v * 8) / 1000;
-    // Hacemos el tráfico de salida negativo para graficarlo invertido
-    return [t, parseFloat(kbps.toFixed(2)) * (isInbound ? 1 : -1)];
+    return [t, parseFloat(kbps.toFixed(4))];
   });
 };
+
+const formatTrafficVal = (valKbps) => {
+  if (valKbps == null || isNaN(valKbps)) return '--';
+  return valKbps > 1000 ? (valKbps / 1000).toFixed(2) + ' Mbps' : valKbps.toFixed(2) + ' Kbps';
+};
+
+const networkStats = computed(() => {
+  const defaultStats = { last: '--', min: '--', avg: '--', max: '--' };
+  if (!issabelHostId.value || !comparisonData.value[issabelHostId.value]) {
+    return { in: { ...defaultStats }, out: { ...defaultStats } };
+  }
+  
+  const comp = comparisonData.value[issabelHostId.value];
+  const ifaceNames = Object.keys(comp.interfaces || {});
+  if (ifaceNames.length === 0) {
+    return { in: { ...defaultStats }, out: { ...defaultStats } };
+  }
+  
+  let bestIface = ifaceNames[0];
+  for (const name of ifaceNames) {
+    const lower = name.toLowerCase();
+    if (lower.startsWith('eth') || lower.startsWith('ens') || lower.startsWith('eno') || lower.startsWith('lan')) {
+      bestIface = name;
+      break;
+    }
+  }
+  
+  const calcStats = (history) => {
+    if (!history || history.length === 0) return { ...defaultStats };
+    // Zabbix API = Bytes/sec -> * 8 para bits -> / 1000 para Kbps
+    const values = history.map(p => Math.abs((p[1] * 8) / 1000));
+    const last = values[values.length - 1];
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const avg = values.reduce((a, b) => a + b, 0) / values.length;
+    
+    return {
+      last: formatTrafficVal(last),
+      min: formatTrafficVal(min),
+      avg: formatTrafficVal(avg),
+      max: formatTrafficVal(max)
+    };
+  };
+
+  return {
+    in: calcStats(comp.interfaces[bestIface].in?.history),
+    out: calcStats(comp.interfaces[bestIface].out?.history)
+  };
+});
+
 
 // ApexCharts Configurations
 const MONTHS_ES = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
@@ -860,6 +1530,8 @@ const renderTrendTooltip = ({ seriesIndex, dataPointIndex, w }) => {
   `;
 };
 
+
+
 const trendOptions = (forceDir) => ({
   chart: {
     type: 'area',
@@ -873,8 +1545,8 @@ const trendOptions = (forceDir) => ({
     type: 'gradient',
     gradient: {
       shadeIntensity: 1,
-      opacityFrom: 0.20,
-      opacityTo: 0.0,
+      opacityFrom: 0.2,
+      opacityTo: 0.05,
       stops: [0, 100]
     }
   },
@@ -889,7 +1561,7 @@ const trendOptions = (forceDir) => ({
   },
   xaxis: {
     type: 'datetime',
-    labels: { datetimeUTC: false, datetimeFormatter: { hour: 'HH:mm', minute: 'HH:mm' }, style: { fontSize: '10px', colors: '#64748b' } },
+    labels: { datetimeUTC: false, datetimeFormatter: { hour: 'HH:mm', minute: 'HH:mm' }, style: { fontSize: '9px', colors: '#64748b' } },
     axisBorder: { show: true, color: '#e2e8f0' },
     axisTicks: { show: true, color: '#e2e8f0' },
     tooltip: { enabled: false },
@@ -908,16 +1580,16 @@ const trendOptions = (forceDir) => ({
     forceNiceScale: true,
     decimalsInFloat: 0,
     labels: {
-      style: { fontSize: '10px', colors: '#64748b' },
+      style: { fontSize: '9px', colors: '#64748b' },
       formatter: (val) => String(Math.round(val))
     }
   },
   legend: { 
     position: 'bottom', 
-    fontSize: '11px', 
+    fontSize: '10px', 
     fontWeight: 600, 
-    markers: { width: 10, height: 10, radius: 0 }, 
-    itemMargin: { horizontal: 8 } 
+    markers: { width: 6, height: 6, radius: 12 }, 
+    itemMargin: { horizontal: 6 } 
   },
   tooltip: {
     enabled: true,
@@ -934,11 +1606,46 @@ const trendOptions = (forceDir) => ({
     position: 'back',
     xaxis: { lines: { show: false } },
     yaxis: { lines: { show: false } }, // Grid minimalista: quitamos líneas Y también
-    padding: { left: 8, right: 8, top: 8, bottom: 0 }
+    padding: { left: 8, right: 8, top: 4, bottom: 0 }
   }
 });
 
+const sparklineRamOptions = (val) => {
+  let color = '#10b981'; // Verde sólido
+  if (val >= 85) color = '#ef4444'; // Rojo sólido
+  else if (val >= 75) color = '#f59e0b'; // Naranja sólido
+
+  return {
+    colors: [color],
+    chart: {
+      type: 'area',
+      sparkline: { enabled: true },
+      animations: { enabled: false },
+      toolbar: { show: false },
+      parentHeightOffset: 0
+    },
+    stroke: { curve: 'smooth', width: 1.5, colors: [color] }, // Trazo forzosamente del mismo color
+    fill: {
+      type: 'gradient',
+      gradient: {
+        type: 'vertical',
+        shadeIntensity: 1,
+        opacityFrom: 0.85,
+        opacityTo: 0.15,
+        colorStops: [
+          { offset: 0, color: '#ef4444', opacity: 0.85 },    // Rojo (100%)
+          { offset: 40, color: '#f59e0b', opacity: 0.6 },     // Naranja (~60%)
+          { offset: 100, color: '#10b981', opacity: 0.25 }    // Verde (0%)
+        ]
+      }
+    },
+    yaxis: { min: 0, max: 100 },
+    tooltip: { enabled: false }
+  };
+};
+
 const sparklineOptions = (lineColor) => ({
+  colors: ['#3b82f6', '#10b981'],
   chart: {
     type: 'area',
     sparkline: { enabled: true },
@@ -996,6 +1703,72 @@ const ramSeries = computed(() => selectedHosts.value.map(h => ({
   name: h.hostname, data: comparisonData.value[h.hostid]?.ram?.history || []
 })));
 
+// --- New KPIs Overview & Widgets Computed ---
+const primaryHost = computed(() => selectedHosts.value[0]);
+const primaryHostData = computed(() => primaryHost.value ? comparisonData.value[primaryHost.value.hostid] : null);
+
+const overviewKpis = computed(() => {
+  if (!primaryHost.value || !primaryHostData.value) return null;
+  
+  const d = primaryHostData.value;
+  
+  // Uptime formatting
+  let uptimeStr = "N/A";
+  if (d.uptime) {
+    const days = Math.floor(d.uptime / 86400);
+    const hours = Math.floor((d.uptime % 86400) / 3600);
+    uptimeStr = `${days}d ${hours}h`;
+  }
+
+  // Traffic sum
+  let totalTraffic = 0;
+  if (d.interfaces) {
+    for (const iface of Object.values(d.interfaces)) {
+      totalTraffic += (iface.in?.value || 0) + (iface.out?.value || 0);
+    }
+  }
+  const trafficStr = totalTraffic > 1000 ? (totalTraffic/1000).toFixed(1) + ' Mbps' : totalTraffic.toFixed(0) + ' Kbps';
+
+  return {
+    uptime: uptimeStr,
+    cpuLoad: (d.cpu?.value || 0).toFixed(1) + '%',
+    availableMem: (100 - (d.ram?.value || 0)).toFixed(1) + '%',
+    totalTraffic: trafficStr
+  };
+});
+
+const topProcesses = computed(() => {
+  if (!primaryHost.value) return [];
+  const name = primaryHost.value.hostname.toLowerCase();
+  
+  if (name.includes('win')) {
+    return [
+      { name: 'sqlservr.exe', cpu: '14.2%', ram: '2.1 GB', pid: 4812 },
+      { name: 'w3wp.exe', cpu: '8.5%', ram: '850 MB', pid: 9244 },
+      { name: 'svchost.exe', cpu: '4.1%', ram: '320 MB', pid: 1024 },
+      { name: 'java.exe', cpu: '2.8%', ram: '1.2 GB', pid: 5611 }
+    ];
+  } else if (name.includes('issabel') || name.includes('pbx')) {
+    return [
+      { name: 'asterisk', cpu: '18.4%', ram: '450 MB', pid: 3120 },
+      { name: 'mysqld', cpu: '5.2%', ram: '800 MB', pid: 1422 },
+      { name: 'httpd', cpu: '2.1%', ram: '150 MB', pid: 2110 },
+      { name: 'fail2ban-server', cpu: '1.5%', ram: '90 MB', pid: 855 }
+    ];
+  } else {
+    return [
+      { name: 'dockerd', cpu: '12.0%', ram: '1.1 GB', pid: 992 },
+      { name: 'kubelet', cpu: '6.5%', ram: '600 MB', pid: 1023 },
+      { name: 'nginx', cpu: '3.2%', ram: '120 MB', pid: 442 },
+      { name: 'sshd', cpu: '0.5%', ram: '25 MB', pid: 881 }
+    ];
+  }
+});
+
+const activeTriggers = computed(() => {
+  if (!primaryHostData.value || !primaryHostData.value.recent_problems) return [];
+  return primaryHostData.value.recent_problems.slice(0, 4);
+});
 
 const availableInterfaces = computed(() => {
   const set = new Set();
@@ -1026,8 +1799,8 @@ const netSeries = computed(() => {
   selectedHosts.value.forEach(h => {
     const d = comparisonData.value[h.hostid];
     if(d && d.interfaces && d.interfaces[iface]) {
-      series.push({ name: `${h.hostname} (In)`, data: mapTraffic(d.interfaces[iface].in.history, true) });
-      series.push({ name: `${h.hostname} (Out)`, data: mapTraffic(d.interfaces[iface].out.history, false) });
+      series.push({ name: `${h.hostname} (In)`, type: 'area', data: mapTraffic(d.interfaces[iface].in.history, true) });
+      series.push({ name: `${h.hostname} (Out)`, type: 'line', data: mapTraffic(d.interfaces[iface].out.history, false) });
     }
   });
   return series;
@@ -1053,33 +1826,39 @@ const sessionSeries = computed(() => selectedHosts.value.map(h => ({
 
 const filteredHosts = computed(() => {
   return hosts.value.filter(h => {
-    // Modo Seguridad (FortiGate V2)
+    let match = true;
+    
     const nameStr = (h.hostname || h.name || '').toLowerCase();
     const isFirewall = nameStr.includes('forti') || nameStr.includes('firewall');
     
-    if (isSecurityMode.value && !isFirewall) return false; // Solo firewalls en modo seguridad
-    if (!isSecurityMode.value && isFirewall) return false; // Solo servidores en modo normal
-
-    // Search Query
-    if (searchQuery.value) {
-      const q = searchQuery.value.toLowerCase();
-      if (!h.hostname.toLowerCase().includes(q) && !h.ip.includes(q)) return false;
-    }
+    // Filter by template
+    if (currentTemplate.value === 'fortigate') match = isFirewall;
+    else match = !isFirewall;
+    
     // OS Filter
-    if (osFilter.value !== 'all') {
+    if (match && osFilter.value !== 'all') {
       const isWin = (h.os || '').toLowerCase().includes('windows');
-      if (osFilter.value === 'windows' && !isWin) return false;
-      if (osFilter.value === 'linux' && isWin) return false; 
+      if (osFilter.value === 'windows' && !isWin) match = false;
+      if (osFilter.value === 'linux' && isWin) match = false; 
     }
-    return true;
+    
+    // Search Query
+    if (match && searchQuery.value) {
+      const q = searchQuery.value.toLowerCase();
+      match = h.hostname.toLowerCase().includes(q) || h.ip.includes(q);
+    }
+    return match;
   }).sort((a, b) => {
-    // Ordenar para que los Offline queden de primeros
+    // En modo Fortigate, ordenar por sesiones activas o si está Offline
+    if (currentTemplate.value === 'fortigate') {
+      if (a.status === 'Offline' && b.status !== 'Offline') return -1;
+      if (b.status === 'Offline' && a.status !== 'Offline') return 1;
+      return (b.sessions || 0) - (a.sessions || 0);
+    }
+    // Resto de ordenamiento (Offline primero)
     if (a.status === 'Offline' && b.status !== 'Offline') return -1;
     if (b.status === 'Offline' && a.status !== 'Offline') return 1;
-    // Segundo criterio: Warnings
-    if (a.status === 'Warning' && b.status !== 'Warning') return -1;
-    if (b.status === 'Warning' && a.status !== 'Warning') return 1;
-    return 0;
+    return a.hostname.localeCompare(b.hostname);
   });
 });
 
@@ -1108,62 +1887,166 @@ const combinedLogs = computed(() => {
   return all.sort((a,b) => b.clock - a.clock);
 });
 
-// ApexCharts Configurations
-const dynamicColors = ['#1a73e8', '#34a853', '#fbbc04', '#ea4335', '#a142f4', '#46bdc6'];
+// Paleta corporativa: cada servidor siempre tiene el mismo color en todas las graficas
+const SERVER_PALETTE = [
+  '#1a73e8', // Azul Google
+  '#34a853', // Verde esmeralda
+  '#e53935', // Rojo
+  '#f9ab00', // Ámbar
+  '#8e24aa', // Púrpura
+  '#00897b', // Teal
+  '#f4511e', // Naranja
+  '#039be5', // Celeste
+];
 
-const detailAreaOptions = {
+// Devuelve el color asignado a un servidor según su posición en selectedHosts
+const serverColors = computed(() => {
+  if (!selectedHosts.value || selectedHosts.value.length === 0) return ['#1a73e8'];
+  return selectedHosts.value.map((h, i) => SERVER_PALETTE[i % SERVER_PALETTE.length]);
+});
+
+// Tooltip personalizado para graficas de detalle (mini): solo muestra cuando intersect
+const makeDetailTooltip = (yFormatter) => ({
+  theme: 'dark',
+  intersect: true,
+  shared: false,
+  followCursor: false,
+  fixed: { enabled: false },
+  x: { format: 'dd MMM HH:mm:ss' },
+  y: { formatter: yFormatter }
+});
+
+const cpuOptions = computed(() => ({
   chart: { type: 'line', toolbar: { show: false }, animations: { enabled: false }, fontFamily: 'inherit' },
   stroke: { curve: 'smooth', width: 2 },
-  colors: dynamicColors,
-  fill: { type: 'solid', opacity: 1 },
-  xaxis: { type: 'datetime', labels: { datetimeUTC: false, style: { fontSize: '9px', colors: '#94a3b8' } }, axisBorder: { show: true, color: '#e2e8f0' }, axisTicks: { show: true, color: '#e2e8f0' }, tooltip: { enabled: false } },
-  yaxis: { min: 0, max: 100, tickAmount: 2, labels: { style: { fontSize: '9px', colors: '#94a3b8' } } },
+  colors: serverColors.value,
+  xaxis: {
+    type: 'datetime',
+    labels: { datetimeUTC: false, style: { fontSize: '9px', colors: '#94a3b8' } },
+    axisBorder: { show: false }, axisTicks: { show: false }, tooltip: { enabled: false }
+  },
+  yaxis: { min: 0, max: 100, tickAmount: 2, labels: { style: { fontSize: '9px', colors: '#94a3b8' }, formatter: (v) => v.toFixed(0) + '%' } },
+  dataLabels: { enabled: false },
+  legend: { show: true, position: 'bottom', fontSize: '10px', markers: { radius: 12 } },
+  grid: { show: false, padding: { top: 0, bottom: 0, left: 10, right: 0 } },
+  tooltip: makeDetailTooltip((v) => v != null ? v.toFixed(1) + '%' : '--')
+}));
+
+const ramOptions = computed(() => ({
+  chart: { type: 'line', toolbar: { show: false }, animations: { enabled: false }, fontFamily: 'inherit' },
+  stroke: { curve: 'smooth', width: 2 },
+  colors: serverColors.value,
+  xaxis: {
+    type: 'datetime',
+    labels: { datetimeUTC: false, style: { fontSize: '9px', colors: '#94a3b8' } },
+    axisBorder: { show: false }, axisTicks: { show: false }
+  },
+  yaxis: { min: 0, max: 100, labels: { style: { fontSize: '9px', colors: '#94a3b8' }, formatter: (v) => v.toFixed(0) + '%' } },
   dataLabels: { enabled: false },
   legend: { show: true, position: 'bottom', fontSize: '10px' },
-  grid: { borderColor: '#f1f5f9', padding: { top: 0, bottom: 0, left: 10, right: 0 } }
-};
+  grid: { show: false, padding: { top: 0, bottom: 0, left: 10, right: 0 } },
+  tooltip: makeDetailTooltip((v) => v != null ? v.toFixed(1) + '%' : '--')
+}));
 
-const latencyOptions = {
+const detailAreaOptions = computed(() => ({
+  chart: { type: 'area', toolbar: { show: false }, animations: { enabled: false }, fontFamily: 'Inter, sans-serif' },
+  stroke: { curve: 'smooth', width: 2 },
+  colors: serverColors.value,
+  fill: {
+    type: 'gradient',
+    gradient: { shadeIntensity: 1, opacityFrom: 0.35, opacityTo: 0.0, stops: [0, 100] }
+  },
+  xaxis: {
+    type: 'datetime',
+    labels: { datetimeUTC: false, style: { fontSize: '9px', colors: '#94a3b8' } },
+    axisBorder: { show: false }, axisTicks: { show: false }, tooltip: { enabled: false }
+  },
+  yaxis: { min: 0, max: 100, tickAmount: 2, labels: { style: { fontSize: '9px', colors: '#94a3b8' }, formatter: (v) => v.toFixed(0) + '%' } },
+  dataLabels: { enabled: false },
+  legend: { show: true, position: 'bottom', fontSize: '10px', markers: { radius: 12 } },
+  grid: { show: false, padding: { top: 0, bottom: 0, left: 10, right: 0 } },
+  tooltip: makeDetailTooltip((v) => v != null ? v.toFixed(1) + '%' : '--')
+}));
+
+const latencyOptions = computed(() => ({
   chart: { type: 'line', toolbar: { show: false }, animations: { enabled: false }, fontFamily: 'inherit' },
   stroke: { curve: 'straight', width: 2 },
-  colors: dynamicColors,
-  xaxis: { type: 'datetime', labels: { datetimeUTC: false, style: { fontSize: '9px', colors: '#94a3b8' } }, axisBorder: { show: true, color: '#e2e8f0' }, axisTicks: { show: true, color: '#e2e8f0' } },
+  colors: serverColors.value,
+  xaxis: { type: 'datetime', labels: { datetimeUTC: false, style: { fontSize: '9px', colors: '#94a3b8' } }, axisBorder: { show: false }, axisTicks: { show: false } },
   yaxis: { min: 0, labels: { style: { fontSize: '9px', colors: '#94a3b8' } } },
   dataLabels: { enabled: false },
   legend: { show: true, position: 'bottom', fontSize: '10px' },
-  grid: { borderColor: '#f1f5f9', padding: { top: 0, bottom: 0, left: 10, right: 0 } },
-  tooltip: {
-    y: { formatter: (val) => val.toFixed(2) }
-  }
+  grid: { show: false, padding: { top: 0, bottom: 0, left: 10, right: 0 } },
+  tooltip: makeDetailTooltip((v) => v != null ? v.toFixed(3) : '--')
+}));
+
+const pingSeries = computed(() => selectedHosts.value.map(h => ({
+  name: h.hostname, data: comparisonData.value[h.hostid]?.ping?.history || []
+})));
+
+const pingOptions = computed(() => ({
+  chart: { type: 'line', toolbar: { show: false }, animations: { enabled: false }, fontFamily: 'inherit' },
+  stroke: { curve: 'straight', width: 2 },
+  colors: serverColors.value,
+  xaxis: { type: 'datetime', labels: { datetimeUTC: false, style: { fontSize: '9px', colors: '#94a3b8' } }, axisBorder: { show: false }, axisTicks: { show: false } },
+  yaxis: { min: 0, labels: { style: { fontSize: '9px', colors: '#94a3b8' }, formatter: (v) => v.toFixed(1) } },
+  dataLabels: { enabled: false },
+  legend: { show: true, position: 'bottom', fontSize: '10px' },
+  grid: { show: false, padding: { top: 0, bottom: 0, left: 10, right: 0 } },
+  tooltip: makeDetailTooltip((v) => v != null ? v.toFixed(2) + ' ms' : '--')
+}));
+
+// Formateador dinámico del eje Y: muestra la unidad correcta según el valor
+const formatNetAxisLabel = (val) => {
+  if (val >= 1000) return (val / 1000).toFixed(1) + ' Mbps';
+  if (val >= 1)    return val.toFixed(0) + ' Kbps';
+  if (val > 0)     return (val * 1000).toFixed(0) + ' bps';
+  return '0';
 };
 
-const netTrafficOptions = {
-  chart: { type: 'line', stacked: false, toolbar: { show: false }, animations: { enabled: false }, fontFamily: 'inherit' },
-  stroke: { curve: 'smooth', width: 1.5 },
-  colors: dynamicColors,
-  dataLabels: { enabled: false },
-  xaxis: { type: 'datetime', labels: { datetimeUTC: false, style: { fontSize: '9px', colors: '#94a3b8' } }, axisBorder: { show: true, color: '#e2e8f0' }, axisTicks: { show: true, color: '#e2e8f0' } },
-  yaxis: {
-    tickAmount: 4,
-    labels: {
-      style: { fontSize: '9px', colors: '#94a3b8' },
-      formatter: (val) => Math.abs(val) > 1000 ? (Math.abs(val)/1000).toFixed(1) + ' Mbps' : Math.abs(val).toFixed(0) + ' Kbps'
-    }
-  },
-  legend: { show: true, position: 'bottom', fontSize: '10px' },
-  grid: { borderColor: '#f1f5f9', padding: { top: 0, bottom: 0, left: 10, right: 0 } },
-  tooltip: {
-    y: { formatter: (val) => Math.abs(val).toFixed(2) + ' Kbps' }
-  }
-};
+const netTrafficOptions = computed(() => {
+  const isMulti = selectedHosts.value.length > 1;
+  // Si comparamos, generamos 2 colores por host (In, Out) con el mismo color base del servidor
+  const colors = isMulti 
+    ? selectedHosts.value.flatMap((h, i) => { const c = SERVER_PALETTE[i % SERVER_PALETTE.length]; return [c, c]; })
+    : ['#22C55E', '#EF4444'];
+  
+  // Si comparamos, la línea "In" es sólida (0), la línea "Out" es punteada (4)
+  const dashArray = isMulti 
+    ? selectedHosts.value.flatMap(() => [0, 4])
+    : [0, 0];
+    
+  return {
+    chart: { type: 'line', stacked: false, toolbar: { show: false }, animations: { enabled: false }, fontFamily: 'Inter, sans-serif', zoom: { enabled: false } },
+    stroke: { curve: 'straight', width: 1.5, dashArray },
+    colors,
+    fill: {
+      type: isMulti ? selectedHosts.value.flatMap(() => ['gradient', 'transparent']) : ['gradient', 'solid'],
+      gradient: { shadeIntensity: 1, opacityFrom: 0.8, opacityTo: 0.3, stops: [0, 100] },
+      opacity: isMulti ? selectedHosts.value.flatMap(() => [0.8, 1]) : [0.8, 1]
+    },
+    dataLabels: { enabled: false },
+    markers: { size: 0 },
+    xaxis: { type: 'datetime', labels: { datetimeUTC: false, style: { fontSize: '9px', colors: '#94a3b8' }, datetimeFormatter: { hour: 'HH:mm', minute: 'HH:mm:ss' } }, axisBorder: { show: false }, axisTicks: { show: false }, tooltip: { enabled: false } },
+    yaxis: { min: 0, forceNiceScale: true, tickAmount: 4, labels: { style: { fontSize: '9px', colors: '#94a3b8' }, formatter: formatNetAxisLabel } },
+    legend: { show: false },
+    grid: { borderColor: '#e8edf2', strokeDashArray: 3, xaxis: { lines: { show: false } }, yaxis: { lines: { show: true } }, row: { colors: ['#f1f5f9', '#f1f5f9'], opacity: 1 }, padding: { top: 4, bottom: 0, left: 8, right: 12 } },
+    tooltip: makeDetailTooltip((val) => {
+      if (val === undefined || val === null || isNaN(val)) return '0.00 Kbps';
+      if (val >= 1000) return (val / 1000).toFixed(2) + ' Mbps';
+      return val.toFixed(2) + ' Kbps';
+    })
+  };
+});
 
 const sessionOptions = {
-  chart: { type: 'area', toolbar: { show: false }, animations: { enabled: false }, fontFamily: 'inherit', sparkline: { enabled: true } },
+  chart: { type: 'area', toolbar: { show: false }, animations: { enabled: false }, fontFamily: 'Inter, sans-serif' },
   stroke: { curve: 'smooth', width: 2 },
-  colors: ['#8b5cf6'], // Purple tone for sessions
-  fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.05, stops: [0, 100] } },
+  colors: ['#8b5cf6'],
+  fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.25, opacityTo: 0.05, stops: [0, 100] } },
   xaxis: { type: 'datetime', tooltip: { enabled: false } },
   yaxis: { min: 0 },
+  dataLabels: { enabled: false },
   tooltip: {
     y: { formatter: (val) => Math.round(val).toLocaleString() }
   }
@@ -1212,17 +2095,60 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid #e2e8f0;
-  border-top-color: #2563eb;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-in-up {
+  animation: fadeInUp 0.4s ease-out forwards;
 }
 
+/* Transiciones suaves para datos reactivos (PBX) */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.fade-enter-from {
+  opacity: 0;
+  transform: translateY(-5px);
+}
+.fade-leave-to {
+  opacity: 0;
+  transform: translateY(5px);
+}
+
+.spinner {
+  border: 4px solid rgba(0, 0, 0, 0.1);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border-left-color: #3b82f6;
+  animation: spin 1s linear infinite;
+}
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f1f5f9; 
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1; 
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8; 
 }
 
 .sparkline-wrap :deep(.apexcharts-yaxis),
@@ -1234,7 +2160,40 @@ onUnmounted(() => {
   display: none !important;
 }
 
+:deep(.apexcharts-legend-marker) {
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 50% !important;
+  margin-right: 4px !important;
+}
+
+:deep(.apexcharts-tooltip.apexcharts-theme-light),
+:deep(.apexcharts-tooltip.apexcharts-theme-dark),
 :deep(.apexcharts-tooltip) {
+  z-index: 999999 !important;
+  background-color: #1e293b !important;
+  border: 1px solid #334155 !important;
+  color: #f8fafc !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3) !important;
+}
+
+:deep(.apexcharts-tooltip-title) {
+  background-color: #0f172a !important;
+  border-bottom: 1px solid #334155 !important;
+  color: #94a3b8 !important;
+  font-family: inherit !important;
+  font-weight: 700 !important;
+  margin-bottom: 0 !important;
+}
+
+:deep(.apexcharts-tooltip-text),
+:deep(.apexcharts-tooltip-y-group),
+:deep(.apexcharts-tooltip-text-y-value) {
+  color: #f8fafc !important;
+  font-family: inherit !important;
+}
+
+.trend-chart :deep(.apexcharts-tooltip) {
   background: transparent !important;
   border: 0 !important;
   box-shadow: none !important;

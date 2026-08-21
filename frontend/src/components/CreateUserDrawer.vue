@@ -21,6 +21,7 @@ const formData = ref({
   lastName: '',
   initials: '',
   fullName: '',
+  description: '',
   upnPrefix: '',
   samAccountName: '',
   password: '',
@@ -31,7 +32,12 @@ const formData = ref({
   // Atributos opcionales
   sharedFolders: [],
   proxyAddresses: [],
-  userParameters: ''
+  userParameters: '',
+  jobTitle: '',
+  department: '',
+  managerDn: '',
+  managerName: '',
+  telephoneNumber: ''
 })
 
 const activeSubView = ref(null)
@@ -43,6 +49,46 @@ function addProxyAddress() {
     formData.value.proxyAddresses.push(`${newProxyType.value}:${newProxyValue.value.trim()}`)
     newProxyValue.value = ''
   }
+}
+
+// Lógica de Autocompletado del Jefe Inmediato
+const managerSearch = ref('')
+const managerSuggestions = ref([])
+const showManagerSuggestions = ref(false)
+let managerSuggestTimeout = null
+
+watch(managerSearch, (newVal) => {
+  clearTimeout(managerSuggestTimeout)
+  if (!newVal || newVal.length < 3) {
+    managerSuggestions.value = []
+    showManagerSuggestions.value = false
+    return
+  }
+  managerSuggestTimeout = setTimeout(async () => {
+    try {
+      const token = localStorage.getItem('access_token')
+      const res = await fetch(`${API_BASE}/accounts/search?q=${encodeURIComponent(newVal)}&limit=10`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (res.ok) {
+        managerSuggestions.value = await res.json()
+        showManagerSuggestions.value = managerSuggestions.value.length > 0
+      }
+    } catch(e) {}
+  }, 300)
+})
+
+function selectManagerSuggestion(user) {
+  formData.value.managerDn = user.dn || user.userPrincipalName || user.username
+  formData.value.managerName = user.fullName
+  managerSearch.value = user.fullName
+  showManagerSuggestions.value = false
+}
+
+function hideManagerSuggestions() {
+  setTimeout(() => {
+    showManagerSuggestions.value = false
+  }, 200)
 }
 
 const newFolderPath = ref('')
@@ -272,23 +318,26 @@ function selectOU(node) {
 
 // Lógica del Wizard
 function nextStep() {
-  if (currentStep.value === 1 && !formData.value.ou && formData.value.accountType !== 'cloud') {
-    alert("Debes seleccionar una Unidad Organizativa para continuar.")
+  if (currentStep.value === 1 && !formData.value.ou) {
+    alert("Por favor selecciona una Unidad Organizativa (Ubicación) antes de continuar.")
     return
   }
+  
   if (currentStep.value === 2) {
-    if (!formData.value.firstName || !formData.value.lastName || !formData.value.upnPrefix) {
-      alert("Por favor completa los campos obligatorios de identidad.")
+    if (!formData.value.firstName || !formData.value.lastName || !formData.value.upnPrefix || !formData.value.description) {
+      alert("Por favor completa los campos obligatorios de identidad (incluyendo el Área/Descripción).")
       return
     }
   }
-  if (currentStep.value === 3) {
+
+  if (currentStep.value === 4) {
     if (!formData.value.password) {
-      alert("Debes establecer una contraseña inicial.")
+      alert("Por favor proporciona una contraseña.")
       return
     }
   }
-  if (currentStep.value < 4) {
+
+  if (currentStep.value < 5) {
     currentStep.value++
   }
 }
@@ -322,9 +371,9 @@ function generatePassword() {
 function resetForm() {
   currentStep.value = 1
   formData.value = {
-    accountType: 'onpremise', ou: '', ouName: '', firstName: '', lastName: '', initials: '', fullName: '', upnPrefix: '', samAccountName: '',
+    accountType: 'onpremise', ou: '', ouName: '', firstName: '', lastName: '', initials: '', fullName: '', description: '', upnPrefix: '', samAccountName: '',
     password: '', mustChangePassword: true, cannotChangePassword: false, passwordNeverExpires: false, accountDisabled: false,
-    sharedFolders: [], proxyAddresses: [], userParameters: ''
+    sharedFolders: [], proxyAddresses: [], userParameters: '', managerDn: '', managerName: '', telephoneNumber: '', jobTitle: '', department: ''
   }
   expandedNodes.value = new Set([ouTree.value[0]?.dn])
 }
@@ -343,6 +392,7 @@ async function submitUser() {
     lastName: formData.value.lastName,
     initials: formData.value.initials,
     fullName: formData.value.fullName,
+    description: formData.value.description,
     upn: `${formData.value.upnPrefix}${upnSuffix.value}`,
     samAccountName: formData.value.samAccountName,
     accountType: formData.value.accountType,
@@ -352,7 +402,11 @@ async function submitUser() {
     cannotChangePassword: formData.value.cannotChangePassword,
     passwordNeverExpires: formData.value.passwordNeverExpires,
     accountDisabled: formData.value.accountDisabled,
-    admin_user: localStorage.getItem('display_name') || 'Admin'
+    admin_user: localStorage.getItem('display_name') || 'Admin',
+    managerDn: formData.value.managerDn,
+    telephoneNumber: formData.value.telephoneNumber,
+    jobTitle: formData.value.jobTitle,
+    department: formData.value.department
   }
 
   try {
@@ -474,22 +528,26 @@ watch(() => props.isOpen, (val) => {
         </div>
 
         <!-- Progress Steps (Microsoft Style Tabs) -->
-        <div v-show="!activeSubView" class="px-6 pt-4 border-b border-slate-200 bg-white shrink-0 flex gap-8">
-          <button class="pb-3 text-[13px] font-medium transition-colors relative cursor-default" :class="currentStep === 1 ? 'text-slate-900' : 'text-slate-500'">
+        <div v-show="!activeSubView" class="px-6 pt-4 border-b border-slate-200 bg-white shrink-0 flex gap-6 overflow-x-auto">
+          <button class="pb-3 text-[13px] font-medium transition-colors relative cursor-default whitespace-nowrap" :class="currentStep === 1 ? 'text-slate-900' : 'text-slate-500'">
             Ubicación
             <div v-if="currentStep === 1" class="absolute bottom-0 left-0 right-0 h-[2px] bg-blue-600"></div>
           </button>
-          <button class="pb-3 text-[13px] font-medium transition-colors relative cursor-default" :class="currentStep === 2 ? 'text-slate-900' : 'text-slate-500'">
+          <button class="pb-3 text-[13px] font-medium transition-colors relative cursor-default whitespace-nowrap" :class="currentStep === 2 ? 'text-slate-900' : 'text-slate-500'">
             Identidad
             <div v-if="currentStep === 2" class="absolute bottom-0 left-0 right-0 h-[2px] bg-blue-600"></div>
           </button>
-          <button class="pb-3 text-[13px] font-medium transition-colors relative cursor-default" :class="currentStep === 3 ? 'text-slate-900' : 'text-slate-500'">
-            Seguridad
+          <button class="pb-3 text-[13px] font-medium transition-colors relative cursor-default whitespace-nowrap" :class="currentStep === 3 ? 'text-slate-900' : 'text-slate-500'">
+            Organización
             <div v-if="currentStep === 3" class="absolute bottom-0 left-0 right-0 h-[2px] bg-blue-600"></div>
           </button>
-          <button class="pb-3 text-[13px] font-medium transition-colors relative cursor-default" :class="currentStep === 4 ? 'text-slate-900' : 'text-slate-500'">
-            Confirmar
+          <button class="pb-3 text-[13px] font-medium transition-colors relative cursor-default whitespace-nowrap" :class="currentStep === 4 ? 'text-slate-900' : 'text-slate-500'">
+            Seguridad
             <div v-if="currentStep === 4" class="absolute bottom-0 left-0 right-0 h-[2px] bg-blue-600"></div>
+          </button>
+          <button class="pb-3 text-[13px] font-medium transition-colors relative cursor-default whitespace-nowrap" :class="currentStep === 5 ? 'text-slate-900' : 'text-slate-500'">
+            Confirmar
+            <div v-if="currentStep === 5" class="absolute bottom-0 left-0 right-0 h-[2px] bg-blue-600"></div>
           </button>
         </div>
 
@@ -546,10 +604,18 @@ watch(() => props.isOpen, (val) => {
                   <template v-for="node in ouTree" :key="node.dn">
                     <TreeNode :node="node" :level="0" :expandedNodes="expandedNodes" :selectedDn="formData.ou" @toggle="toggleNode" @select="selectOU" />
                   </template>
+                  <div class="flex justify-between items-center py-2 border-b border-slate-100">
+                    <span class="text-[12px] text-slate-500">Jefe Inmediato</span>
+                    <span class="text-[12px] font-medium text-slate-800">{{ formData.managerName || 'Ninguno' }}</span>
+                  </div>
+                  <div class="flex justify-between items-center py-2 border-b border-slate-100">
+                    <span class="text-[12px] text-slate-500">Extensión</span>
+                    <span class="text-[12px] font-medium text-slate-800">{{ formData.telephoneNumber || 'Ninguna' }}</span>
+                  </div>
                 </div>
               </div>
 
-              <!-- Selección Actual -->
+              <!-- Seguridad Resumen -->
               <div class="bg-slate-50 border-t border-slate-200 p-3 shrink-0">
                 <p class="text-[11px] font-semibold text-slate-700 mb-1">Ubicación seleccionada</p>
                 <div class="text-[12px] font-mono text-slate-600 break-all leading-relaxed">
@@ -581,9 +647,26 @@ watch(() => props.isOpen, (val) => {
               </div>
 
               <!-- Nombre completo a media pantalla para que no sea tan grande -->
-              <div class="col-span-6 sm:col-span-4">
+              <div class="col-span-6 sm:col-span-3">
                 <label class="block text-[12px] font-medium text-slate-700 mb-1">Nombre completo para mostrar</label>
                 <input v-model="formData.fullName" type="text" class="w-full text-[13px] border-0 border-b border-slate-300 bg-transparent px-0 py-1.5 focus:ring-0 focus:border-blue-600 transition-colors">
+              </div>
+
+              <!-- Descripción/Área (Obligatorio según requerimiento) -->
+              <div class="col-span-6 sm:col-span-6">
+                <label class="block text-[12px] font-medium text-slate-700 mb-1">Área / Descripción <span class="text-red-500">*</span></label>
+                <input v-model="formData.description" type="text" placeholder="Ej. Gerencia Comercial (Requerido para AD)" class="w-full text-[13px] border-0 border-b border-slate-300 bg-transparent px-0 py-1.5 focus:ring-0 focus:border-blue-600 transition-colors">
+              </div>
+
+              <!-- Cargo y Departamento -->
+              <div class="col-span-6 sm:col-span-3">
+                <label class="block text-[12px] font-medium text-slate-700 mb-1">Cargo</label>
+                <input v-model="formData.jobTitle" type="text" placeholder="Ej. Analista de Datos" class="w-full text-[13px] border-0 border-b border-slate-300 bg-transparent px-0 py-1.5 focus:ring-0 focus:border-blue-600 transition-colors">
+              </div>
+              
+              <div class="col-span-6 sm:col-span-3">
+                <label class="block text-[12px] font-medium text-slate-700 mb-1">Departamento</label>
+                <input v-model="formData.department" type="text" placeholder="Ej. Tecnología" class="w-full text-[13px] border-0 border-b border-slate-300 bg-transparent px-0 py-1.5 focus:ring-0 focus:border-blue-600 transition-colors">
               </div>
             </div>
 
@@ -614,8 +697,59 @@ watch(() => props.isOpen, (val) => {
             </div>
           </div>
 
-          <!-- STEP 3: SEGURIDAD -->
+          <!-- STEP 3: ORGANIZACIÓN Y CONTACTO -->
           <div v-show="currentStep === 3" class="space-y-8 px-2">
+            <div>
+              <h3 class="text-base font-semibold text-slate-900 mb-1">Organización y Contacto</h3>
+              <p class="text-[13px] text-slate-600 mb-6">Asigna el jefe inmediato y detalles de contacto corporativo.</p>
+            </div>
+
+            <div class="grid grid-cols-6 gap-x-6 gap-y-8">
+              <!-- Jefe Inmediato Autocomplete -->
+              <div class="col-span-6 sm:col-span-3 relative">
+                <label class="block text-[12px] font-medium text-slate-700 mb-1">Jefe Inmediato (Manager)</label>
+                <input 
+                  v-model="managerSearch" 
+                  @focus="managerSuggestions.length > 0 && (showManagerSuggestions = true)"
+                  @blur="hideManagerSuggestions"
+                  type="text" 
+                  placeholder="Buscar nombre o usuario..." 
+                  class="w-full text-[13px] border-0 border-b border-slate-300 bg-transparent px-0 py-1.5 focus:ring-0 focus:border-blue-600 transition-colors"
+                >
+                <div v-if="showManagerSuggestions" class="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 shadow-lg rounded-sm z-50 max-h-60 overflow-y-auto">
+                  <ul>
+                    <li 
+                      v-for="user in managerSuggestions" 
+                      :key="user.dn || user.userPrincipalName || user.username" 
+                      @mousedown.prevent="selectManagerSuggestion(user)"
+                      class="px-3 py-2 text-[12px] hover:bg-blue-50 cursor-pointer border-b border-slate-100 last:border-0"
+                    >
+                      <div class="font-bold text-slate-800">{{ user.fullName }}</div>
+                      <div class="text-[11px] text-slate-500 font-mono">{{ user.userPrincipalName || user.username }}</div>
+                    </li>
+                  </ul>
+                </div>
+                <div v-if="formData.managerDn" class="mt-2 flex items-center justify-between bg-slate-50 border border-slate-200 px-3 py-2 rounded-md">
+                  <div class="flex flex-col">
+                    <span class="text-[11px] font-semibold text-slate-500 uppercase">Jefe Seleccionado:</span>
+                    <span class="text-[12px] font-medium text-slate-800">{{ formData.managerName || managerSearch }}</span>
+                  </div>
+                  <button @click.prevent="formData.managerDn = ''; formData.managerName = ''; managerSearch = ''" class="text-slate-400 hover:text-red-500 transition-colors">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Extensión / Teléfono -->
+              <div class="col-span-6 sm:col-span-3">
+                <label class="block text-[12px] font-medium text-slate-700 mb-1">Extensión / Teléfono</label>
+                <input v-model="formData.telephoneNumber" type="text" class="w-full text-[13px] border-0 border-b border-slate-300 bg-transparent px-0 py-1.5 focus:ring-0 focus:border-blue-600 transition-colors" placeholder="Ej. 1014 o +57 300 000 0000">
+              </div>
+            </div>
+          </div>
+
+          <!-- STEP 4: SEGURIDAD -->
+          <div v-show="currentStep === 4" class="space-y-8 px-2">
             <div>
               <h3 class="text-base font-semibold text-slate-900 mb-1">Seguridad de la cuenta</h3>
               <p class="text-[13px] text-slate-600 mb-6">Establece la contraseña inicial y las políticas de la cuenta.</p>
@@ -661,11 +795,11 @@ watch(() => props.isOpen, (val) => {
             </div>
           </div>
 
-          <!-- STEP 4: RESUMEN -->
-          <div v-show="currentStep === 4" class="space-y-4">
+          <!-- STEP 5: CONFIRMACIÓN Y RESUMEN -->
+          <div v-show="currentStep === 5" class="space-y-4">
             <div>
-              <h3 class="text-[13px] font-bold text-slate-800 uppercase tracking-widest mb-1">Confirmar CreaciÃ³n</h3>
-              <p class="text-[12px] text-slate-500">Revisa los datos antes de ejecutar la acciÃ³n en el Directorio Activo.</p>
+              <h3 class="text-[13px] font-bold text-slate-800 uppercase tracking-widest mb-1">Confirmar Creación</h3>
+              <p class="text-[12px] text-slate-500">Revisa los datos antes de ejecutar la acción en el Directorio Activo.</p>
             </div>
 
             <div class="border border-slate-200 rounded-md overflow-hidden text-sm">
@@ -682,7 +816,7 @@ watch(() => props.isOpen, (val) => {
                 <div class="col-span-2 px-4 py-3 text-slate-800 font-mono text-[13px]">{{ preWin2000 }}{{ formData.samAccountName }}</div>
               </div>
               <div class="grid grid-cols-3 border-b border-slate-100">
-                <div class="col-span-1 bg-slate-50 px-4 py-3 font-semibold text-slate-600 text-xs uppercase tracking-wider">UbicaciÃ³n (OU)</div>
+                <div class="col-span-1 bg-slate-50 px-4 py-3 font-semibold text-slate-600 text-xs uppercase tracking-wider">Ubicación (OU)</div>
                 <div class="col-span-2 px-4 py-3 text-slate-800 font-mono text-[11px] break-all">{{ formData.ou }}</div>
               </div>
               <div class="grid grid-cols-3">
@@ -844,10 +978,11 @@ watch(() => props.isOpen, (val) => {
             <button v-show="currentStep > 1" @click="prevStep" class="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-sm hover:bg-slate-50 transition-colors shadow-sm">
               Anterior
             </button>
-            <button v-show="currentStep < 4" @click="nextStep" class="px-6 py-2 text-sm font-medium text-white bg-slate-800 rounded-sm hover:bg-slate-900 transition-colors shadow-sm">
-              Siguiente
+            <button v-if="currentStep < 5" @click="nextStep" class="bg-slate-800 text-white px-5 py-2.5 rounded-md text-[13px] font-semibold hover:bg-slate-700 transition-colors">
+              Siguiente Paso
             </button>
-            <button v-show="currentStep === 4" @click="submitUser" :disabled="isSubmitting" class="px-6 py-2 text-sm font-bold text-white bg-blue-600 rounded-sm hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm flex items-center gap-2">
+            
+            <button v-if="currentStep === 5" @click="submitUser" :disabled="isSubmitting" class="bg-blue-600 text-white px-6 py-2.5 rounded-md text-[13px] font-bold hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-2">
               <span v-if="isSubmitting" class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
               {{ isSubmitting ? submitStatusText : 'Crear Usuario' }}
             </button>

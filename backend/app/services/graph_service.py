@@ -214,7 +214,35 @@ class MicrosoftGraphService:
             ],
             "removeLicenses": []
         }
-        return await self._request("POST", endpoint, json=payload)
+        result = await self._request("POST", endpoint, json=payload)
+        
+        # Bust the caches to reflect updated counts immediately
+        global _subscribed_skus_cache, _license_summary_cache
+        _subscribed_skus_cache["time"] = 0
+        _license_summary_cache["time"] = 0
+        
+        return result
+
+    async def remove_license(self, username: str, sku_id: str):
+        """Remueve una licencia específica de Microsoft 365 a un usuario."""
+        try:
+            user_id = await self.resolve_user_id(username)
+        except Exception as e:
+            raise ValueError(str(e))
+
+        endpoint = f"/users/{user_id}/assignLicense"
+        payload = {
+            "addLicenses": [],
+            "removeLicenses": [sku_id]
+        }
+        result = await self._request("POST", endpoint, json=payload)
+        
+        # Bust the caches to reflect updated counts immediately
+        global _subscribed_skus_cache, _license_summary_cache
+        _subscribed_skus_cache["time"] = 0
+        _license_summary_cache["time"] = 0
+        
+        return result
 
     async def remove_all_licenses(self, username: str):
         """Remueve todas las licencias asignadas al usuario."""
@@ -426,7 +454,7 @@ class MicrosoftGraphService:
         if not user_id:
             return {"success": False, "error": "Usuario no encontrado en Entra ID"}
             
-        endpoint = f"/users/{user_id}?$select=onPremisesSyncEnabled,onPremisesLastSyncDateTime,mail,userPrincipalName,accountEnabled,id,proxyAddresses,signInActivity"
+        endpoint = f"/users/{user_id}?$select=onPremisesSyncEnabled,onPremisesLastSyncDateTime,mail,userPrincipalName,accountEnabled,id,proxyAddresses,signInActivity,onPremisesDistinguishedName,onPremisesImmutableId,onPremisesSamAccountName,onPremisesDomainName,onPremisesSecurityIdentifier"
         data = await self._request("GET", endpoint)
         
         if not data or "error" in data:
@@ -454,6 +482,11 @@ class MicrosoftGraphService:
                 "userPrincipalName": data.get("userPrincipalName"),
                 "onPremisesSyncEnabled": data.get("onPremisesSyncEnabled"),
                 "onPremisesLastSyncDateTime": data.get("onPremisesLastSyncDateTime"),
+                "onPremisesDistinguishedName": data.get("onPremisesDistinguishedName"),
+                "onPremisesImmutableId": data.get("onPremisesImmutableId"),
+                "onPremisesSamAccountName": data.get("onPremisesSamAccountName"),
+                "onPremisesDomainName": data.get("onPremisesDomainName"),
+                "onPremisesSecurityIdentifier": data.get("onPremisesSecurityIdentifier"),
                 "proxyAddresses": data.get("proxyAddresses", []),
                 "signInActivity": sign_in_info
             }

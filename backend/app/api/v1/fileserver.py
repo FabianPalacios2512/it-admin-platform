@@ -246,12 +246,22 @@ class CloneExecuteRequest(BaseModel):
     delta: dict
     admin_user: str = "Sistema"
 
+from fastapi import BackgroundTasks
+
 @router.post("/clone-execute")
-def execute_clone_permissions(req: CloneExecuteRequest):
-    """Ejecuta la clonación de permisos usando el delta."""
+def execute_clone_permissions(req: CloneExecuteRequest, background_tasks: BackgroundTasks):
+    """Ejecuta la clonación de permisos usando el delta en segundo plano."""
     from app.services.fs_acl_service import execute_clone_delta
+    from app.core.task_manager import create_task, run_async_task
     try:
-        result = execute_clone_delta(req.target_user, req.delta, req.admin_user)
-        return {"success": True, "results": result}
+        # 1. Crear el registro de la tarea
+        description = f"Clonando permisos de {req.source_user} a {req.target_user}"
+        task_id = create_task("clone_permissions", req.admin_user, description)
+        
+        # 2. Enviar a segundo plano
+        background_tasks.add_task(run_async_task, task_id, execute_clone_delta, req.target_user, req.delta, req.admin_user)
+        
+        # 3. Retornar inmediatamente
+        return {"success": True, "message": "Clonación iniciada en segundo plano", "task_id": task_id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

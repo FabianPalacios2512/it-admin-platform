@@ -70,6 +70,11 @@ class CreateUserRequest(BaseModel):
     cannotChangePassword: bool = False
     passwordNeverExpires: bool = False
     accountDisabled: bool = False
+    description: str
+    jobTitle: Optional[str] = ""
+    department: Optional[str] = ""
+    managerDn: Optional[str] = ""
+    telephoneNumber: Optional[str] = ""
     admin_user: Optional[str] = "Sistema"
 
 class GroupMembershipRequest(BaseModel):

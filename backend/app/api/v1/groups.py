@@ -2,12 +2,20 @@ from fastapi import APIRouter, HTTPException
 from typing import List, Dict, Any
 from pydantic import BaseModel
 from app.services.graph_service import graph_service
+from app.services import ad_service
 
 router = APIRouter()
 
 class GroupMemberRequest(BaseModel):
     username: str
     group_id: str
+
+class AdGroupCreateRequest(BaseModel):
+    name: str
+    description: str = ""
+    scope: str = "Global"
+    type: str = "Security"
+    path: str
 
 @router.get("/")
 async def list_m365_groups():
@@ -16,6 +24,80 @@ async def list_m365_groups():
         return await graph_service.get_m365_groups()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ══════════════════════════════════════════════════════════════
+# RUTAS DE ACTIVE DIRECTORY (ON-PREMISES)
+# ══════════════════════════════════════════════════════════════
+
+@router.get("/ad")
+def get_ad_groups():
+    """Obtiene todos los grupos locales del AD."""
+    try:
+        return ad_service.get_ad_groups()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/ad")
+def create_ad_group(req: AdGroupCreateRequest):
+    """Crea un nuevo grupo local en el AD."""
+    try:
+        result = ad_service.create_ad_group(req.dict())
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("error"))
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/ad/search")
+def search_ad_objects(q: str = ""):
+    """Busca usuarios y grupos locales para autocompletado."""
+    try:
+        return ad_service.search_ad_objects(q)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/ad/{group_name}/members")
+def get_ad_group_members(group_name: str):
+    """Obtiene los miembros de un grupo AD local."""
+    try:
+        return ad_service.get_ad_group_members(group_name)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class AddMemberRequest(BaseModel):
+    member_name: str
+
+@router.post("/ad/{group_name}/members")
+def add_ad_group_member(group_name: str, req: AddMemberRequest):
+    """Agrega un miembro a un grupo AD local."""
+    try:
+        result = ad_service.add_ad_group_member(group_name, req.member_name)
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("error"))
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/ad/{group_name}/members/{member_name}")
+def remove_ad_group_member(group_name: str, member_name: str):
+    """Quita un miembro de un grupo AD local."""
+    try:
+        result = ad_service.remove_ad_group_member(group_name, member_name)
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("error"))
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ══════════════════════════════════════════════════════════════
+# RUTAS DE MICROSOFT 365
+# ══════════════════════════════════════════════════════════════
 
 @router.get("/user/{username}")
 async def get_user_m365_groups(username: str):

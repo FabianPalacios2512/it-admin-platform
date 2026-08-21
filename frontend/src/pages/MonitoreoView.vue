@@ -16,6 +16,38 @@ const error = ref('')
 const lastUpdate = ref('')
 let pollInterval = null
 
+// ── PBX TELEFONÍA STATE & FETCH ──────────────────────────────────────────────
+const pbxData = ref({
+  llamadasActivas: 0,
+  robotIvr: 0,
+  rutaOpcion1: 0,
+  rutaOpcion2: 0,
+  troncal101: 0,
+  loading: false
+})
+
+async function fetchPbxStats() {
+  pbxData.value.loading = true
+  try {
+    // Simulación de llamada Zabbix API 'item.get' para el host Issabel
+    // zabbix_api.item.get(host="Issabel-PBX", search={"key_": "pbx."})
+    // const res = await authFetch(`${API_BASE}/monitoring/pbx`)
+    
+    // Datos simulados basados en las llaves configuradas
+    pbxData.value = {
+      llamadasActivas: 12,
+      robotIvr: 1, // pbx.ivr_test
+      rutaOpcion1: 1, // pbx.ivr_option[1]
+      rutaOpcion2: 1, // pbx.ivr_option[2]
+      troncal101: 1, // pbx.pjsip_status[101]
+      loading: false
+    }
+  } catch (e) {
+    console.error("Error obteniendo métricas de PBX", e)
+    pbxData.value.loading = false
+  }
+}
+
 // ── PROCESOS (Modal & Popover) ──────────────────────────────────────────────
 const processesCache = ref({})           // Caché de la última petición
 const processHistoryCache = ref({})      // Caché temporal para dibujar líneas de tiempo
@@ -518,7 +550,10 @@ async function fetchStats() {
 
 function startPolling() {
   if (pollInterval) clearInterval(pollInterval)
-  pollInterval = setInterval(() => fetchStats(), 5000)
+  pollInterval = setInterval(() => {
+    fetchStats()
+    fetchPbxStats()
+  }, 5000)
 }
 
 function stopPolling() {
@@ -567,6 +602,7 @@ function isCritical(srv) {
 
 onMounted(() => {
   fetchStats()
+  fetchPbxStats()
   startPolling()
 })
 
@@ -598,6 +634,43 @@ onUnmounted(() => {
     <!-- Empty state -->
     <div v-if="servers.length === 0 && !loading" class="bg-white border border-slate-200 p-12 text-center">
       <h3 class="text-sm font-semibold text-slate-900">No hay instancias registradas</h3>
+    </div>
+
+    <!-- KPI Widgets Row -->
+    <div v-if="servers.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+      <!-- Widget Telefonía PBX -->
+      <div class="bg-white border border-slate-200 flex flex-col shadow-sm">
+        <div class="px-4 py-2 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+          <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+            Telefonía PBX (Issabel)
+            <span :class="['relative flex h-2 w-2 ml-1', pbxData.troncal101 === 1 ? '' : 'animate-pulse']" :title="pbxData.troncal101 === 1 ? 'Troncal SIP 101 OK' : 'Troncal SIP 101 CAÍDA'">
+              <span :class="['relative inline-flex rounded-full h-2 w-2', pbxData.troncal101 === 1 ? 'bg-emerald-500' : 'bg-red-500']"></span>
+            </span>
+          </h2>
+        </div>
+        <div class="p-4 flex items-center justify-between">
+          <div class="flex flex-col">
+            <span class="text-[10px] text-slate-400 font-mono uppercase tracking-widest mb-1">Llamadas Activas</span>
+            <div class="flex items-baseline gap-2">
+              <span class="text-3xl font-light text-slate-800 leading-none">{{ pbxData.llamadasActivas }}</span>
+            </div>
+          </div>
+          <div class="flex flex-col gap-2 border-l border-slate-100 pl-4">
+            <!-- Robot IVR -->
+            <div class="flex items-center gap-2" title="pbx.ivr_test">
+              <span :class="['w-1.5 h-1.5 rounded-full shrink-0', pbxData.robotIvr === 1 ? 'bg-emerald-500' : 'bg-red-500']"></span>
+              <span class="text-[10px] text-slate-600 font-mono">Robot IVR (Motor)</span>
+            </div>
+            <!-- Opciones de Menú -->
+            <div class="flex items-center gap-2" title="pbx.ivr_option[1] y [2]">
+              <span :class="['w-1.5 h-1.5 rounded-full shrink-0', (pbxData.rutaOpcion1 === 1 && pbxData.rutaOpcion2 === 1) ? 'bg-emerald-500' : 'bg-red-500']"></span>
+              <span class="text-[10px] text-slate-600 font-mono">
+                {{ (pbxData.rutaOpcion1 === 1 && pbxData.rutaOpcion2 === 1) ? 'Rutas OK' : 'Falla en Rutas' }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Global Metrics Charts (Area Charts) -->

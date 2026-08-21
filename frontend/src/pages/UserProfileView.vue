@@ -55,12 +55,13 @@ const tabs = [
   { id: 'folders',   name: 'Carpetas asignadas', icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z' },
   { id: 'licenses',  name: 'Licencias Microsoft 365', icon: 'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z' },
   { id: 'alias',     name: 'Alias de Correo (ProxyAddresses)', icon: 'M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207' },
+  { id: 'email-delegation', name: 'Correo (Delegación)', icon: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z' },
   { id: 'entra',     name: 'Nube (Entra ID)',                  icon: 'M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z' }
 ]
 
 const filteredTabs = computed(() => {
   if (userProfile.value?.isCloudOnly) {
-    return tabs.filter(t => ['general', 'account', 'licenses', 'entra'].includes(t.id))
+    return tabs.filter(t => ['general', 'account', 'licenses', 'entra', 'email-delegation'].includes(t.id))
   }
   return tabs
 })
@@ -135,6 +136,32 @@ async function assignLicense() {
   }
 }
 
+const removingLicense = ref(null)
+async function removeLicense(skuId) {
+  if (!confirm('¿Estás seguro de quitar esta licencia al usuario?')) return
+  removingLicense.value = skuId
+  try {
+    const username = userProfile.value.username
+    const res = await authFetch('/api/v1/graph/licenses/remove', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, sku_id: skuId })
+    })
+    const data = await res.json()
+    if (res.ok && data.success) {
+      alert(`Licencia removida correctamente`)
+      fetchLicenses()
+    } else {
+      alert("Error al remover: " + (data.detail || "Error desconocido"))
+    }
+  } catch (e) {
+    console.error("Error de red:", e)
+    alert("Error de red al remover licencia.")
+  } finally {
+    removingLicense.value = null
+  }
+}
+
 const token = localStorage.getItem('access_token')
 const adminUser = localStorage.getItem('display_name') || 'Admin'
 
@@ -147,6 +174,104 @@ const newAlias = ref('')
 const newAliasPrefix = ref('smtp:')
 const aliasLoading = ref(false)
 const aliasStatus = ref('')
+
+// â”€â”€ Gestión de Correo (Delegación) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const emailDelegates = ref([])
+const loadingDelegates = ref(false)
+const delegateSearch = ref('')
+const selectedDelegatePermission = ref('SendAs')
+const isAssigningDelegate = ref(false)
+
+const delegateSuggestions = ref([])
+const showDelegateSuggestions = ref(false)
+let delegateSuggestTimeout = null
+
+watch(delegateSearch, (newVal) => {
+  clearTimeout(delegateSuggestTimeout)
+  if (!newVal || newVal.length < 3) {
+    delegateSuggestions.value = []
+    showDelegateSuggestions.value = false
+    return
+  }
+  delegateSuggestTimeout = setTimeout(async () => {
+    try {
+      const res = await authFetch(`${API_BASE}/accounts/search?q=${encodeURIComponent(newVal)}&limit=10`)
+      if (res.ok) {
+        delegateSuggestions.value = await res.json()
+        showDelegateSuggestions.value = delegateSuggestions.value.length > 0
+      }
+    } catch(e) {}
+  }, 300)
+})
+
+function selectDelegateSuggestion(user) {
+  delegateSearch.value = user.userPrincipalName || user.username
+  showDelegateSuggestions.value = false
+}
+
+function hideDelegateSuggestions() {
+  setTimeout(() => {
+    showDelegateSuggestions.value = false
+  }, 200)
+}
+
+async function fetchDelegates() {
+  if (!userProfile.value?.username) return
+  loadingDelegates.value = true
+  try {
+    const res = await authFetch(`/api/v1/exchange/${userProfile.value.username}/delegates`)
+    if (res.ok) {
+      const data = await res.json()
+      emailDelegates.value = data.data || []
+    }
+  } catch (e) {
+    console.error("Error al cargar delegados:", e)
+  } finally {
+    loadingDelegates.value = false
+  }
+}
+
+async function assignDelegate() {
+  if (!delegateSearch.value) return
+  isAssigningDelegate.value = true
+  try {
+    const res = await authFetch(`/api/v1/exchange/${userProfile.value.username}/delegates`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ delegate: delegateSearch.value, permission: selectedDelegatePermission.value })
+    })
+    const data = await res.json()
+    if (res.ok && data.success) {
+      alert("Permiso de correo asignado exitosamente")
+      delegateSearch.value = ''
+      fetchDelegates()
+    } else {
+      alert("Error: " + (data.detail || data.error || "Desconocido"))
+    }
+  } catch (e) {
+    alert("Error de red al asignar permiso")
+  } finally {
+    isAssigningDelegate.value = false
+  }
+}
+
+async function removeDelegate(delegateUser, permission) {
+  if (!confirm(`¿Remover permiso de ${permission} a ${delegateUser}?`)) return
+  try {
+    const res = await authFetch(`/api/v1/exchange/${userProfile.value.username}/delegates`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ delegate: delegateUser, permission: permission })
+    })
+    if (res.ok) {
+      fetchDelegates()
+    } else {
+      alert("Error al remover permiso")
+    }
+  } catch (e) {
+    alert("Error de red al remover permiso")
+  }
+}
 
 async function addAlias() {
   if (!newAlias.value.trim()) return
@@ -201,7 +326,7 @@ async function removeAlias(alias) {
   }
 }
 
-// â”€â”€ Gestión de Grupos M365 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Gestión de Grupos M365 ──────────────────────────────────────────────────
 const allM365Groups = ref([])
 const userM365Groups = ref([])
 const selectedM365Group = ref('')
@@ -227,26 +352,22 @@ async function syncLocalAD() {
     })
     const data = await res.json()
     if (res.ok && data.success) {
-      syncModalType.value = 'success'
-      syncModalTitle.value = 'Sincronización Iniciada'
-      syncModalMessage.value = data.message || 'La sincronización local se inició correctamente. Puede tardar un par de minutos en reflejarse en la nube.'
-      showSyncModal.value = true
+      addNotification({
+        type: 'info',
+        title: 'Sincronización Iniciada',
+        message: 'La tarea de sincronización de Entra ID se ha iniciado en segundo plano. Te avisaremos cuando termine.'
+      })
     } else {
-      syncModalType.value = 'error'
-      syncModalTitle.value = 'Error de Sincronización'
-      syncModalMessage.value = data.detail || data.error || 'Fallo al iniciar sincronización'
-      showSyncModal.value = true
+      addNotification({
+        type: 'error',
+        title: 'Error de Sincronización',
+        message: data.detail || data.error || 'Fallo al iniciar sincronización'
+      })
     }
   } catch (e) {
-    syncModalType.value = 'error'
-    syncModalTitle.value = 'Error de Conexión'
-    syncModalMessage.value = "Error de red: " + e.message
-    showSyncModal.value = true
+    addNotification({ type: 'error', title: 'Error de Conexión', message: "Error de red: " + e.message })
   } finally {
     isSyncingAd.value = false
-    if (showSyncModal.value) {
-      setTimeout(() => { showSyncModal.value = false }, 5000)
-    }
   }
 }
 
@@ -316,7 +437,7 @@ async function removeM365Group(groupId, groupName) {
   }
 }
 
-// â”€â”€ Offboarding Automático â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Offboarding Automático ──────────────────────────────────────────────────
 const showOffboardModal = ref(false)
 const offboardLoading = ref(false)
 const offboardResult = ref(null)
@@ -346,7 +467,7 @@ async function offboardUser() {
   }
 }
 
-// â”€â”€ MFA y Sesiones â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── MFA y Sesiones ──────────────────────────────────────────────────────────
 const resetMfaLoading = ref(false)
 const revokeLoading = ref(false)
 
@@ -370,9 +491,21 @@ async function revokeSessions() {
   try {
     const res = await authFetch(`${API_BASE}/graph/users/${userProfile.value.username}/revoke-sessions`, { method: 'POST' })
     const data = await res.json()
-    alert(res.ok ? data.message : `Error: ${data.detail || data.message}`)
+    if (res.ok && data.success) {
+      addNotification({
+        type: 'info',
+        title: 'Revocación Iniciada',
+        message: `Se ha iniciado el cierre de sesiones para ${userProfile.value.username} en segundo plano.`
+      })
+    } else {
+      addNotification({
+        type: 'error',
+        title: 'Error',
+        message: data.detail || data.message || 'Error al iniciar revocación'
+      })
+    }
   } catch(e) {
-    alert("Error de red: " + e.message)
+    addNotification({ type: 'error', title: 'Error de Red', message: e.message })
   } finally {
     revokeLoading.value = false
   }
@@ -494,7 +627,27 @@ watch(activeTab, async (tab) => {
   if (tab === 'groups') {
     fetchM365Groups()
   }
+  if (tab === 'email-delegation') {
+    fetchDelegates()
+  }
 })
+
+async function refreshCurrentView() {
+  fetchUserProfile()
+  if (activeTab.value === 'attributes') {
+    const username = route.params.username
+    const res = await authFetch(`${API_BASE}/accounts/attributes/${username}`)
+    if (res.ok) allAttributes.value = await res.json()
+  }
+  if (activeTab.value === 'entra') {
+    loadUserEntraStatus()
+    // mailbox y devices
+  }
+  if (activeTab.value === 'folders') loadFolderGroups()
+  if (activeTab.value === 'licenses') fetchLicenses()
+  if (activeTab.value === 'groups') fetchM365Groups()
+  if (activeTab.value === 'email-delegation') fetchDelegates()
+}
 
 function goBack() { router.push('/cuentas') }
 
@@ -543,7 +696,7 @@ async function executePasswordReset() {
   } finally { resetLoading.value = false }
 }
 
-// â”€â”€ Desbloqueo directo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Desbloqueo directo ──────────────────────────────────────────────────────
 async function executeUnlock() {
   unlockLoading.value = true; unlockResult.value = null
   try {
@@ -559,7 +712,7 @@ async function executeUnlock() {
   } finally { unlockLoading.value = false }
 }
 
-// â”€â”€ Opciones de cuenta â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Opciones de cuenta ──────────────────────────────────────────────────────
 async function saveAccountOptions() {
   optionsSaving.value = true; optionsResult.value = null
   try {
@@ -576,7 +729,7 @@ async function saveAccountOptions() {
   } finally { optionsSaving.value = false }
 }
 
-// â”€â”€ Editor de atributos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Editor de atributos ─────────────────────────────────────────────────────
 const filteredAttributes = computed(() => {
   let list = allAttributes.value
   if (showOnlySet.value) list = list.filter(a => a.value !== '<no establecido>')
@@ -633,7 +786,7 @@ async function saveAttribute() {
   } finally { attrSaving.value = false }
 }
 
-// â”€â”€ Carpetas Compartidas (ACL) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Carpetas Compartidas (ACL) ──────────────────────────────────────────────
 async function updateFolderPermission(folder) {
   if (folder.access === 'Sin Acceso') return removeFolderPermission(folder, true);
   const parts = folder.path.split('/');
@@ -789,6 +942,9 @@ async function analyzeClone() {
   }
 }
 
+import { useTasks } from '@/composables/useTasks'
+const { addNotification } = useTasks()
+
 async function executeClone() {
   if (!cloneDelta.value) return;
   
@@ -812,11 +968,23 @@ async function executeClone() {
       throw new Error(err.detail || 'Error ejecutando clonación');
     }
     
-    const data = await res.json();
+    // Alerta Inmediata de "Fire-and-forget"
+    addNotification({
+      type: 'info',
+      title: 'Clonación Iniciada',
+      message: `Estamos copiando los permisos de ${cloneSourceUser.value} a ${userProfile.value.username}. Te avisaremos cuando finalice.`
+    });
+    
     cloneExecuteSuccess.value = true;
-    cloneResults.value = data.results || [];
-    // Recargar permisos
-    loadFolderGroups();
+    
+    // Ocultar delta y vaciar el form para que el usuario pueda seguir
+    setTimeout(() => {
+      cloneSourceUser.value = '';
+      cloneDelta.value = null;
+      cloneExecuteSuccess.value = false;
+      foldersSubTab.value = 'view';
+    }, 3000);
+    
   } catch (err) {
     cloneExecuteError.value = err.message;
   } finally {
@@ -941,6 +1109,10 @@ const statusConfig = computed(() => {
           <span class="text-[11px] text-slate-800 font-medium">Propiedades del usuario</span>
         </div>
         <div class="flex items-center gap-1">
+          <button @click="refreshCurrentView" class="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-slate-700 hover:bg-slate-100 rounded transition-colors mr-2">
+            <svg class="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+            Actualizar
+          </button>
           <button @click="showEditModal = true" :disabled="!userProfile" class="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-slate-700 hover:bg-slate-100 rounded transition-colors disabled:opacity-40">
             <svg class="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
             Editar propiedades
@@ -1328,6 +1500,13 @@ const statusConfig = computed(() => {
                   </div>
                   <span class="text-[11px] text-slate-400 bg-slate-50 border border-slate-200 rounded-sm px-2 py-0.5">{{ userProfile.groups.length }} grupos</span>
                 </div>
+                
+                <div class="mb-4 flex items-center gap-2 w-full">
+                  <input type="text" placeholder="Buscar grupo local..." class="flex-1 w-full border border-slate-300 rounded px-2 py-1.5 text-[12px] bg-white outline-none focus:border-blue-500" />
+                  <button class="px-3 py-1.5 bg-blue-600 text-white text-[12px] rounded font-semibold disabled:opacity-50 flex items-center gap-1.5 shrink-0 hover:bg-blue-700 transition-colors">
+                    Agregar
+                  </button>
+                </div>
                 <div class="border border-slate-200 rounded-sm overflow-hidden">
                   <table class="w-full text-left">
                     <thead>
@@ -1362,15 +1541,15 @@ const statusConfig = computed(() => {
                   <span class="text-[11px] text-slate-400 bg-slate-50 border border-slate-200 rounded-sm px-2 py-0.5">{{ userM365Groups.length }} grupos</span>
                 </div>
                 
-                <div class="mb-4 flex gap-2">
-                  <select v-model="selectedM365Group" class="flex-1 border border-slate-300 rounded px-2 py-1.5 text-[12px] bg-white outline-none focus:border-blue-500">
+                <div class="mb-4 flex items-center gap-2 w-full">
+                  <select v-model="selectedM365Group" class="flex-1 w-full border border-slate-300 rounded px-2 py-1.5 text-[12px] bg-white outline-none focus:border-blue-500">
                     <option value="" disabled>Seleccione un grupo M365...</option>
                     <option v-for="g in allM365Groups" :key="g.id" :value="g.id">
                       {{ g.displayName }} {{ g.groupTypes?.includes('Unified') ? '(M365/Teams)' : '(Seguridad)' }}
                     </option>
                   </select>
-                  <button @click="addM365Group" :disabled="!selectedM365Group || m365GroupLoading" class="px-3 py-1.5 bg-blue-600 text-white text-[12px] rounded font-semibold disabled:opacity-50 flex items-center gap-1.5">
-                    <span v-if="m365GroupLoading" class="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                  <button @click="addM365Group" :disabled="!selectedM365Group || m365GroupLoading" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 transition-colors text-white text-[12px] rounded font-semibold disabled:opacity-50 flex items-center gap-1.5 shrink-0">
+                    <span v-if="m365GroupLoading" class="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0"></span>
                     Agregar
                   </button>
                 </div>
@@ -1646,7 +1825,103 @@ const statusConfig = computed(() => {
               </div>
             </div>
           </div>
+          </div>
+          
+          <div v-else-if="activeTab==='email-delegation'">
+            <div class="flex justify-between items-center mb-5 pb-3 border-b border-slate-100">
+              <div>
+                <h2 class="text-[14px] font-bold text-slate-800 uppercase tracking-wide">Correo (Delegación)</h2>
+                <p class="text-[11px] text-slate-500 mt-0.5">Administre permisos de buzón (Send As, Full Access) vía Exchange Online</p>
+              </div>
+              <button @click="fetchDelegates" class="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 transition-colors">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                Actualizar
+              </button>
+            </div>
 
+            <div class="bg-white border border-slate-200 rounded-md shadow-sm p-5 mb-5">
+              <h3 class="text-[12px] font-bold text-slate-700 mb-3 uppercase tracking-wider">Asignar Permiso</h3>
+              <div class="flex flex-wrap items-end gap-3">
+                <div class="flex-1 min-w-[250px] relative">
+                  <label class="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Usuario Delegado</label>
+                  <input 
+                    v-model="delegateSearch" 
+                    @focus="delegateSuggestions.length > 0 && (showDelegateSuggestions = true)"
+                    @blur="hideDelegateSuggestions"
+                    type="text" 
+                    placeholder="Ej. jperez@empresa.com o Juan Pérez" 
+                    class="w-full bg-white border border-slate-200 rounded-sm text-[13px] text-slate-800 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <!-- Custom Dropdown para Autocompletado -->
+                  <div v-if="showDelegateSuggestions" class="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 shadow-lg rounded-sm z-50 max-h-60 overflow-y-auto">
+                    <ul>
+                      <li 
+                        v-for="user in delegateSuggestions" 
+                        :key="user.userPrincipalName || user.username" 
+                        @mousedown.prevent="selectDelegateSuggestion(user)"
+                        class="px-3 py-2 text-[12px] hover:bg-blue-50 cursor-pointer border-b border-slate-100 last:border-0"
+                      >
+                        <div class="font-bold text-slate-800">{{ user.fullName }}</div>
+                        <div class="text-[11px] text-slate-500 font-mono">{{ user.userPrincipalName || user.username }}</div>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+                <div class="w-48">
+                  <label class="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Nivel de Acceso</label>
+                  <select v-model="selectedDelegatePermission" class="w-full bg-white border border-slate-200 rounded-sm text-[13px] text-slate-800 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                    <option value="SendAs">Send As (Enviar como)</option>
+                    <option value="SendOnBehalf">Send on Behalf (En nombre de)</option>
+                    <option value="FullAccess">Full Access (Acceso Total)</option>
+                  </select>
+                </div>
+                <button @click="assignDelegate" :disabled="isAssigningDelegate || !delegateSearch" class="bg-blue-600 text-white px-5 py-2 rounded-sm text-[13px] font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-2">
+                  <svg v-if="isAssigningDelegate" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                  Agregar
+                </button>
+              </div>
+            </div>
+
+            <div class="bg-white border border-slate-200 rounded-md shadow-sm flex flex-col">
+              <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5">
+                <h3 class="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Delegados Actuales</h3>
+              </div>
+              <div v-if="loadingDelegates" class="p-8 flex justify-center">
+                <div class="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+              <div v-else-if="emailDelegates.length > 0" class="overflow-x-auto">
+                <table class="w-full text-left">
+                  <thead class="bg-white border-b border-slate-100">
+                    <tr>
+                      <th class="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Usuario Delegado</th>
+                      <th class="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Permiso</th>
+                      <th class="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-24 text-center">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100">
+                    <tr v-for="del in emailDelegates" :key="del.user + del.permission" class="hover:bg-slate-50/50 transition-colors group">
+                      <td class="px-4 py-2.5 text-[12px] text-slate-800 font-medium">
+                        <div class="flex items-center gap-2">
+                          <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                          {{ del.user }}
+                        </div>
+                      </td>
+                      <td class="px-4 py-2.5 text-[11px] font-bold text-indigo-700">
+                        <span class="bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 uppercase tracking-wide">{{ del.permission }}</span>
+                      </td>
+                      <td class="px-4 py-2.5 text-center">
+                        <button @click="removeDelegate(del.user, del.permission)" class="text-slate-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-all p-1 rounded hover:bg-red-50">
+                          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div v-else class="p-8 text-center text-[12px] text-slate-500">
+                No hay delegados asignados a este buzón.
+              </div>
+            </div>
           </div>
 
           <div v-else-if="activeTab==='licenses'">
@@ -1680,6 +1955,7 @@ const statusConfig = computed(() => {
                       <tr>
                         <th class="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Producto (M365)</th>
                         <th class="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-48">ID de SKU</th>
+                        <th class="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-24 text-right">Acciones</th>
                       </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
@@ -1690,6 +1966,16 @@ const statusConfig = computed(() => {
                         </td>
                         <td class="px-4 py-2.5 text-[11px] font-mono text-slate-500">
                           {{ lic.skuId }}
+                        </td>
+                        <td class="px-4 py-2.5 text-right">
+                          <button 
+                            @click="removeLicense(lic.skuId)" 
+                            :disabled="removingLicense === lic.skuId"
+                            class="text-[11px] font-bold text-red-500 hover:text-red-700 hover:underline disabled:opacity-50 transition-colors"
+                          >
+                            <span v-if="removingLicense === lic.skuId" class="inline-block animate-spin mr-1">↻</span>
+                            {{ removingLicense === lic.skuId ? 'Quitando...' : 'Quitar' }}
+                          </button>
                         </td>
                       </tr>
                     </tbody>
@@ -1708,8 +1994,13 @@ const statusConfig = computed(() => {
                   <div class="relative">
                     <select v-model="selectedSku" class="w-full h-[36px] pl-3 pr-8 text-[12px] font-medium text-slate-700 bg-slate-50 border border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none rounded appearance-none cursor-pointer transition-colors">
                       <option value="" disabled>Seleccione un plan de licencia...</option>
-                      <option v-for="sku in availableLicenses" :key="sku.skuId" :value="sku.skuId">
-                        {{ getLicenseName(sku.skuId, sku.skuPartNumber) }} ({{ (sku.prepaidUnits?.enabled || 0) - sku.consumedUnits }} lib.)
+                      <option 
+                        v-for="sku in availableLicenses" 
+                        :key="sku.skuId" 
+                        :value="sku.skuId"
+                        :disabled="((sku.prepaidUnits?.enabled || 0) - sku.consumedUnits) <= 0"
+                      >
+                        {{ getLicenseName(sku.skuId, sku.skuPartNumber) }} ({{ Math.max(0, (sku.prepaidUnits?.enabled || 0) - sku.consumedUnits) }} disponibles) {{ ((sku.prepaidUnits?.enabled || 0) - sku.consumedUnits) < 0 ? `(Sobreasignadas: ${sku.consumedUnits - (sku.prepaidUnits?.enabled || 0)}) - Sin stock` : (((sku.prepaidUnits?.enabled || 0) - sku.consumedUnits) === 0 ? '- Sin stock' : '') }}
                       </option>
                     </select>
                     <svg class="w-4 h-4 text-slate-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>

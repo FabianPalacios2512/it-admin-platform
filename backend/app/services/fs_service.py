@@ -95,6 +95,9 @@ def get_shared_folders():
         c = _get_wmi_connection()
         shares = c.Win32_Share(Type=0)
 
+        cfg = get_primary_server("files")
+        ip = cfg["ip"]
+
         results = []
         for share in shares:
             # Filtrar solo shares ocultos estándar del sistema, no los creados a medida
@@ -104,6 +107,7 @@ def get_shared_folders():
             results.append({
                 "name": share.Name,
                 "path": share.Path,
+                "unc_path": f"\\\\{ip}\\{share.Name}",
                 "description": share.Description if share.Description else "",
                 "status": share.Status if hasattr(share, "Status") else "OK"
             })
@@ -193,6 +197,16 @@ def browse_folder(share_name: str, subpath: str = ""):
 
     items = []
     try:
+        # Si la ruta es un archivo, devolvemos su info sin intentar escanearlo como directorio
+        if os.path.isfile(target_path):
+            stat_info = os.stat(target_path)
+            return [{
+                "name": os.path.basename(target_path),
+                "is_dir": False,
+                "size": stat_info.st_size,
+                "modified_at": datetime.fromtimestamp(stat_info.st_mtime).isoformat()
+            }]
+
         with os.scandir(target_path) as it:
             for entry in it:
                 is_dir = entry.is_dir()

@@ -1,3 +1,32 @@
-RC: 0\nSTDOUT:\n"Nombre de host","Nombre de tarea","Hora pr½xima ejecuci½n","Estado","Modo de inicio de sesi½n","‚ltimo tiempo de ejecuci½n","‚ltimo resultado","Autor","Tarea que se ejecutarÿ","Iniciar en","Comentario","Estado de tarea programada","Tiempo de inactividad","Administraci½n de energ­a","Ejecutar como usuario","Eliminar tarea si no se vuelve a programar","Eliminar tarea si ejecuta durante X horas y X minutos","Programaci½n","Tipo de programaci½n","Hora de inicio","Fecha de inicio","Fecha final","D­as","Meses","Repetir: cada","Repetir: hasta: hora","Repetir: hasta: duraci½n","Repetir: detener si aœn se ejecuta"
-"WIN-SV-CONTEO","\AdminInfra_RDS_Cleanup","19/08/2026 1:53:00","Listo","Interactivo/En segundo plano","18/08/2026 5:55:24","-2147020576","N/A","powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\AdminInfra\rds_cleanup.ps1","N/A","N/A","Habilitado","Deshabilitado","Detener en modo Bater­a, No iniciar en Bater­a","SYSTEM","Deshabilitado","72:00:00","Datos de programaci½n no disponibles en este formato.","Semanal","1:53:00","19/07/2026","N/A","Todos los d­as de la semana","Cada 1 semana(s)","Deshabilitado","Deshabilitado","Deshabilitado","Deshabilitado"
-\nSTDERR:\n
+RC: 1\nSTDOUT:\n\nSTDERR:\n$ErrorActionPreference = 'Stop'
+# Registrar el servidor como equipo de confianza para WinRM si tenemos permisos
+try {
+    $current = (Get-Item WSMan:\localhost\Client\TrustedHosts -ErrorAction SilentlyContinue).Value
+    if ($current -notlike '*192.168.20.130*') {
+        Set-Item WSMan:\localhost\Client\TrustedHosts -Value '192.168.20.130' -Force -Concatenate -ErrorAction Stop
+    }
+} catch {
+    # Si no somos administrador local, ignoramos. El usuario debera configurarlo manualmente.
+}
+$pass = ConvertTo-SecureString 'Colombia123456++' -AsPlainText -Force
+$cred = New-Object System.Management.Automation.PSCredential('code\administrador', $pass)
+try {
+    $result = Invoke-Command -ComputerName '192.168.20.130' -Credential $cred -ScriptBlock { schtasks /Query /TN 
+'AdminInfra_RDS_Cleanup' /V /FO CSV } -ErrorAction Stop
+    Write-Output $result
+} catch {
+    Write-Error $_.Exception.Message
+    exit 1
+}
+ : Error de conexi¢n al servidor remoto 192.168.20.130. Mensaje de error: El cliente WinRM no puede procesar la 
+solicitud. Si el esquema de autenticaci¢n es distinto de Kerberos o si el equipo cliente no est  unido a un dominio, 
+se debe usar el transporte HTTPS o agregar el equipo de destino al valor de configuraci¢n TrustedHosts. Use winrm.cmd 
+para configurar TrustedHosts. Tenga en cuenta que es posible que no se autentiquen los equipos de la lista 
+TrustedHosts. Para obtener m s informaci¢n, ejecute el siguiente comando: winrm help config. Para obtener m s 
+informaci¢n, consulte el tema de la Ayuda about_Remote_Troubleshooting.
+En l¡nea: 18 Car cter: 5
++     Write-Error $_.Exception.Message
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [Write-Error], WriteErrorException
+    + FullyQualifiedErrorId : Microsoft.PowerShell.Commands.WriteErrorException
+ 

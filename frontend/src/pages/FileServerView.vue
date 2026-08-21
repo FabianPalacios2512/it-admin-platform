@@ -399,6 +399,17 @@ const toggleSelection = (item) => {
     selectedItems.value.push(item)
   }
 }
+
+const copyToClipboard = async (text) => {
+  if (!text) return
+  try {
+    await navigator.clipboard.writeText(text)
+    // Se podría agregar una notificación visual breve aquí si existe un componente de Toast
+  } catch (err) {
+    console.error('Error al copiar al portapapeles:', err)
+  }
+}
+
 const toggleAll = (items) => {
   if (selectedItems.value.length === items.length) {
     selectedItems.value = []
@@ -482,7 +493,13 @@ onUnmounted(() => {
           <svg class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
           Nueva carpeta
         </button>
-        <button @click="showCloneModal = true" class="text-[13px] font-medium text-indigo-700 hover:text-indigo-800 hover:bg-indigo-100 bg-indigo-50 px-2 py-1.5 rounded transition-colors flex items-center gap-1.5 border border-indigo-100">
+        <button class="text-[13px] font-medium text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-2 py-1.5 rounded transition-colors flex items-center gap-1.5">
+          <svg class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+          Mapear a Usuario
+        </button>
+        <button @click="selectedItems.length > 0 ? showCloneModal = true : null" 
+                :class="selectedItems.length === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:text-indigo-800 hover:bg-indigo-100'"
+                class="text-[13px] font-medium text-indigo-700 bg-indigo-50 px-2 py-1.5 rounded transition-colors flex items-center gap-1.5 border border-indigo-100">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
           Clonar Permisos (Espejo)
         </button>
@@ -560,18 +577,18 @@ onUnmounted(() => {
 
       <!-- VISTA: LISTA DE SHARES -->
       <div v-else-if="!isBrowsing" class="flex-1 overflow-auto">
-        <table class="w-full text-left text-sm">
+        <table class="w-full text-left text-sm whitespace-nowrap">
           <thead class="text-gray-500 font-bold uppercase tracking-wider text-xs border-b-2 border-gray-200">
             <tr>
-              <th class="px-5 py-3 w-12 text-center"></th>
+              <th class="px-3 py-3 w-10 text-center"></th>
               <th class="px-2 py-3 w-1/3">Recurso Compartido</th>
-              <th class="px-5 py-3 w-1/3">Ruta Local Servidor</th>
-              <th class="px-5 py-3 w-1/4">DESCRIPCIÓN</th>
+              <th class="px-4 py-3 w-1/3">Ruta UNC</th>
+              <th class="px-4 py-3 w-1/3">Ruta Local</th>
             </tr>
           </thead>
           <tbody class="text-gray-700">
-            <tr v-for="share in shares" :key="share.name" class="hover:bg-gray-50/80 transition-colors cursor-pointer border-b border-gray-100" @dblclick="browsePath(share)">
-              <td class="px-5 py-4 text-center" @click.stop>
+            <tr v-for="share in shares" :key="share.name" class="hover:bg-gray-50/80 transition-colors cursor-pointer border-b border-gray-100 group" @dblclick="browsePath(share)">
+              <td class="px-3 py-4 text-center" @click.stop>
                 <input type="checkbox" class="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer" :checked="isSelected(share)" @change="toggleSelection(share)"/>
               </td>
               <td class="px-2 py-4" @click="toggleSelection(share)">
@@ -580,8 +597,15 @@ onUnmounted(() => {
                   <span class="font-medium text-gray-900">{{ share.name }}</span>
                 </div>
               </td>
-              <td class="px-5 py-4 font-mono text-xs text-gray-500" @click="toggleSelection(share)">{{ share.path }}</td>
-              <td class="px-5 py-4 text-gray-500 truncate max-w-[200px]" @click="toggleSelection(share)">{{ share.description || '-' }}</td>
+              <td class="px-4 py-4 text-gray-700 font-mono text-xs" @click="toggleSelection(share)">
+                <div class="flex items-center gap-2">
+                  <span>{{ share.unc_path || '\\\\' + share.name }}</span>
+                  <button @click.stop="copyToClipboard(share.unc_path || '\\\\' + share.name)" title="Copiar Ruta UNC" class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-blue-600 transition-opacity">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                  </button>
+                </div>
+              </td>
+              <td class="px-4 py-4 font-mono text-xs text-gray-500" @click="toggleSelection(share)">{{ share.path }}</td>
             </tr>
           </tbody>
         </table>
@@ -708,7 +732,10 @@ onUnmounted(() => {
                     @click="selectedADAccount = res"
                     :class="['flex items-center gap-3 px-4 py-3 cursor-pointer text-sm border-b border-gray-100 last:border-0 transition-colors', selectedADAccount?.ntaccount === res.ntaccount ? 'bg-indigo-50 border-l-4 border-l-indigo-600' : 'hover:bg-gray-50']"
                   >
-                    <span class="text-lg">{{ res.type === 'Grupo' ? 'ðŸ‘¥' : 'ðŸ‘¤' }}</span>
+                    <span class="flex items-center justify-center w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 shrink-0">
+                      <i v-if="res.type === 'Grupo'" class="fas fa-users text-sm"></i>
+                      <i v-else class="fas fa-user text-sm"></i>
+                    </span>
                     <div class="flex flex-col flex-1 min-w-0">
                       <span class="font-medium text-gray-900 truncate">{{ res.name }}</span>
                       <span class="text-xs text-gray-500 truncate">{{ res.ntaccount }}</span>

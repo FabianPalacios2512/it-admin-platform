@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from typing import List, Dict, Any
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -6,11 +6,19 @@ from app.services.graph_service import graph_service
 from app.core.database import get_db
 from app.models.server import ServerConfig
 from app.core.encryption import decrypt_password
+from app.core.task_manager import create_task, update_task_status, run_async_task
 import subprocess
 
 class AssignLicenseRequest(BaseModel):
     username: str
     sku_id: str
+
+class RemoveLicenseRequest(BaseModel):
+    username: str
+    sku_id: str
+
+class SyncAdRequest(BaseModel):
+    username: str
 
 class MfaStatusRequest(BaseModel):
     enable: bool
@@ -34,9 +42,24 @@ async def get_licenses_summary():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+def _run_ad_sync_task(task_id: str, ip: str, admin_user: str, admin_pass: str):
+    try:
+        ps_script = f'''
+$password = ConvertTo-SecureString "{admin_pass}" -AsPlainText -Force
+$credential = New-Object System.Management.Automation.PSCredential ("{admin_user}", $password)
+Invoke-WmiMethod -Class Win32_Process -Name Create -ArgumentList 'powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -Command "Start-ADSyncSyncCycle -PolicyType Delta"' -ComputerName "{ip}" -Credential $credential
+'''
+        result = subprocess.run(["powershell", "-Command", ps_script], capture_output=True, text=True)
+        if result.returncode == 0:
+            update_task_status(task_id, "completed", result={"message": "Sincronización iniciada remotamente.", "stdout": result.stdout}, progress=100)
+        else:
+            update_task_status(task_id, "error", error=f"Error PowerShell Remoto: {result.stderr or result.stdout}")
+    except Exception as e:
+        update_task_status(task_id, "error", error=str(e))
+
 @router.post("/sync-ad")
-async def force_ad_sync(db: Session = Depends(get_db)):
-    """Fuerza un ciclo delta de sincronización de Entra Connect de forma remota."""
+async def force_ad_sync(req: SyncAdRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    """Fuerza un ciclo delta de sincronización de Entra Connect de forma remota en segundo plano."""
     try:
         # Obtener el servidor primario (AD)
         server = db.query(ServerConfig).filter(ServerConfig.server_type == "da", ServerConfig.is_primary == True).first()
@@ -48,26 +71,20 @@ async def force_ad_sync(db: Session = Depends(get_db)):
         except Exception as e:
             return {"success": False, "detail": "Error desencriptando la contraseña del servidor."}
 
-        # Ejecutar remotamente vía WMI (Bypasses WinRM/TrustedHosts)
-        ps_script = f'''
-$password = ConvertTo-SecureString "{admin_pass}" -AsPlainText -Force
-$credential = New-Object System.Management.Automation.PSCredential ("{server.admin_user}", $password)
-Invoke-WmiMethod -Class Win32_Process -Name Create -ArgumentList 'powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -Command "Start-ADSyncSyncCycle -PolicyType Delta"' -ComputerName "{server.ip}" -Credential $credential
-'''
-        result = subprocess.run(["powershell", "-Command", ps_script], capture_output=True, text=True)
-        if result.returncode == 0:
-            return {"success": True, "message": "Sincronización iniciada remotamente en el servidor.", "stdout": result.stdout}
-        else:
-            return {"success": False, "detail": f"Error PowerShell Remoto: {result.stderr or result.stdout}"}
+        task_id = create_task("ad_sync", req.username, f"Sincronizando AD a Entra ID")
+        background_tasks.add_task(_run_ad_sync_task, task_id, server.ip, server.admin_user, admin_pass)
+        
+        return {"success": True, "task_id": task_id, "message": "Tarea de sincronización iniciada en segundo plano."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/users/{username}/revoke-sessions")
-async def revoke_user_sessions(username: str):
-    """Revoca todas las sesiones activas en Entra ID para un usuario."""
+async def revoke_user_sessions(username: str, background_tasks: BackgroundTasks):
+    """Revoca todas las sesiones activas en Entra ID para un usuario en segundo plano."""
     try:
-        await graph_service.revoke_sessions(username)
-        return {"success": True, "message": f"Sesiones revocadas para {username}"}
+        task_id = create_task("revoke_sessions", username, f"Revocando sesiones de {username} en Entra ID")
+        background_tasks.add_task(run_async_task, task_id, graph_service.revoke_sessions, username)
+        return {"success": True, "task_id": task_id, "message": f"Tarea iniciada: Revocar sesiones para {username}"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -103,6 +120,22 @@ async def assign_license(req: AssignLicenseRequest):
                 pass
         raise HTTPException(status_code=500, detail=f"Error al asignar licencia: {error_msg}")
 
+@router.post("/licenses/remove")
+async def remove_license(req: RemoveLicenseRequest):
+    """Remueve una licencia específica de un usuario en Entra ID."""
+    try:
+        result = await graph_service.remove_license(req.username, req.sku_id)
+        return {"success": True, "message": "Licencia removida correctamente", "data": result}
+    except Exception as e:
+        error_msg = str(e)
+        if hasattr(e, 'response') and e.response is not None:
+            try:
+                err_data = e.response.json()
+                error_msg = err_data.get('error', {}).get('message', str(e))
+            except:
+                pass
+        raise HTTPException(status_code=500, detail=f"Error al remover licencia: {error_msg}")
+
 @router.get("/sync-status")
 async def get_sync_status():
     """Devuelve la fecha de la última sincronización de Entra Connect."""
@@ -134,14 +167,7 @@ async def get_risk_detections():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/users/{username}/revoke-sessions")
-async def revoke_user_sessions(username: str):
-    try:
-        return await graph_service.revoke_user_sessions(username)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/users/{username}/devices")
 async def get_user_devices(username: str):

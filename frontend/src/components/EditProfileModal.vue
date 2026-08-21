@@ -1,5 +1,5 @@
-﻿<script setup>
-import { ref, onMounted, computed, watch } from 'vue'
+<script setup>
+import { ref, onMounted, watch } from 'vue'
 
 const props = defineProps({
   userProfile: { type: Object, required: true },
@@ -9,22 +9,23 @@ const props = defineProps({
 const emit = defineEmits(['close', 'saved'])
 const API_BASE = '/api/v1'
 
-// â”€â”€ PestaÃ±as â”€â”€
+// Estado de pestañas
 const activeTab = ref('general')
 const tabs = [
-  { id: 'general', name: 'General' },
-  { id: 'cuenta', name: 'Cuenta' },
-  { id: 'miembro', name: 'Miembro de' },
+  { id: 'general', name: 'General', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
+  { id: 'cuenta', name: 'Cuenta', icon: 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z' },
+  { id: 'miembro', name: 'Miembro de', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z' },
 ]
 
-// â”€â”€ General â”€â”€
+// Datos General
 const general = ref({
   givenName: '', initials: '', sn: '', displayName: '',
   description: '', physicalDeliveryOfficeName: '',
   telephoneNumber: '', mail: '',
+  title: '', department: '', manager: ''
 })
 
-// â”€â”€ Cuenta â”€â”€
+// Datos Cuenta
 const cuenta = ref({
   upnPrefix: '', upnSuffix: '@local.code', sAMAccountName: '',
   must_change_password: false,
@@ -34,18 +35,23 @@ const cuenta = ref({
   account_disabled: false,
 })
 
-// â”€â”€ Miembro de â”€â”€
+// Miembro de / Grupos
 const groups = ref([])
 const groupSearchQuery = ref('')
 const groupSearchResults = ref([])
 const searchingGroups = ref(false)
 
-// â”€â”€ Estado global â”€â”€
+// Jefe Inmediato
+const managerSearchQuery = ref('')
+const managerSearchResults = ref([])
+const searchingManager = ref(false)
+const selectedManagerName = ref('')
+
+// Estado Global
 const saving = ref(false)
 const resultMsg = ref(null)
 
 onMounted(() => {
-  // General
   general.value = {
     givenName: props.userProfile.firstName || '',
     initials: '',
@@ -55,8 +61,15 @@ onMounted(() => {
     physicalDeliveryOfficeName: props.userProfile.office === 'Sin oficina' ? '' : (props.userProfile.office || ''),
     telephoneNumber: props.userProfile.phone || '',
     mail: props.userProfile.email || '',
+    title: props.userProfile.jobTitle || props.userProfile.title || '',
+    department: props.userProfile.department || '',
+    manager: ''
   }
-  // Cuenta
+  
+  if (props.userProfile.manager) {
+    selectedManagerName.value = props.userProfile.manager
+  }
+  
   if (props.accountOptions) {
     const defaultUpn = props.userProfile.email ? props.userProfile.username + '@' + (props.userProfile.email.split('@')[1] || 'local.code') : props.userProfile.username + '@local.code'
     const parts = defaultUpn.split('@')
@@ -71,13 +84,47 @@ onMounted(() => {
       account_disabled: props.accountOptions.account_disabled || false,
     }
   }
-  // Grupos
+
   if (props.userProfile.groups) {
     groups.value = [...props.userProfile.groups]
   }
 })
 
-// â”€â”€ Buscar grupos â”€â”€
+// Búsqueda de Jefe Inmediato
+let managerSearchTimeout = null
+watch(managerSearchQuery, (q) => {
+  clearTimeout(managerSearchTimeout)
+  if (!q || q.length < 3) { 
+    managerSearchResults.value = []
+    return 
+  }
+  managerSearchTimeout = setTimeout(async () => {
+    searchingManager.value = true
+    try {
+      const res = await fetch(`${API_BASE}/accounts/search?q=${encodeURIComponent(q)}&limit=5`)
+      const data = await res.json()
+      managerSearchResults.value = Array.isArray(data) ? data : (data.data || [])
+    } catch { 
+      managerSearchResults.value = [] 
+    }
+    searchingManager.value = false
+  }, 300)
+})
+
+const selectManager = (manager) => {
+  general.value.manager = manager.dn || manager.userPrincipalName || manager.username
+  selectedManagerName.value = manager.fullName || manager.displayName
+  managerSearchQuery.value = ''
+  managerSearchResults.value = []
+}
+
+const clearManager = () => {
+  general.value.manager = ''
+  selectedManagerName.value = ''
+}
+
+
+// Búsqueda de Grupos
 let groupSearchTimeout = null
 watch(groupSearchQuery, (q) => {
   clearTimeout(groupSearchTimeout)
@@ -87,7 +134,9 @@ watch(groupSearchQuery, (q) => {
     try {
       const res = await fetch(`${API_BASE}/accounts/groups/search?q=${encodeURIComponent(q)}&limit=10`)
       groupSearchResults.value = await res.json()
-    } catch { groupSearchResults.value = [] }
+    } catch { 
+      groupSearchResults.value = [] 
+    }
     searchingGroups.value = false
   }, 300)
 })
@@ -100,7 +149,9 @@ const addGroup = async (group) => {
     })
     const data = await res.json()
     if (data.success) {
-      groups.value.push({ name: group.name, dn: group.dn })
+      if (!groups.value.find(g => g.dn === group.dn)) {
+        groups.value.push({ name: group.name, dn: group.dn })
+      }
       groupSearchQuery.value = ''
       groupSearchResults.value = []
     } else {
@@ -128,12 +179,11 @@ const removeGroup = async (group) => {
   }
 }
 
-// â”€â”€ Aplicar cambios (General + Cuenta) â”€â”€
+// Aplicar Cambios
 const applyChanges = async () => {
   saving.value = true
   resultMsg.value = null
   try {
-    // 1. Actualizar atributos generales
     const res1 = await fetch(`${API_BASE}/accounts/profile/bulk-edit`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: props.userProfile.username, updates: general.value })
@@ -141,8 +191,6 @@ const applyChanges = async () => {
     const d1 = await res1.json()
     if (!d1.success) throw new Error(d1.error || 'Error al actualizar perfil')
 
-    // 2. Actualizar opciones de cuenta (UPN, sAMAccountName, flags)
-    // Primero UPN y sAMAccountName si cambiaron
     const upnUpdates = {}
     const finalUpn = `${cuenta.value.upnPrefix}${cuenta.value.upnSuffix}`
     if (finalUpn) upnUpdates.userPrincipalName = finalUpn
@@ -156,7 +204,6 @@ const applyChanges = async () => {
       })
     }
 
-    // 3. Actualizar flags UAC
     const res3 = await fetch(`${API_BASE}/accounts/account-options`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -182,222 +229,274 @@ const applyChanges = async () => {
 
 const acceptAndClose = async () => {
   await applyChanges()
-  if (resultMsg.value?.success) emit('saved')
+  if (resultMsg.value?.success) {
+    setTimeout(() => {
+      emit('saved')
+    }, 500)
+  }
 }
 </script>
 
 <template>
-  <div class="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" @click.self="emit('close')">
-    <!-- Ventana estilo Windows -->
-    <div class="bg-[#f0f0f0] border border-[#a0a0a0] shadow-[4px_4px_12px_rgba(0,0,0,0.35)] w-full max-w-[480px] flex flex-col select-none" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
-
-      <!-- Barra de tÃ­tulo -->
-      <div class="bg-gradient-to-r from-[#0078d4] to-[#005a9e] px-3 py-1.5 flex items-center justify-between">
-        <span class="text-white text-[12px] font-normal tracking-wide">Propiedades: {{ userProfile.fullName }}</span>
-        <button @click="emit('close')" class="text-white/80 hover:text-white hover:bg-red-500 px-2 py-0.5 text-[14px] font-bold leading-none transition-colors">Ã—</button>
-      </div>
-
-      <!-- PestaÃ±as -->
-      <div class="flex border-b border-[#a0a0a0] bg-[#f0f0f0] px-1 pt-1">
-        <button v-for="tab in tabs" :key="tab.id" @click="activeTab = tab.id"
-          :class="[
-            'px-3 py-1.5 text-[11px] border border-b-0 -mb-[1px] transition-none',
-            activeTab === tab.id
-              ? 'bg-[#f0f0f0] border-[#a0a0a0] text-black font-normal z-10'
-              : 'bg-[#d4d0c8] border-[#a0a0a0] text-[#333] hover:bg-[#e8e4dc]'
-          ]">
-          {{ tab.name }}
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-sm" @click.self="emit('close')">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      
+      <!-- Cabecera -->
+      <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-white shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center text-lg font-bold uppercase ring-2 ring-blue-50/50">
+            {{ general.givenName.charAt(0) || userProfile.username.charAt(0) }}{{ general.sn.charAt(0) }}
+          </div>
+          <div>
+            <h2 class="text-base font-bold text-slate-800 leading-none">{{ userProfile.fullName }}</h2>
+            <p class="text-xs font-medium text-slate-500 mt-1 flex items-center gap-1.5">
+              <span class="inline-flex items-center rounded bg-green-50 px-1.5 py-0.5 text-[10px] font-semibold text-green-700 ring-1 ring-inset ring-green-600/20" v-if="!cuenta.account_disabled">Activo</span>
+              <span class="inline-flex items-center rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700 ring-1 ring-inset ring-red-600/20" v-else>Inactivo</span>
+              {{ cuenta.upnPrefix }}{{ cuenta.upnSuffix }}
+            </p>
+          </div>
+        </div>
+        <button @click="emit('close')" class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
         </button>
       </div>
 
-      <!-- Contenido de la pestaÃ±a -->
-      <div class="flex-1 bg-[#f0f0f0] overflow-y-auto" style="max-height: 460px;">
+      <!-- Contenido Principal -->
+      <div class="flex flex-1 overflow-hidden">
+        
+        <!-- Sidebar Fija con Cero Saltos Visuales -->
+        <div class="w-64 bg-slate-50 border-r border-slate-200 p-4 shrink-0 flex flex-col gap-1 overflow-y-auto">
+          <button 
+            v-for="tab in tabs" 
+            :key="tab.id" 
+            @click="activeTab = tab.id"
+            :class="[
+              'flex items-center gap-3 px-4 py-2 rounded-md text-sm font-semibold transition-colors duration-150 w-full text-left h-10',
+              activeTab === tab.id 
+                ? 'bg-blue-50 text-blue-700' 
+                : 'bg-transparent text-slate-600 hover:bg-slate-200/50 hover:text-slate-900'
+            ]">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" :d="tab.icon" />
+            </svg>
+            {{ tab.name }}
+          </button>
+        </div>
 
-        <!-- â•â•â•â•â•â•â•â• GENERAL â•â•â•â•â•â•â•â• -->
-        <div v-if="activeTab === 'general'" class="px-4 py-3">
-          <!-- Cabecera con icono y nombre -->
-          <div class="flex items-center gap-3 mb-4 pb-3 border-b border-[#c0c0c0]">
-            <div class="w-10 h-10 bg-[#d4e7f9] border border-[#7fb0dc] flex items-center justify-center rounded-sm">
-              <svg class="w-6 h-6 text-[#4a7fb5]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+        <!-- Área de Pestañas -->
+        <div class="flex-1 p-6 overflow-y-auto bg-white">
+          
+          <!-- GENERAL -->
+          <div v-show="activeTab === 'general'" class="space-y-5 animate-in slide-in-from-right-2 duration-200">
+            <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2 border-b border-slate-100 pb-1">Identidad</h3>
+            
+            <div class="grid grid-cols-2 gap-4">
+              <div class="space-y-1">
+                <label class="text-xs font-medium text-slate-700">Nombre de pila</label>
+                <input v-model="general.givenName" type="text" class="w-full border border-slate-300 rounded-md bg-white text-sm px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-shadow"/>
+              </div>
+              <div class="space-y-1">
+                <label class="text-xs font-medium text-slate-700">Apellidos</label>
+                <input v-model="general.sn" type="text" class="w-full border border-slate-300 rounded-md bg-white text-sm px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-shadow"/>
+              </div>
+              <div class="col-span-2 space-y-1">
+                <label class="text-xs font-medium text-slate-700">Nombre para mostrar</label>
+                <input v-model="general.displayName" type="text" class="w-full border border-slate-300 rounded-md bg-white text-sm px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-shadow"/>
+              </div>
+              <div class="col-span-2 space-y-1">
+                <label class="text-xs font-medium text-slate-700">Descripción (Área)</label>
+                <input v-model="general.description" type="text" class="w-full border border-slate-300 rounded-md bg-white text-sm px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-shadow"/>
+              </div>
             </div>
-            <span class="text-[12px] text-black font-normal">{{ userProfile.fullName }}</span>
+
+            <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2 mt-6 border-b border-slate-100 pb-1">Organización y Contacto</h3>
+            <div class="grid grid-cols-2 gap-4">
+              <div class="space-y-1">
+                <label class="text-xs font-medium text-slate-700">Cargo</label>
+                <input v-model="general.title" type="text" class="w-full border border-slate-300 rounded-md bg-white text-sm px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-shadow"/>
+              </div>
+              <div class="space-y-1">
+                <label class="text-xs font-medium text-slate-700">Departamento</label>
+                <input v-model="general.department" type="text" class="w-full border border-slate-300 rounded-md bg-white text-sm px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-shadow"/>
+              </div>
+              <div class="col-span-2 space-y-1 relative">
+                <label class="text-xs font-medium text-slate-700">Jefe Inmediato</label>
+                <div v-if="selectedManagerName" class="flex items-center justify-between border border-slate-300 rounded-md bg-slate-50 px-3 py-1.5">
+                  <span class="text-sm font-semibold text-slate-800">{{ selectedManagerName }}</span>
+                  <button @click="clearManager" class="text-slate-400 hover:text-red-500" title="Quitar Jefe">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+                <div v-else>
+                  <input v-model="managerSearchQuery" type="text" placeholder="Buscar por nombre..." class="w-full border border-slate-300 rounded-md bg-white text-sm px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-shadow"/>
+                  <div v-if="managerSearchQuery.length >= 3" class="absolute left-0 right-0 mt-1 bg-white border border-slate-200 shadow-lg rounded-md overflow-hidden z-10 max-h-48 overflow-y-auto">
+                    <div v-if="searchingManager" class="p-2 text-center text-xs text-slate-500">Buscando...</div>
+                    <ul v-else-if="managerSearchResults.length > 0">
+                      <li v-for="mgr in managerSearchResults" :key="mgr.username || mgr.id" @click="selectManager(mgr)" class="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm border-b border-slate-50">
+                        <div class="font-semibold text-slate-800">{{ mgr.fullName || mgr.displayName }}</div>
+                        <div class="text-xs text-slate-500 font-mono truncate">{{ mgr.dn || mgr.userPrincipalName }}</div>
+                      </li>
+                    </ul>
+                    <div v-else class="p-2 text-center text-xs text-slate-500">Sin resultados</div>
+                  </div>
+                </div>
+              </div>
+              <div class="space-y-1">
+                <label class="text-xs font-medium text-slate-700">Extensión / Teléfono</label>
+                <input v-model="general.telephoneNumber" type="text" class="w-full border border-slate-300 rounded-md bg-white text-sm px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-shadow"/>
+              </div>
+              <div class="space-y-1">
+                <label class="text-xs font-medium text-slate-700">Correo electrónico</label>
+                <input v-model="general.mail" type="email" class="w-full border border-slate-300 rounded-md bg-white text-sm px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-shadow"/>
+              </div>
+            </div>
           </div>
 
-          <!-- Campos del formulario -->
-          <div class="space-y-2.5">
-            <!-- Nombre de pila + Iniciales -->
-            <div class="flex gap-3 items-center">
-              <label class="text-[11px] text-black w-[115px] text-right shrink-0">Nombre de pila:</label>
-              <input v-model="general.givenName" type="text" class="flex-1 border border-[#7f9db9] bg-white text-[11px] px-1.5 py-[3px] focus:outline-none focus:border-[#0078d4]"/>
-              <label class="text-[11px] text-black shrink-0">Iniciales:</label>
-              <input v-model="general.initials" type="text" class="w-[50px] border border-[#7f9db9] bg-white text-[11px] px-1.5 py-[3px] focus:outline-none focus:border-[#0078d4]"/>
-            </div>
-            <!-- Apellidos -->
-            <div class="flex gap-3 items-center">
-              <label class="text-[11px] text-black w-[115px] text-right shrink-0">Apellidos:</label>
-              <input v-model="general.sn" type="text" class="flex-1 border border-[#7f9db9] bg-white text-[11px] px-1.5 py-[3px] focus:outline-none focus:border-[#0078d4]"/>
-            </div>
-            <!-- Nombre para mostrar -->
-            <div class="flex gap-3 items-center">
-              <label class="text-[11px] text-black w-[115px] text-right shrink-0">Nombre para mostrar:</label>
-              <input v-model="general.displayName" type="text" class="flex-1 border border-[#7f9db9] bg-white text-[11px] px-1.5 py-[3px] focus:outline-none focus:border-[#0078d4]"/>
-            </div>
-            <!-- DescripciÃ³n -->
-            <div class="flex gap-3 items-center">
-              <label class="text-[11px] text-black w-[115px] text-right shrink-0">DescripciÃ³n:</label>
-              <input v-model="general.description" type="text" class="flex-1 border border-[#7f9db9] bg-white text-[11px] px-1.5 py-[3px] focus:outline-none focus:border-[#0078d4]"/>
-            </div>
-            <!-- Oficina -->
-            <div class="flex gap-3 items-center">
-              <label class="text-[11px] text-black w-[115px] text-right shrink-0">Oficina:</label>
-              <input v-model="general.physicalDeliveryOfficeName" type="text" class="flex-1 border border-[#7f9db9] bg-white text-[11px] px-1.5 py-[3px] focus:outline-none focus:border-[#0078d4]"/>
+          <!-- CUENTA -->
+          <div v-show="activeTab === 'cuenta'" class="space-y-6 animate-in slide-in-from-right-2 duration-200">
+            <div>
+              <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2 border-b border-slate-100 pb-1">Inicio de Sesión</h3>
+              <div class="space-y-4 mt-3">
+                <div class="space-y-1">
+                  <label class="text-xs font-medium text-slate-700">Nombre de inicio de sesión de usuario (UPN)</label>
+                  <div class="flex gap-2">
+                    <input v-model="cuenta.upnPrefix" type="text" class="flex-1 border border-slate-300 rounded-md bg-white text-sm font-mono px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-shadow"/>
+                    <select v-model="cuenta.upnSuffix" class="w-1/3 border border-slate-300 rounded-md bg-slate-50 text-sm font-mono px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-shadow">
+                      <option value="@code.local">@code.local</option>
+                      <option value="@local.code">@local.code</option>
+                      <option value="@105code.cloud">@105code.cloud</option>
+                      <option value="@hogarymoda.com.co">@hogarymoda.com.co</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="space-y-1">
+                  <label class="text-xs font-medium text-slate-700">Inicio de sesión heredado (Pre-Windows 2000)</label>
+                  <div class="flex">
+                    <span class="inline-flex items-center px-3 rounded-l-md border border-r-0 border-slate-300 bg-slate-100 text-slate-500 text-sm font-mono font-bold">CODE\</span>
+                    <input v-model="cuenta.sAMAccountName" type="text" class="flex-1 w-full px-3 py-1.5 rounded-none rounded-r-md border border-slate-300 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-shadow"/>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div class="h-1"></div>
+            <div>
+              <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2 mt-6 border-b border-slate-100 pb-1">Opciones de la Cuenta</h3>
+              <div class="space-y-3 mt-3">
+                <label class="flex items-center gap-3 cursor-pointer group">
+                  <input type="checkbox" v-model="cuenta.must_change_password" class="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500 transition-colors"/>
+                  <span class="text-sm font-medium text-slate-700 group-hover:text-blue-700 transition-colors">El usuario debe cambiar la contraseña en el siguiente inicio de sesión</span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer group">
+                  <input type="checkbox" v-model="cuenta.cannot_change_password" :disabled="cuenta.must_change_password" class="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500 disabled:opacity-50 transition-colors"/>
+                  <span class="text-sm font-medium text-slate-700 group-hover:text-blue-700 transition-colors" :class="{'opacity-50': cuenta.must_change_password}">El usuario no puede cambiar la contraseña</span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer group">
+                  <input type="checkbox" v-model="cuenta.password_never_expires" :disabled="cuenta.must_change_password" class="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500 disabled:opacity-50 transition-colors"/>
+                  <span class="text-sm font-medium text-slate-700 group-hover:text-blue-700 transition-colors" :class="{'opacity-50': cuenta.must_change_password}">La contraseña nunca expira</span>
+                </label>
+                
+                <div class="pt-3 mt-1 border-t border-slate-100">
+                  <label class="flex items-center gap-3 cursor-pointer group">
+                    <input type="checkbox" v-model="cuenta.account_disabled" class="w-4 h-4 rounded text-red-600 border-slate-300 focus:ring-red-500 transition-colors"/>
+                    <span class="text-sm font-medium text-slate-700 group-hover:text-red-700 transition-colors">La cuenta está deshabilitada</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
 
-            <!-- NÃºmero de telÃ©fono -->
-            <div class="flex gap-3 items-center">
-              <label class="text-[11px] text-black w-[115px] text-right shrink-0">NÃºmero de telÃ©fono:</label>
-              <input v-model="general.telephoneNumber" type="text" class="flex-1 border border-[#7f9db9] bg-white text-[11px] px-1.5 py-[3px] focus:outline-none focus:border-[#0078d4]"/>
+          <!-- MIEMBRO DE -->
+          <div v-show="activeTab === 'miembro'" class="space-y-4 animate-in slide-in-from-right-2 duration-200">
+            <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2 border-b border-slate-100 pb-1">Grupos Asignados</h3>
+            
+            <div class="border border-slate-300 rounded-md overflow-hidden bg-white flex flex-col h-64">
+              <div class="flex bg-slate-50 border-b border-slate-300">
+                <span class="text-xs font-bold text-slate-600 px-3 py-1.5 flex-1 border-r border-slate-300">Nombre del Grupo</span>
+                <span class="text-xs font-bold text-slate-600 px-3 py-1.5 flex-1">Ubicación (Distinguished Name)</span>
+              </div>
+              <div class="flex-1 overflow-y-auto">
+                <div v-if="groups.length === 0" class="text-sm text-slate-500 text-center py-10">
+                  No pertenece a ningún grupo.
+                </div>
+                <div v-else v-for="group in groups" :key="group.dn" class="flex border-b border-slate-100 hover:bg-blue-50 group transition-colors">
+                  <span class="text-xs font-semibold text-slate-800 px-3 py-2 flex-1 border-r border-slate-100 truncate">{{ group.name }}</span>
+                  <span class="text-xs text-slate-500 px-3 py-2 flex-1 font-mono truncate">{{ group.dn }}</span>
+                  <button @click="removeGroup(group)" class="opacity-0 group-hover:opacity-100 text-red-600 font-bold text-xs px-3 hover:bg-red-100 transition-colors" title="Quitar">
+                    ✕
+                  </button>
+                </div>
+              </div>
             </div>
-            <!-- Correo electrÃ³nico -->
-            <div class="flex gap-3 items-center">
-              <label class="text-[11px] text-black w-[115px] text-right shrink-0">Correo electrÃ³nico:</label>
-              <input v-model="general.mail" type="text" class="flex-1 border border-[#7f9db9] bg-white text-[11px] px-1.5 py-[3px] focus:outline-none focus:border-[#0078d4]"/>
+
+            <!-- Botones y Buscador -->
+            <div class="relative">
+              <input 
+                v-model="groupSearchQuery" 
+                type="text" 
+                placeholder="Buscar grupo para añadir..." 
+                class="w-full border border-slate-300 rounded-md bg-white text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-shadow"
+              />
+              
+              <div v-if="groupSearchQuery.length >= 2" class="absolute left-0 right-0 mt-1 bg-white border border-slate-200 shadow-xl rounded-md overflow-hidden z-20">
+                <div v-if="searchingGroups" class="p-3 text-center text-xs text-slate-500">
+                  Buscando grupos...
+                </div>
+                <div v-else-if="groupSearchResults.length === 0" class="p-3 text-center text-xs text-slate-500">
+                  No se encontraron grupos
+                </div>
+                <ul v-else class="max-h-48 overflow-y-auto">
+                  <li v-for="gr in groupSearchResults" :key="gr.dn" @click="addGroup(gr)" class="px-3 py-2 border-b border-slate-50 hover:bg-blue-50 cursor-pointer transition-colors flex justify-between items-center group/item">
+                    <div>
+                      <p class="text-sm font-semibold text-slate-800">{{ gr.name }}</p>
+                      <p class="text-xs text-slate-400 font-mono truncate max-w-sm">{{ gr.dn }}</p>
+                    </div>
+                    <span class="text-xs font-bold text-blue-600 bg-white px-2 py-1 rounded border border-blue-200 opacity-0 group-hover/item:opacity-100 transition-opacity">Añadir</span>
+                  </li>
+                </ul>
+              </div>
             </div>
+            <p class="text-[11px] text-slate-500">Nota: El grupo "Usuarios del dominio" (Domain Users) es el grupo principal implícito.</p>
+          </div>
+          
+        </div>
+      </div>
+
+      <!-- Pie del Modal -->
+      <div class="px-6 py-3 bg-slate-50 border-t border-slate-200 shrink-0 flex items-center justify-between rounded-b-xl">
+        <div class="flex-1 pr-4">
+          <div v-if="resultMsg" class="flex items-center gap-2 animate-in fade-in" :class="resultMsg.success ? 'text-green-600' : 'text-red-600'">
+            <span class="text-sm font-medium">{{ resultMsg.text }}</span>
           </div>
         </div>
 
-        <!-- â•â•â•â•â•â•â•â• CUENTA â•â•â•â•â•â•â•â• -->
-        <div v-else-if="activeTab === 'cuenta'" class="px-4 py-3">
-          <!-- UPN -->
-          <div class="mb-4">
-            <label class="text-[11px] text-black block mb-1">Nombre de inicio de sesiÃ³n de usuario:</label>
-            <div class="flex gap-1">
-              <input v-model="cuenta.upnPrefix" type="text" class="flex-1 border border-[#7f9db9] bg-white text-[11px] px-1.5 py-[3px] focus:outline-none focus:border-[#0078d4]"/>
-                <select v-model="cuenta.upnSuffix" class="border border-[#7f9db9] bg-white text-[11px] px-1 py-[3px] focus:outline-none focus:border-[#0078d4]">
-                  <option value="@code.local">@code.local</option>
-                  <option value="@local.code">@local.code</option>
-                  <option value="@105code.cloud">@105code.cloud</option>
-                </select>
-            </div>
-          </div>
-          <!-- sAMAccountName -->
-          <div class="mb-4">
-            <label class="text-[11px] text-black block mb-1">Nombre de inicio de sesiÃ³n de usuario (anterior a Windows 2000):</label>
-            <div class="flex gap-1 items-center">
-              <span class="text-[11px] text-[#555] bg-[#e8e4dc] border border-[#a0a0a0] px-1.5 py-[3px] shrink-0">CODE\</span>
-              <input v-model="cuenta.sAMAccountName" type="text" class="flex-1 border border-[#7f9db9] bg-white text-[11px] px-1.5 py-[3px] focus:outline-none focus:border-[#0078d4]"/>
-            </div>
-          </div>
-
-          <div class="h-1 border-t border-[#c0c0c0] mb-3"></div>
-
-          <!-- Desbloquear -->
-          <label class="flex items-center gap-2 mb-3">
-            <input type="checkbox" disabled :checked="false" class="w-3.5 h-3.5"/>
-            <span class="text-[11px] text-[#888]">Desbloquear cuenta</span>
-          </label>
-
-          <!-- Opciones de cuenta -->
-          <div class="border border-[#c0c0c0] p-2.5 mb-3">
-            <span class="text-[11px] text-black font-normal block mb-2">Opciones de cuenta</span>
-            <div class="space-y-1.5">
-              <label class="flex items-start gap-2">
-                <input type="checkbox" v-model="cuenta.must_change_password" class="w-3.5 h-3.5 mt-0.5 shrink-0"/>
-                <span class="text-[11px] text-black">El usuario debe cambiar la contraseÃ±a en el siguiente inicio de sesiÃ³n</span>
-              </label>
-              <label class="flex items-start gap-2">
-                <input type="checkbox" v-model="cuenta.cannot_change_password" class="w-3.5 h-3.5 mt-0.5 shrink-0"/>
-                <span class="text-[11px] text-black">El usuario no puede cambiar la contraseÃ±a</span>
-              </label>
-              <label class="flex items-start gap-2">
-                <input type="checkbox" v-model="cuenta.password_never_expires" class="w-3.5 h-3.5 mt-0.5 shrink-0"/>
-                <span class="text-[11px] text-black">La contraseÃ±a nunca expira</span>
-              </label>
-              <label class="flex items-start gap-2">
-                <input type="checkbox" v-model="cuenta.store_reversible_encryption" class="w-3.5 h-3.5 mt-0.5 shrink-0"/>
-                <span class="text-[11px] text-black">Almacenar contraseÃ±a utilizando cifrado reversible</span>
-              </label>
-              <label class="flex items-start gap-2">
-                <input type="checkbox" v-model="cuenta.account_disabled" class="w-3.5 h-3.5 mt-0.5 shrink-0"/>
-                <span class="text-[11px] text-black">La cuenta estÃ¡ deshabilitada</span>
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <!-- â•â•â•â•â•â•â•â• MIEMBRO DE â•â•â•â•â•â•â•â• -->
-        <div v-else-if="activeTab === 'miembro'" class="px-4 py-3">
-          <label class="text-[11px] text-black block mb-1.5">Miembro de:</label>
-
-          <!-- Lista de grupos -->
-          <div class="border border-[#7f9db9] bg-white mb-3" style="min-height: 180px; max-height: 220px; overflow-y: auto;">
-            <!-- Cabecera -->
-            <div class="flex bg-[#e8e4dc] border-b border-[#c0c0c0] sticky top-0">
-              <span class="text-[10px] text-black font-normal px-2 py-1 flex-1 border-r border-[#c0c0c0]">Nombre</span>
-              <span class="text-[10px] text-black font-normal px-2 py-1 flex-1">Carpeta de los Servicios de dominio de Active Dir...</span>
-            </div>
-            <!-- Filas -->
-            <div v-for="(group, idx) in groups" :key="idx"
-              class="flex cursor-default hover:bg-[#316ac5] hover:text-white group border-b border-[#e8e4dc]">
-              <span class="text-[10px] px-2 py-[3px] flex-1 border-r border-[#e8e4dc] truncate group-hover:text-white text-black">{{ group.name }}</span>
-              <span class="text-[10px] px-2 py-[3px] flex-1 truncate group-hover:text-white text-[#666]">{{ group.dn }}</span>
-            </div>
-            <div v-if="groups.length === 0" class="text-[10px] text-[#999] text-center py-6">No pertenece a ningÃºn grupo</div>
-          </div>
-
-          <!-- Botones Agregar / Quitar -->
-          <div class="flex gap-2 mb-4">
-            <button @click="groupSearchQuery = groupSearchQuery || ' '" class="border border-[#a0a0a0] bg-[#f0f0f0] hover:bg-[#e0e0e0] active:bg-[#d0d0d0] text-[11px] text-black px-4 py-1 focus:outline-none">
-              Agregar...
-            </button>
-            <button @click="removeGroup(groups.find(g => true))" :disabled="groups.length === 0" class="border border-[#a0a0a0] bg-[#f0f0f0] hover:bg-[#e0e0e0] active:bg-[#d0d0d0] text-[11px] text-black px-4 py-1 disabled:text-[#aaa] disabled:bg-[#e8e4dc] focus:outline-none">
-              Quitar
-            </button>
-          </div>
-
-          <!-- Buscador de grupos (aparece cuando se da en Agregar) -->
-          <div v-if="groupSearchQuery !== null && groupSearchQuery !== ''" class="border border-[#c0c0c0] bg-white p-2 mb-2">
-            <label class="text-[10px] text-black block mb-1">Buscar grupo:</label>
-            <input v-model="groupSearchQuery" type="text" placeholder="Escriba el nombre del grupo..." autofocus
-              class="w-full border border-[#7f9db9] bg-white text-[11px] px-1.5 py-[3px] mb-1.5 focus:outline-none focus:border-[#0078d4]"/>
-            <div v-if="searchingGroups" class="text-[10px] text-[#888]">Buscando...</div>
-            <div v-for="gr in groupSearchResults" :key="gr.dn"
-              class="flex items-center justify-between py-1 px-1 hover:bg-[#e8f0fe] cursor-pointer border-b border-[#eee]"
-              @click="addGroup(gr)">
-              <span class="text-[10px] text-black">{{ gr.name }}</span>
-              <span class="text-[9px] text-[#0078d4]">+ Agregar</span>
-            </div>
-          </div>
-
-          <!-- Grupo principal -->
-          <div class="border-t border-[#c0c0c0] pt-2 mt-2">
-            <div class="flex items-center gap-2">
-              <span class="text-[11px] text-black font-normal">Grupo principal:</span>
-              <span class="text-[11px] text-black">Usuarios del dominio</span>
-            </div>
-          </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <button 
+            @click="emit('close')" 
+            :disabled="saving"
+            class="px-4 py-2 text-sm font-semibold text-slate-600 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          
+          <button 
+            @click="applyChanges" 
+            :disabled="saving"
+            class="px-4 py-2 text-sm font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-md transition-colors disabled:opacity-50"
+          >
+            Aplicar
+          </button>
+          
+          <button 
+            @click="acceptAndClose" 
+            :disabled="saving"
+            class="px-5 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors shadow-sm disabled:opacity-50 flex items-center gap-2"
+          >
+            <span v-if="saving" class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+            {{ saving ? 'Guardando...' : 'Guardar' }}
+          </button>
         </div>
       </div>
-
-      <!-- Resultado -->
-      <div v-if="resultMsg" :class="['text-[10px] px-3 py-1.5 border-t', resultMsg.success ? 'bg-[#dff0d8] text-[#3c763d] border-[#b2dba1]' : 'bg-[#f2dede] text-[#a94442] border-[#e4b9b9]']">
-        {{ resultMsg.text }}
-      </div>
-
-      <!-- Botones de pie (estilo Windows) -->
-      <div class="flex justify-end gap-1.5 px-3 py-2.5 border-t border-[#a0a0a0] bg-[#f0f0f0]">
-        <button @click="acceptAndClose" :disabled="saving" class="min-w-[75px] border border-[#0054a6] bg-[#e1ecf7] hover:bg-[#cde0f4] active:bg-[#b8d4f0] text-[11px] text-black px-3 py-[4px] focus:outline-1 focus:outline-[#0078d4] disabled:opacity-50">
-          {{ saving ? 'Guardando...' : 'Aceptar' }}
-        </button>
-        <button @click="emit('close')" class="min-w-[75px] border border-[#a0a0a0] bg-[#f0f0f0] hover:bg-[#e0e0e0] active:bg-[#d0d0d0] text-[11px] text-black px-3 py-[4px] focus:outline-1 focus:outline-[#0078d4]">
-          Cancelar
-        </button>
-        <button @click="applyChanges" :disabled="saving" class="min-w-[75px] border border-[#a0a0a0] bg-[#f0f0f0] hover:bg-[#e0e0e0] active:bg-[#d0d0d0] text-[11px] text-black px-3 py-[4px] focus:outline-1 focus:outline-[#0078d4] disabled:opacity-50">
-          Aplicar
-        </button>
-      </div>
+      
     </div>
   </div>
 </template>

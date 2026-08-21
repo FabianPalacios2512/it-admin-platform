@@ -98,10 +98,27 @@ def get_linux_stats(server) -> dict:
         if "timed out" in err_msg.lower() or "timeout" in err_msg.lower():
             return {"status": "timeout", "error": f"Timeout SSH ({SSH_TIMEOUT}s)"}
         if "authentication" in err_msg.lower() or "auth" in err_msg.lower():
-            return {"status": "error", "error": "Autenticación SSH fallida"}
-        if "connection refused" in err_msg.lower() or "no route" in err_msg.lower():
-            return {"status": "offline", "error": f"Conexión rechazada: {server.ip}"}
-        return {"status": "error", "error": err_msg[:200]}
+            return {"status": "auth_error", "error": "Fallo de autenticación SSH"}
+        return {"status": "offline", "error": f"Inalcanzable ({err_msg})"}
+
+
+def get_pbx_ivr_options(server) -> dict:
+    """
+    Se conecta al servidor PBX y lee el archivo de configuración de Asterisk
+    para extraer qué dígitos numéricos (0-9) están configurados en el IVR principal.
+    """
+    try:
+        client = _get_ssh_client(server)
+        # Buscar en el archivo de Asterisk las extensiones del IVR que apuntan al primer paso
+        # Ej: exten => 1,1,Goto(...)
+        cmd = "grep -E '^exten => [0-9],1' /etc/asterisk/extensions_additional.conf | awk -F'=>' '{print $2}' | awk -F',' '{print $1}' | sort | uniq"
+        out = _exec(client, cmd)
+        client.close()
+        
+        options = [int(x.strip()) for x in out.splitlines() if x.strip().isdigit()]
+        return {"status": "success", "options": options}
+    except Exception as e:
+        return {"status": "error", "error": str(e), "options": []}
 
 
 def _get_linux_stats_internal(server) -> dict:

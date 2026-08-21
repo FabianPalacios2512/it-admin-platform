@@ -18,6 +18,7 @@ import CuarentenaView from '@/pages/CuarentenaView.vue'
 import LicenciasInactivasView from '@/pages/LicenciasInactivasView.vue'
 import ZabbixMonitoringView from '@/pages/ZabbixMonitoringView.vue'
 import GpoManagerView from '@/pages/GpoManagerView.vue'
+import AdGroupsView from '@/pages/AdGroupsView.vue'
 
 const routes = [
   {
@@ -56,6 +57,16 @@ const routes = [
         path: 'cuentas/recuperacion',
         name: 'AccountRecovery',
         component: AccountRecoveryView,
+      },
+      {
+        path: 'grupos',
+        name: 'AdGroups',
+        component: AdGroupsView,
+      },
+      {
+        path: 'ous',
+        name: 'AdOUs',
+        component: () => import('@/pages/OusView.vue'),
       },
       {
         path: 'seguridad',
