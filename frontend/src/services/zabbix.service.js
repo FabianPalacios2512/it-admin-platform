@@ -69,6 +69,19 @@ class ZabbixService {
     if (!response.ok) throw new Error(`Error HTTP: ${response.status}`);
     return await response.json();
   }
+
+  async getFortigates() {
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(`${API_BASE}/zabbix/fortigates`, {
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+    });
+    if (response.status === 401) {
+      localStorage.removeItem('access_token');
+      window.location.href = '/login';
+    }
+    if (!response.ok) throw new Error(`Error HTTP: ${response.status}`);
+    return await response.json();
+  }
 }
 
 export default new ZabbixService();

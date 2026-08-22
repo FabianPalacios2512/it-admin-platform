@@ -300,26 +300,11 @@
     </div>
 
     <!-- Global Trends (Modo Seguridad) -->
-    <div v-if="currentTemplate === 'fortigate'" class="grid grid-cols-1 lg:grid-cols-3 gap-3 shrink-0">
-      <div class="bg-slate-800 text-white px-5 py-4 rounded-xl shadow-lg relative flex flex-col justify-between">
-        <h2 class="text-xs font-bold text-slate-300 tracking-wider">TOTAL SESSIONS (ACTIVES)</h2>
-        <div class="text-4xl font-black tracking-tight mt-2 text-purple-400">{{ globalFirewallSessions.toLocaleString() }}</div>
-        <div class="text-[10px] text-slate-400 mt-1">Conexiones concurrentes en tiempo real</div>
-      </div>
-      <div class="bg-slate-800 text-white px-5 py-4 rounded-xl shadow-lg relative flex flex-col justify-between">
-        <h2 class="text-xs font-bold text-slate-300 tracking-wider">VPN TUNNELS (IPSEC/SSL)</h2>
-        <div class="text-4xl font-black tracking-tight mt-2" :class="globalVpnTunnels > 0 ? 'text-emerald-400' : 'text-slate-500'">{{ globalVpnTunnels }}</div>
-        <div class="text-[10px] text-slate-400 mt-1">Túneles VPN Activos</div>
-      </div>
-      <div class="bg-slate-800 text-white px-5 py-4 rounded-xl shadow-lg relative flex flex-col justify-between">
-        <h2 class="text-xs font-bold text-slate-300 tracking-wider">NETWORK TRAFFIC (TOTAL IN)</h2>
-        <div class="text-4xl font-black tracking-tight mt-2 text-blue-400">{{ (globalNetIn / 1000).toFixed(1) }} <span class="text-lg">Mbps</span></div>
-        <div class="text-[10px] text-slate-400 mt-1">Tráfico de descarga consolidado</div>
-      </div>
-    </div>
+    <!-- Vista Dedicada FortiGate -->
+    <FortiGateMonitorView v-if="currentTemplate === 'fortigate'" />
 
-    <!-- Data Table -->
-    <div v-if="currentTemplate !== 'issabel'" class="bg-white rounded-xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] relative">
+    <!-- Data Table (Solo Global) -->
+    <div v-if="currentTemplate === 'global'" class="bg-white rounded-xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] relative">
       <div v-if="loadingHosts" class="absolute inset-0 bg-white/80 flex items-center justify-center z-10 rounded-xl"><div class="spinner"></div></div>
       
       <!-- Toolbar -->
@@ -712,25 +697,32 @@
           </div>
         </div>
         <div class="flex-1 p-6 min-h-0 bg-white">
-          <apexchart type="line" width="100%" height="100%" :options="expandedOptions" :series="expandedSeries" />
+          <apexchart :type="expandedOptions.chart.type || 'line'" width="100%" height="100%" :options="expandedOptions" :series="expandedSeries" />
         </div>
-        <div v-if="expandedStats" class="px-6 py-3 bg-slate-50 border-t border-slate-200 grid grid-cols-4 gap-4 text-center rounded-b-2xl">
-          <div>
-            <div class="text-[10px] text-slate-400 font-bold tracking-wider uppercase mb-0.5">Último Valor</div>
-            <div class="text-sm font-bold text-blue-600">{{ expandedStats.last }}</div>
-          </div>
-          <div>
-            <div class="text-[10px] text-slate-400 font-bold tracking-wider uppercase mb-0.5">Promedio</div>
-            <div class="text-sm font-bold text-slate-700">{{ expandedStats.avg }}</div>
-          </div>
-          <div>
-            <div class="text-[10px] text-slate-400 font-bold tracking-wider uppercase mb-0.5">Máximo</div>
-            <div class="text-sm font-bold text-red-500">{{ expandedStats.max }}</div>
-          </div>
-          <div>
-            <div class="text-[10px] text-slate-400 font-bold tracking-wider uppercase mb-0.5">Mínimo</div>
-            <div class="text-sm font-bold text-emerald-500">{{ expandedStats.min }}</div>
-          </div>
+        <div v-if="expandedStats && expandedStats.length > 0" class="px-6 py-4 bg-slate-50 border-t border-slate-200 rounded-b-2xl overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr>
+                <th class="pb-2 text-xs font-semibold text-slate-500 border-b border-slate-200">Serie</th>
+                <th class="pb-2 text-xs font-semibold text-slate-500 border-b border-slate-200 text-right">Último</th>
+                <th class="pb-2 text-xs font-semibold text-slate-500 border-b border-slate-200 text-right">Mínimo</th>
+                <th class="pb-2 text-xs font-semibold text-slate-500 border-b border-slate-200 text-right">Promedio</th>
+                <th class="pb-2 text-xs font-semibold text-slate-500 border-b border-slate-200 text-right">Máximo</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(stat, idx) in expandedStats" :key="idx" class="border-b border-slate-100 last:border-0 hover:bg-slate-100 transition-colors">
+                <td class="py-2 text-xs font-medium text-slate-700 flex items-center gap-2">
+                  <span class="w-2.5 h-2.5 rounded-sm inline-block shadow-sm" :style="{ backgroundColor: stat.color }"></span>
+                  {{ stat.name }}
+                </td>
+                <td class="py-2 text-xs font-semibold text-blue-600 text-right">{{ stat.last }}</td>
+                <td class="py-2 text-xs font-semibold text-emerald-500 text-right">{{ stat.min }}</td>
+                <td class="py-2 text-xs font-semibold text-slate-600 text-right">{{ stat.avg }}</td>
+                <td class="py-2 text-xs font-semibold text-red-500 text-right">{{ stat.max }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -738,7 +730,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
+import FortiGateMonitorView from './FortiGateMonitorView.vue';
 import zabbixService from '../services/zabbix.service';
 
 const pbxData = ref({
@@ -905,18 +898,6 @@ const expandedSeries = computed(() => {
 
 const expandedStats = computed(() => {
   if (!expandedSeries.value || expandedSeries.value.length === 0) return null;
-  // Combine all series for accurate min/max if there are multiple lines, or just take the first
-  const allValues = [];
-  expandedSeries.value.forEach(s => {
-    if (s.data) s.data.forEach(p => { if (p[1] != null && !isNaN(p[1])) allValues.push(p[1]); });
-  });
-  if (allValues.length === 0) return null;
-  const min = Math.min(...allValues);
-  const max = Math.max(...allValues);
-  const avg = allValues.reduce((a,b) => a+b, 0) / allValues.length;
-  // Get last value of the primary series
-  const series = expandedSeries.value[0];
-  const last = (series.data && series.data.length > 0) ? series.data[series.data.length - 1][1] : 0;
 
   let formatFn = (v) => v.toFixed(2);
   if (expandedChart.value === 'net') formatFn = formatNetAxisLabel;
@@ -924,13 +905,40 @@ const expandedStats = computed(() => {
   else if (expandedChart.value === 'cpu' || expandedChart.value === 'ram') formatFn = (v) => v.toFixed(1) + '%';
   else if (expandedChart.value === 'sessions') formatFn = (v) => Math.round(v).toLocaleString();
 
-  return { min: formatFn(min), max: formatFn(max), avg: formatFn(avg), last: formatFn(last) };
+  return expandedSeries.value.map((series, i) => {
+    let allValues = [];
+    if (series.data) {
+      allValues = series.data.map(p => p[1]).filter(v => v != null && !isNaN(v));
+    }
+    
+    // El color puede venir de expandedOptions o fallback
+    const fallbackColor = SERVER_PALETTE[i % SERVER_PALETTE.length];
+    const color = expandedOptions.value.colors?.[i] || fallbackColor;
+    
+    if (allValues.length === 0) {
+      return { name: series.name, last: '--', min: '--', avg: '--', max: '--', color };
+    }
+    
+    const min = Math.min(...allValues);
+    const max = Math.max(...allValues);
+    const avg = allValues.reduce((a, b) => a + b, 0) / allValues.length;
+    const last = allValues[allValues.length - 1];
+    
+    return {
+      name: series.name,
+      last: formatFn(last),
+      min: formatFn(min),
+      avg: formatFn(avg),
+      max: formatFn(max),
+      color
+    };
+  });
 });
 
 const expandedOptions = computed(() => {
   let baseObj = {};
   if (expandedChart.value === 'cpu' || expandedChart.value === 'ram') baseObj = detailAreaOptions.value;
-  else if (expandedChart.value === 'net') baseObj = netTrafficOptions.value;
+  else if (expandedChart.value === 'net') baseObj = netTrafficOptions;
   else if (expandedChart.value === 'latency') baseObj = latencyOptions.value;
   else if (expandedChart.value === 'ping') baseObj = pingOptions.value;
   else if (expandedChart.value === 'sessions') baseObj = { ...sessionOptions, chart: { ...sessionOptions.chart, sparkline: { enabled: false } }, stroke: { width: 2 }, xaxis: { type: 'datetime', labels: { style: { fontSize: '9px', colors: '#94a3b8' } } }, grid: { borderColor: '#f1f5f9' }, yaxis: { labels: { style: { fontSize: '9px', colors: '#94a3b8' } } } };
@@ -938,6 +946,7 @@ const expandedOptions = computed(() => {
   // Modificar base clone para resolución más alta
   return {
     ...baseObj,
+    colors: baseObj.colors ? [...baseObj.colors] : undefined,
     chart: { ...baseObj.chart, toolbar: { show: true }, zoom: { enabled: true } },
     legend: { ...baseObj.legend, fontSize: '13px' },
     xaxis: { ...baseObj.xaxis, labels: { ...baseObj.xaxis?.labels, style: { fontSize: '11px', colors: '#64748b' } } },
@@ -945,33 +954,31 @@ const expandedOptions = computed(() => {
     grid: { show: true, borderColor: '#e2e8f0', strokeDashArray: 4, position: 'back', xaxis: { lines: { show: false } }, yaxis: { lines: { show: true } }, padding: { left: 10, right: 10 } },
     tooltip: { 
       theme: 'dark',
-      shared: false,
-      intersect: true,
-      fixed: { enabled: true, position: 'topRight', offsetX: -20, offsetY: 20 },
       custom: function({series, seriesIndex, dataPointIndex, w}) {
-        let hoverTs = w.globals.seriesX?.[seriesIndex]?.[dataPointIndex];
-        if (!hoverTs) return '';
-        let d = new Date(hoverTs);
-        let title = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+        let hoverTs = w.globals.seriesX?.[seriesIndex]?.[dataPointIndex] ?? w.globals.seriesX?.[0]?.[dataPointIndex];
+        let title = '';
+        if (hoverTs) {
+          let d = new Date(hoverTs);
+          title = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+        }
         
-        let name = w.globals.seriesNames[seriesIndex];
-        let val = series[seriesIndex][dataPointIndex];
-        if (val == null) return '';
-        let color = w.globals.colors[seriesIndex];
-        let formatter = baseObj.yaxis?.labels?.formatter || (v => v);
-        let formattedVal = formatter(val);
-        
-        let row = `<div style="display:flex;justify-content:space-between;align-items:center;gap:16px;margin-top:6px;">
+        let rows = w.globals.seriesNames.map((name, i) => {
+          let val = series[i][dataPointIndex];
+          if (val == null) return '';
+          let color = w.globals.colors[i];
+          let formattedVal = baseObj.yaxis?.labels?.formatter ? baseObj.yaxis.labels.formatter(val) : val;
+          return `<div style="display:flex;justify-content:space-between;align-items:center;gap:16px;margin-top:6px;">
                     <div style="display:flex;align-items:center;gap:6px;">
                       <span style="width:10px;height:10px;border-radius:50%;background:${color};display:inline-block;"></span>
                       <span style="color:#cbd5e1;font-size:11px;">${name}</span>
                     </div>
                     <span style="color:#fff;font-weight:bold;font-size:12px;">${formattedVal}</span>
                   </div>`;
+        }).filter(r => r !== '').join('');
         
         return `<div style="background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.3);min-width:140px;font-family:inherit;">
                   <div style="color:#94a3b8;font-size:11px;font-weight:bold;border-bottom:1px solid #334155;padding-bottom:4px;margin-bottom:4px;">${title}</div>
-                  ${row}
+                  ${rows}
                 </div>`;
       }
     }
@@ -1799,8 +1806,8 @@ const netSeries = computed(() => {
   selectedHosts.value.forEach(h => {
     const d = comparisonData.value[h.hostid];
     if(d && d.interfaces && d.interfaces[iface]) {
-      series.push({ name: `${h.hostname} (In)`, type: 'area', data: mapTraffic(d.interfaces[iface].in.history, true) });
-      series.push({ name: `${h.hostname} (Out)`, type: 'line', data: mapTraffic(d.interfaces[iface].out.history, false) });
+      series.push({ name: `${h.hostname} - Recibido (Bajada)`, type: 'area', data: mapTraffic(d.interfaces[iface].in.history, true) });
+      series.push({ name: `${h.hostname} - Enviado (Subida)`, type: 'line', data: mapTraffic(d.interfaces[iface].out.history, false) });
     }
   });
   return series;
@@ -1919,7 +1926,7 @@ const makeDetailTooltip = (yFormatter) => ({
 const cpuOptions = computed(() => ({
   chart: { type: 'line', toolbar: { show: false }, animations: { enabled: false }, fontFamily: 'inherit' },
   stroke: { curve: 'smooth', width: 2 },
-  colors: serverColors.value,
+  colors: [...serverColors.value],
   xaxis: {
     type: 'datetime',
     labels: { datetimeUTC: false, style: { fontSize: '9px', colors: '#94a3b8' } },
@@ -1935,7 +1942,7 @@ const cpuOptions = computed(() => ({
 const ramOptions = computed(() => ({
   chart: { type: 'line', toolbar: { show: false }, animations: { enabled: false }, fontFamily: 'inherit' },
   stroke: { curve: 'smooth', width: 2 },
-  colors: serverColors.value,
+  colors: [...serverColors.value],
   xaxis: {
     type: 'datetime',
     labels: { datetimeUTC: false, style: { fontSize: '9px', colors: '#94a3b8' } },
@@ -1951,7 +1958,7 @@ const ramOptions = computed(() => ({
 const detailAreaOptions = computed(() => ({
   chart: { type: 'area', toolbar: { show: false }, animations: { enabled: false }, fontFamily: 'Inter, sans-serif' },
   stroke: { curve: 'smooth', width: 2 },
-  colors: serverColors.value,
+  colors: [...serverColors.value],
   fill: {
     type: 'gradient',
     gradient: { shadeIntensity: 1, opacityFrom: 0.35, opacityTo: 0.0, stops: [0, 100] }
@@ -1971,7 +1978,7 @@ const detailAreaOptions = computed(() => ({
 const latencyOptions = computed(() => ({
   chart: { type: 'line', toolbar: { show: false }, animations: { enabled: false }, fontFamily: 'inherit' },
   stroke: { curve: 'straight', width: 2 },
-  colors: serverColors.value,
+  colors: [...serverColors.value],
   xaxis: { type: 'datetime', labels: { datetimeUTC: false, style: { fontSize: '9px', colors: '#94a3b8' } }, axisBorder: { show: false }, axisTicks: { show: false } },
   yaxis: { min: 0, labels: { style: { fontSize: '9px', colors: '#94a3b8' } } },
   dataLabels: { enabled: false },
@@ -1987,7 +1994,7 @@ const pingSeries = computed(() => selectedHosts.value.map(h => ({
 const pingOptions = computed(() => ({
   chart: { type: 'line', toolbar: { show: false }, animations: { enabled: false }, fontFamily: 'inherit' },
   stroke: { curve: 'straight', width: 2 },
-  colors: serverColors.value,
+  colors: [...serverColors.value],
   xaxis: { type: 'datetime', labels: { datetimeUTC: false, style: { fontSize: '9px', colors: '#94a3b8' } }, axisBorder: { show: false }, axisTicks: { show: false } },
   yaxis: { min: 0, labels: { style: { fontSize: '9px', colors: '#94a3b8' }, formatter: (v) => v.toFixed(1) } },
   dataLabels: { enabled: false },
@@ -2004,40 +2011,72 @@ const formatNetAxisLabel = (val) => {
   return '0';
 };
 
-const netTrafficOptions = computed(() => {
-  const isMulti = selectedHosts.value.length > 1;
-  // Si comparamos, generamos 2 colores por host (In, Out) con el mismo color base del servidor
-  const colors = isMulti 
-    ? selectedHosts.value.flatMap((h, i) => { const c = SERVER_PALETTE[i % SERVER_PALETTE.length]; return [c, c]; })
-    : ['#22C55E', '#EF4444'];
-  
-  // Si comparamos, la línea "In" es sólida (0), la línea "Out" es punteada (4)
-  const dashArray = isMulti 
-    ? selectedHosts.value.flatMap(() => [0, 4])
-    : [0, 0];
-    
-  return {
-    chart: { type: 'line', stacked: false, toolbar: { show: false }, animations: { enabled: false }, fontFamily: 'Inter, sans-serif', zoom: { enabled: false } },
-    stroke: { curve: 'straight', width: 1.5, dashArray },
-    colors,
-    fill: {
-      type: isMulti ? selectedHosts.value.flatMap(() => ['gradient', 'transparent']) : ['gradient', 'solid'],
-      gradient: { shadeIntensity: 1, opacityFrom: 0.8, opacityTo: 0.3, stops: [0, 100] },
-      opacity: isMulti ? selectedHosts.value.flatMap(() => [0.8, 1]) : [0.8, 1]
+const netTrafficOptions = {
+  chart: {
+    type: 'line',
+    stacked: false,
+    toolbar: { show: false },
+    animations: { enabled: false },
+    fontFamily: 'Inter, sans-serif',
+    zoom: { enabled: false }
+  },
+  stroke: { curve: 'straight', width: [1.5, 1.5] },
+  colors: ['#22C55E', '#EF4444'],
+  fill: {
+    type: ['gradient', 'solid'],
+    gradient: {
+      shadeIntensity: 1,
+      opacityFrom: 0.8,
+      opacityTo: 0.3,
+      stops: [0, 100]
     },
-    dataLabels: { enabled: false },
-    markers: { size: 0 },
-    xaxis: { type: 'datetime', labels: { datetimeUTC: false, style: { fontSize: '9px', colors: '#94a3b8' }, datetimeFormatter: { hour: 'HH:mm', minute: 'HH:mm:ss' } }, axisBorder: { show: false }, axisTicks: { show: false }, tooltip: { enabled: false } },
-    yaxis: { min: 0, forceNiceScale: true, tickAmount: 4, labels: { style: { fontSize: '9px', colors: '#94a3b8' }, formatter: formatNetAxisLabel } },
-    legend: { show: false },
-    grid: { borderColor: '#e8edf2', strokeDashArray: 3, xaxis: { lines: { show: false } }, yaxis: { lines: { show: true } }, row: { colors: ['#f1f5f9', '#f1f5f9'], opacity: 1 }, padding: { top: 4, bottom: 0, left: 8, right: 12 } },
-    tooltip: makeDetailTooltip((val) => {
-      if (val === undefined || val === null || isNaN(val)) return '0.00 Kbps';
-      if (val >= 1000) return (val / 1000).toFixed(2) + ' Mbps';
-      return val.toFixed(2) + ' Kbps';
-    })
-  };
-});
+    opacity: [0.8, 1]
+  },
+  dataLabels: { enabled: false },
+  markers: { size: 0 },
+  xaxis: {
+    type: 'datetime',
+    labels: {
+      datetimeUTC: false,
+      style: { fontSize: '9px', colors: '#94a3b8' },
+      datetimeFormatter: { hour: 'HH:mm', minute: 'HH:mm:ss' }
+    },
+    axisBorder: { show: false },
+    axisTicks: { show: false },
+    tooltip: { enabled: false }
+  },
+  yaxis: {
+    min: 0,
+    forceNiceScale: true,
+    tickAmount: 4,
+    labels: {
+      style: { fontSize: '9px', colors: '#94a3b8' },
+      formatter: formatNetAxisLabel
+    }
+  },
+  legend: { show: true, position: 'bottom', fontSize: '10px', markers: { radius: 12 } },
+  grid: {
+    borderColor: '#e8edf2',
+    strokeDashArray: 3,
+    xaxis: { lines: { show: false } },
+    yaxis: { lines: { show: true } },
+    row: { colors: ['#f1f5f9', '#f1f5f9'], opacity: 1 },
+    padding: { top: 4, bottom: 0, left: 8, right: 12 }
+  },
+  tooltip: {
+    theme: 'dark',
+    shared: true,
+    intersect: false,
+    y: {
+      formatter: (val) => {
+        if (val === undefined || val === null || isNaN(val)) return '0.00 Kbps';
+        if (val >= 1000) return (val / 1000).toFixed(2) + ' Mbps';
+        return val.toFixed(2) + ' Kbps';
+      }
+    },
+    x: { format: 'HH:mm:ss' }
+  }
+};
 
 const sessionOptions = {
   chart: { type: 'area', toolbar: { show: false }, animations: { enabled: false }, fontFamily: 'Inter, sans-serif' },

@@ -1,0 +1,21 @@
+﻿[
+    {
+        "metrics":  {
+                        "active_sessions":  0,
+                        "cpu":  1,
+                        "ram":  47,
+                        "vpn":  {
+                                    "down":  0,
+                                    "up":  1
+                                },
+                        "traffic":  {
+                                        "in_bps":  82968,
+                                        "out_bps":  82624
+                                    }
+                    },
+        "status":  "Online",
+        "ip":  "192.168.20.1",
+        "hostid":  "10684",
+        "hostname":  "FortiGate-Principal"
+    }
+]

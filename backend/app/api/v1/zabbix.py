@@ -58,3 +58,36 @@ async def get_zabbix_pbx_telephony(current_user: dict = Depends(get_current_user
     except Exception as e:
         logger.error(f"Error fetching PBX data: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch PBX data: {str(e)}")
+
+import os
+import json
+import asyncio
+
+import subprocess
+
+@router.get("/fortigates")
+def get_fortigates_data(current_user: dict = Depends(get_current_user)):
+    try:
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        ps1_path = os.path.join(base_dir, "scripts", "Get-ZabbixFortigates.ps1")
+        output_path = os.path.join(base_dir, "scripts", "fortigates_data.json")
+        
+        # Ejecutamos el script de PowerShell sincrónicamente (es más estable en Windows/uvicorn)
+        cmd = ["powershell.exe", "-ExecutionPolicy", "Bypass", "-File", ps1_path, "-OutputFile", output_path]
+        
+        process = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if process.returncode != 0:
+            logger.error(f"PowerShell Script Failed: {process.stderr}")
+            raise Exception(f"PowerShell script failed: {process.stderr}")
+            
+        if os.path.exists(output_path):
+            with open(output_path, "r", encoding="utf-8-sig") as f:
+                data = json.load(f)
+            return data
+        else:
+            return []
+            
+    except Exception as e:
+        logger.exception(f"Error executing PS1 script: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
