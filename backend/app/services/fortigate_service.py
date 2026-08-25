@@ -1500,9 +1500,19 @@ class FortigateService:
         """Niega origen → página. Reutiliza UNA política por equipo: las VM suelen tener tope de 3."""
         src_name = self._ensure_host_address_object(srcip)
         dest = self._ensure_dest_address_object(dstip, dst_host, srcip=srcip, cascade=cascade)
-        policy_name = self._safe_object_name("NOC-DBLOCK", srcip)
+        base_name = self._safe_object_name("NOC-DBLOCK", srcip)
         policies = self._consolidate_noc_block_policies(self._as_list(self._request("/firewall/policy", is_cmdb=True)))
         mine = self._policies_for_src(policies, src_name, srcip)
+        
+        policy_name = base_name
+        existing_names = [str(p.get("name") or "") for p in policies]
+        counter = 1
+        while policy_name in existing_names:
+            if mine and mine[0].get("name") == policy_name:
+                break
+            suffix = f"-{counter}"
+            policy_name = base_name[: 35 - len(suffix)] + suffix
+            counter += 1
         detail = dest.get("domains_label") or dest["label"]
         warning = dest.get("warning")
         subsumed = self._dests_covered_by(dest)
@@ -1581,9 +1591,10 @@ class FortigateService:
                         )
                 else:
                     raise Exception(
-                        "Este FortiGate llegó al tope de políticas de firewall (error -4) y no hay "
-                        "una regla NOC que se pueda reutilizar. Borra una política vieja en el "
-                        "FortiGate o sube la licencia de la VM."
+                        f"Límite de licencia alcanzado en el FortiGate. "
+                        f"La máquina virtual está usando una licencia de evaluación que solo permite un máximo de 3 políticas en total. "
+                        f"Debes borrar una política de forma manual en el FortiGate o instalar una licencia válida. "
+                        f"Detalle original: {exc}"
                     ) from exc
 
         self._move_policy_before_first_accept(policy_id, policies)
