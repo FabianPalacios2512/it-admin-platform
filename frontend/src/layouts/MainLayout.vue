@@ -25,83 +25,74 @@ watch(
 
 const navigationGroups = ref([
   {
-    title: 'ANALYTICS & AI',
+    title: 'ANALÍTICA E IA',
     items: [
       {
         name: 'Centro de Control',
         path: '/',
-        icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1',
+        icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z',
       },
-      // {
-      //   name: 'NOC Servers (Legacy)',
-      //   path: '/monitoring',
-      //   icon: 'M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2',
-      // },
       {
-        name: 'SOC Firewall',
+        name: 'Telemetría Global',
         path: '/monitoring-zabbix',
         icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
       },
       {
-        name: 'Copiloto IA',
-        path: '/diagnostico',
-        icon: 'M13 10V3L4 14h7v7l9-11h-7z',
-        badge: 'AI'
+        name: 'FortiGate',
+        path: '/fortigate-admin',
+        icon: 'M3 12h4l2-6 4 12 2-6h6'
+      },
+      {
+        name: 'Unifi Wireless',
+        path: '/wifi',
+        icon: 'M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0'
       }
     ]
   },
   {
-    title: 'IDENTITY & ACCESS',
+    title: 'IDENTIDAD Y ACCESOS',
     items: [
       {
         name: 'Gestión de Accesos',
         icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z',
         expanded: false,
         subItems: [
-          { name: 'Cuentas AD', path: '/cuentas', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
-          { 
-            name: 'Grupos AD', 
-            path: '/grupos',
-            icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z'
-          },
-          { 
-            name: 'Estructura AD (OUs)', 
-            path: '/ous',
-            icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z'
-          },
-          { name: 'Equipos Dominio', path: '/devices', icon: 'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z' }
+          { name: 'Cuentas AD', path: '/cuentas' },
+          { name: 'Grupos AD', path: '/grupos' },
+          { name: 'Estructura AD (OUs)', path: '/ous' },
+          { name: 'Equipos Dominio', path: '/devices' }
         ]
       }
     ]
   },
   {
-    title: 'GOVERNANCE & POLICY',
+    title: 'GOBERNANZA Y POLÍTICAS',
     items: [
       {
         name: 'Políticas y Auditoría',
         icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
         expanded: false,
         subItems: [
-          { name: 'Control de Licencias', path: '/licencias-inactivas', icon: 'M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z' },
-          { name: 'Gestor GPO', path: '/gpo-manager', icon: 'M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4' },
-          { name: 'Auditoría IT', path: '/auditoria', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4' },
-          { name: 'Seguridad Global', path: '/seguridad', icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' }
+          { name: 'Control de Licencias', path: '/licencias-inactivas' },
+          { name: 'Gestor GPO', path: '/gpo-manager' },
+          { name: 'Auditoría IT', path: '/auditoria' },
+          { name: 'Seguridad Global', path: '/seguridad' },
+          { name: 'Agente Diagnóstico (IA)', path: '/diagnostico' }
         ]
       }
     ]
   },
   {
-    title: 'INFRASTRUCTURE',
+    title: 'INFRAESTRUCTURA',
     items: [
       {
         name: 'Servidores',
         icon: 'M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4',
         expanded: false,
         subItems: [
-          { name: 'Servidor Archivos', path: '/fileserver', icon: 'M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z' },
-          { name: 'Servidor Impresión', path: '/printers', icon: 'M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z' },
-          { name: 'Gestor RDS', path: '/rds', icon: 'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z' },
-          { name: 'Gestión Wi-Fi', path: '/wifi', icon: 'M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0' }
+          { name: 'Servidor Archivos', path: '/fileserver' },
+          { name: 'Servidor Impresión', path: '/printers' },
+          { name: 'Gestor RDS', path: '/rds' }
         ]
       },
       {
@@ -109,8 +100,8 @@ const navigationGroups = ref([
         icon: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
         expanded: false,
         subItems: [
-          { name: 'Cuarentena', path: '/cuarentena', icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z' },
-          { name: 'Hub de Delegación', path: '/delegation', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' }
+          { name: 'Cuarentena', path: '/cuarentena' },
+          { name: 'Hub de Delegación', path: '/delegation' }
         ]
       }
     ]
@@ -202,6 +193,8 @@ const searchOptions = [
   { name: 'Equipos de Red', path: '/devices', type: 'Módulo' },
   { name: 'Monitoreo de Infraestructura', path: '/monitoring', type: 'Módulo' },
   { name: 'Monitoreo Zabbix (V2)', path: '/monitoring-zabbix', type: 'Módulo' },
+  { name: 'Centro de Respuesta Activa NOC/SOC', path: '/fortigate-admin', type: 'Módulo' },
+  { name: 'Kill Session / Traffic Shaping / Quarantine', path: '/fortigate-admin', type: 'Acción' },
   { name: 'Servidor de Impresión', path: '/printers', type: 'Módulo' },
   { name: 'Gestionar Impresoras', path: '/printers', type: 'Acción' },
   { name: 'Gestión Wi-Fi', path: '/wifi', type: 'Módulo' },
@@ -357,7 +350,7 @@ onUnmounted(() => {
       <nav :class="['flex-1 py-2', sidebarCollapsed ? 'overflow-visible' : 'overflow-y-auto overflow-x-hidden']">
         <template v-for="(group, gIdx) in navigationGroups" :key="gIdx">
           <div v-show="!sidebarCollapsed" class="px-4 mb-1.5" :class="gIdx === 0 ? 'mt-3' : 'mt-5'">
-            <h3 class="text-[10px] tracking-widest text-slate-500 uppercase font-semibold">{{ group.title }}</h3>
+            <h3 class="text-xs tracking-wider text-slate-400 uppercase font-semibold">{{ group.title }}</h3>
           </div>
           <div v-show="sidebarCollapsed && gIdx > 0" class="my-3 border-t border-slate-700/50 mx-3"></div>
           
@@ -370,8 +363,8 @@ onUnmounted(() => {
                     'flex items-center justify-between py-2.5 transition-all duration-200 cursor-pointer',
                     sidebarCollapsed ? 'justify-center px-0' : 'px-4',
                     isActive(item)
-                      ? 'bg-blue-500/10 border-l-4 border-blue-500 text-blue-400'
-                      : 'text-slate-400 hover:bg-white/5 hover:text-slate-200 border-l-4 border-transparent'
+                      ? 'bg-white/10 border-l-4 border-blue-500 text-blue-400'
+                      : 'text-slate-300 hover:bg-white/5 hover:text-white border-l-4 border-transparent'
                   ]"
                 >
                   <div class="flex items-center gap-3">
@@ -396,8 +389,8 @@ onUnmounted(() => {
                     'flex items-center justify-between py-2.5 transition-all duration-200 cursor-pointer group',
                     sidebarCollapsed ? 'justify-center px-0' : 'px-4',
                     isActive(item)
-                      ? 'bg-blue-500/10 border-l-4 border-blue-500 text-blue-400'
-                      : 'text-slate-400 hover:bg-white/5 hover:text-slate-200 border-l-4 border-transparent'
+                      ? 'bg-white/10 border-l-4 border-blue-500 text-blue-400'
+                      : 'text-slate-300 hover:bg-white/5 hover:text-white border-l-4 border-transparent'
                   ]"
                 >
                   <div class="flex items-center gap-3">
@@ -414,25 +407,21 @@ onUnmounted(() => {
                   </svg>
                 </div>
                 
-                <ul v-show="activeCategory === item.name && !sidebarCollapsed" class="w-full bg-[#0f172a] shadow-inner py-2 space-y-0.5 relative before:content-[''] before:absolute before:left-[23px] before:top-4 before:bottom-4 before:w-px before:bg-slate-700">
+                <ul v-show="activeCategory === item.name && !sidebarCollapsed" class="w-full bg-slate-900/40 shadow-inner py-2 space-y-0.5 relative">
                   <li v-for="subItem in item.subItems" :key="subItem.path">
                     <router-link
                       :to="subItem.path"
                       :class="[
-                        'flex items-center py-2 pl-[42px] pr-4 transition-all duration-150 relative text-[12.5px]',
+                        'flex items-center py-2 pl-12 pr-4 transition-all duration-150 relative text-[12.5px] rounded-r-full',
                         isActive(subItem)
                           ? 'text-blue-400 font-medium'
-                          : 'text-slate-400 hover:text-slate-200'
+                          : 'text-slate-400 hover:text-white hover:bg-white/5'
                       ]"
                     >
                       <template v-if="subItem.icon">
-                        <svg class="absolute left-[16px] w-3.5 h-3.5" :class="isActive(subItem) ? 'text-blue-500' : 'text-slate-500'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg class="absolute left-[20px] w-3.5 h-3.5" :class="isActive(subItem) ? 'text-blue-500' : 'text-slate-500'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="subItem.icon" />
                         </svg>
-                      </template>
-                      <template v-else>
-                        <span v-if="isActive(subItem)" class="absolute left-[21.5px] w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                        <span v-else class="absolute left-[21.5px] w-1.5 h-1.5 rounded-full bg-slate-600 transition-colors"></span>
                       </template>
                       {{ subItem.name }}
                     </router-link>
@@ -471,11 +460,11 @@ onUnmounted(() => {
 
       <!-- Collapse / Footer -->
       <div class="border-t border-slate-700/50 p-3">
-        <div class="flex items-center justify-between">
+        <div class="flex items-center justify-between overflow-hidden">
           <button
             @click="toggleSidebar"
-            class="flex items-center py-2 text-slate-500 hover:text-white transition-colors duration-200"
-            :class="sidebarCollapsed ? 'justify-center w-full' : 'gap-3 px-1'"
+            class="flex items-center py-2 text-slate-500 hover:text-white transition-colors duration-200 shrink-0 rounded-md hover:bg-white/5"
+            :class="sidebarCollapsed ? 'justify-center w-full' : 'gap-2 px-2'"
           >
             <svg
               v-if="!sidebarCollapsed"
@@ -491,10 +480,13 @@ onUnmounted(() => {
             >
               <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
             </svg>
-            <span v-show="!sidebarCollapsed" class="text-[13px] font-medium">Contraer menú</span>
+            <span v-show="!sidebarCollapsed" class="text-[13px] font-medium whitespace-nowrap">Ocultar panel</span>
           </button>
           
-          <span v-show="!sidebarCollapsed" class="text-[10px] text-slate-600 font-mono">v2.4.1 - PROD</span>
+          <div v-show="!sidebarCollapsed" class="flex flex-col items-end shrink min-w-0 pr-1">
+             <span class="text-[10px] text-slate-400 font-mono truncate w-full text-right leading-tight">v2.4.1</span>
+             <span class="text-[8px] text-slate-500 font-mono uppercase tracking-wider truncate w-full text-right leading-tight">Producción</span>
+          </div>
         </div>
       </div>
     </aside>
@@ -532,8 +524,8 @@ onUnmounted(() => {
                   :class="[
                     'flex items-center justify-between px-5 py-2.5 transition-all duration-200',
                     isActive(item)
-                      ? 'bg-blue-500/10 border-l-4 border-blue-500 text-blue-400'
-                      : 'text-slate-400 hover:bg-white/5 hover:text-slate-200 border-l-4 border-transparent'
+                      ? 'bg-white/10 border-l-4 border-blue-500 text-blue-400'
+                      : 'text-slate-300 hover:bg-white/5 hover:text-white border-l-4 border-transparent'
                   ]"
                 >
                   <div class="flex items-center gap-3">
@@ -556,8 +548,8 @@ onUnmounted(() => {
                   :class="[
                     'flex items-center justify-between px-5 py-2.5 transition-all duration-200 cursor-pointer',
                     isActive(item)
-                      ? 'bg-blue-500/10 border-l-4 border-blue-500 text-blue-400'
-                      : 'text-slate-400 hover:bg-white/5 hover:text-slate-200 border-l-4 border-transparent'
+                      ? 'bg-white/10 border-l-4 border-blue-500 text-blue-400'
+                      : 'text-slate-300 hover:bg-white/5 hover:text-white border-l-4 border-transparent'
                   ]"
                 >
                   <div class="flex items-center gap-3">
@@ -574,26 +566,22 @@ onUnmounted(() => {
                   </svg>
                 </div>
                 
-                <ul v-show="activeCategory === item.name" class="w-full bg-[#0f172a] shadow-inner py-2 space-y-0.5 relative before:content-[''] before:absolute before:left-[27px] before:top-4 before:bottom-4 before:w-px before:bg-slate-700">
+                <ul v-show="activeCategory === item.name" class="w-full bg-slate-900/40 shadow-inner py-2 space-y-0.5 relative">
                   <li v-for="subItem in item.subItems" :key="subItem.path">
                     <router-link
                       :to="subItem.path"
                       @click="closeMobileMenu"
                       :class="[
-                        'flex items-center py-2 pl-[46px] pr-5 transition-all duration-150 relative text-[12.5px]',
+                        'flex items-center py-2 pl-[46px] pr-5 transition-all duration-150 relative text-[12.5px] rounded-r-full',
                         isActive(subItem)
                           ? 'text-blue-400 font-medium'
-                          : 'text-slate-400 hover:text-slate-200'
+                          : 'text-slate-400 hover:text-white hover:bg-white/5'
                       ]"
                     >
                       <template v-if="subItem.icon">
                         <svg class="absolute left-[20px] w-3.5 h-3.5" :class="isActive(subItem) ? 'text-blue-500' : 'text-slate-500'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="subItem.icon" />
                         </svg>
-                      </template>
-                      <template v-else>
-                        <span v-if="isActive(subItem)" class="absolute left-[25.5px] w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                        <span v-else class="absolute left-[25.5px] w-1.5 h-1.5 rounded-full bg-slate-600 transition-colors"></span>
                       </template>
                       {{ subItem.name }}
                     </router-link>

@@ -1,0 +1,34 @@
+RC: 1\nSTDOUT:\n\nSTDERR:\n$ErrorActionPreference = 'Stop'
+# Registrar el servidor como equipo de confianza para WinRM si tenemos permisos
+try {
+    $current = (Get-Item WSMan:\localhost\Client\TrustedHosts -ErrorAction SilentlyContinue).Value
+    if ($current -notlike '*192.168.20.130*') {
+        Set-Item WSMan:\localhost\Client\TrustedHosts -Value '192.168.20.130' -Force -Concatenate 
+-ErrorAction Stop
+    }
+} catch {
+    # Si no somos administrador local, ignoramos. El usuario debera configurarlo manualmente.
+}
+$pass = ConvertTo-SecureString 'Colombia123456++' -AsPlainText -Force
+$cred = New-Object System.Management.Automation.PSCredential('code\administrador', $pass)
+try {
+    $result = Invoke-Command -ComputerName '192.168.20.130' -Credential $cred -ScriptBlock { 
+schtasks /Query /TN 'AdminInfra_RDS_Cleanup' /V /FO CSV } -ErrorAction Stop
+    Write-Output $result
+} catch {
+    Write-Error $_.Exception.Message
+    exit 1
+}
+ : Error de conexi¢n al servidor remoto 192.168.20.130. Mensaje de error: El cliente WinRM no puede 
+procesar la solicitud. Si el esquema de autenticaci¢n es distinto de Kerberos o si el equipo cliente 
+no est  unido a un dominio, se debe usar el transporte HTTPS o agregar el equipo de destino al valor 
+de configuraci¢n TrustedHosts. Use winrm.cmd para configurar TrustedHosts. Tenga en cuenta que es 
+posible que no se autentiquen los equipos de la lista TrustedHosts. Para obtener m s informaci¢n, 
+ejecute el siguiente comando: winrm help config. Para obtener m s informaci¢n, consulte el tema de 
+la Ayuda about_Remote_Troubleshooting.
+En l¡nea: 18 Car cter: 5
++     Write-Error $_.Exception.Message
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [Write-Error], WriteErrorException
+    + FullyQualifiedErrorId : Microsoft.PowerShell.Commands.WriteErrorException
+ 

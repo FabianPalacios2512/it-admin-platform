@@ -1,0 +1,50 @@
+# Variables de entorno
+SECRET_KEY=cambiar_en_produccion
+LDAP_SERVER=ldap://dominio.com
+LDAP_USER=admin
+LDAP_PASSWORD=secreto
+
+# Configuración de Microsoft Entra ID (Graph API)
+# Credenciales de Entra ID para Microsoft Graph
+ENTRA_TENANT_ID="b9af4dc2-f021-4ba0-84b1-fa31133feb68"
+ENTRA_CLIENT_ID="e6b5baa0-1fc9-49d3-9982-2d70c8b8d602"
+ENTRA_CLIENT_SECRET="IGY8Q~lQlC_WLFQJWndufElkKb7GtrQRYliwkclU"
+# Master Password para seguridad de la UI
+SETUP_MASTER_PASSWORD_HASH="2c0dc1235c51488eafe96ea87778b6c38350dc75008a8128ddb0470d7f5a63d4"
+
+# API Key de Google Gemini (AI Studio) para el Agente de Diagnóstico IT
+GEMINI_API_KEY="AQ.Ab8RN6IsPBMk52nZADKoExGBjmivcT_yEHY98eXCIcJ2axPj_A"
+
+# Groq — rotación automática si una key llega al límite
+GROQ_API_KEY_1=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
+GROQ_API_KEY_2=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
+GROQ_API_KEY_3=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
+GROQ_API_KEY_4=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
+GROQ_API_KEY_5=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
+GROQ_API_KEY_6=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
+GROQ_API_KEY_7=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
+GROQ_API_KEY_8=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
+GROQ_API_KEY_9=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
+GROQ_API_KEY_10=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
+GROQ_API_KEY_11=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
+GROQ_API_KEY_12=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
+GROQ_API_KEY_13=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
+GROQ_API_KEY_14=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
+
+# API Key para FortiGate 192.168.40.16 generada automaticamente
+
+# API Key para FortiGate 192.168.40.16 generada automaticamente
+FORTIGATE_TOKEN_192_168_40_16=nqcm9pG6hfxqwd63n6p1rkyxfh7t7w
+
+# API Key original de Playa
+FORTIGATE_TOKEN_192_168_40_25=0pxy6pw06H3qjQkxxdhQgNqGpHfNfm
+
+# API Key para FortiGate 192.168.20.1 (Manual)
+FORTIGATE_TOKEN_192_168_20_1=zNh15t4xw5tyQr1ytsxqntywQ7pjzm
+
+# ==========================================
+# CONFIGURACIÓN DE ZABBIX (TELEMETRÍA GLOBAL)
+# ==========================================
+ZABBIX_URL=http://192.168.20.4/api_jsonrpc.php
+ZABBIX_USER=AdminInfraAPI
+ZABBIX_PASSWORD=Colombia123456++

@@ -1,6 +1,9 @@
 import sys
 import asyncio
 
+from dotenv import load_dotenv
+load_dotenv()
+
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
@@ -84,6 +87,8 @@ from app.api.v1 import exchange
 app.include_router(exchange.router, prefix="/api/v1/exchange", tags=["exchange"])
 from app.api.v1 import tasks
 app.include_router(tasks.router, prefix="/api/v1/tasks", tags=["tasks"])
+from app.api.v1 import fortigate
+app.include_router(fortigate.router, prefix="/api/v1/fortigate", tags=["fortigate"])
 # ---------------------------------------------------------
 # Integración: Servir Frontend Estático (Vue SPA)
 # ---------------------------------------------------------

@@ -1,38 +1,40 @@
 <template>
-  <div class="bg-white border border-slate-100 rounded-xl p-4 shadow-sm w-full">
-    <!-- Header -->
-    <div class="flex justify-between items-center mb-3">
-      <h3 class="text-xs font-bold text-slate-800">{{ portName }}</h3>
-      <div class="flex items-center gap-3">
-        <span class="text-xs font-mono font-medium text-emerald-500 flex items-center">
-          <i class="fas fa-arrow-down mr-1 text-[9px]"></i>{{ inKbps }} Kbps
-        </span>
-        <span class="text-xs font-mono font-medium text-rose-500 flex items-center">
-          <i class="fas fa-arrow-up mr-1 text-[9px]"></i>{{ outKbps }} Kbps
-        </span>
+  <div class="bg-white border border-slate-200 shadow-sm p-4 w-full">
+    <div class="flex items-center justify-between mb-2">
+      <div class="flex items-center gap-2">
+        <div class="w-7 h-7 bg-slate-100 border border-slate-200 flex items-center justify-center">
+          <i class="fas fa-ethernet text-slate-600 text-xs"></i>
+        </div>
+        <h3 class="text-xs font-semibold text-slate-800">{{ cleanPortName }}</h3>
       </div>
+      <div class="text-[10px] text-slate-400">Clic en un pico o usa el zoom</div>
     </div>
 
-    <!-- ECharts Sparkline -->
-    <div class="h-32 w-full relative mb-3">
-      <v-chart class="h-full w-full" :option="chartOptions" autoresize />
+    <div class="h-44 w-full relative">
+      <v-chart
+        class="h-full w-full"
+        :option="chartOptions"
+        autoresize
+        @click="onChartClick"
+      />
     </div>
 
-    <!-- Stats Footer -->
-    <div class="flex items-center justify-between border-t border-slate-50 pt-3 text-[11px]">
-      <!-- Download Stats -->
-      <div class="flex items-center gap-4 text-emerald-600">
-        <span class="font-bold uppercase tracking-wider text-[10px] hidden sm:inline">Download</span>
-        <span title="Mínimo"><span class="text-slate-400 mr-1">Min:</span>{{ stats.in.min }} Kbps</span>
-        <span title="Máximo"><span class="text-slate-400 mr-1">Max:</span>{{ stats.in.max }} Kbps</span>
-        <span title="Promedio"><span class="text-slate-400 mr-1">Avg:</span>{{ stats.in.avg }} Kbps</span>
+    <div class="grid grid-cols-4 gap-2 border-t border-slate-200 pt-2.5 mt-1">
+      <div>
+        <div class="text-[10px] font-semibold uppercase tracking-wider text-emerald-600">↓ In</div>
+        <div class="font-mono text-xs font-semibold text-slate-800">{{ formatKbps(inKbps) }}</div>
       </div>
-      <!-- Upload Stats -->
-      <div class="flex items-center gap-4 text-rose-600">
-        <span class="font-bold uppercase tracking-wider text-[10px] hidden sm:inline">Upload</span>
-        <span title="Mínimo"><span class="text-slate-400 mr-1">Min:</span>{{ stats.out.min }} Kbps</span>
-        <span title="Máximo"><span class="text-slate-400 mr-1">Max:</span>{{ stats.out.max }} Kbps</span>
-        <span title="Promedio"><span class="text-slate-400 mr-1">Avg:</span>{{ stats.out.avg }} Kbps</span>
+      <div>
+        <div class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">↑ Out</div>
+        <div class="font-mono text-xs font-semibold text-slate-800">{{ formatKbps(outKbps) }}</div>
+      </div>
+      <div>
+        <div class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Max</div>
+        <div class="font-mono text-xs font-semibold text-slate-800">{{ formatKbps(Math.max(stats.in.max, stats.out.max)) }}</div>
+      </div>
+      <div>
+        <div class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Avg</div>
+        <div class="font-mono text-xs font-semibold text-slate-800">{{ formatKbps(Math.round((stats.in.avg + stats.out.avg) / 2)) }}</div>
       </div>
     </div>
   </div>
@@ -42,12 +44,11 @@
 import { computed } from 'vue';
 import { use } from 'echarts/core';
 import { LineChart } from 'echarts/charts';
-import { GridComponent, TooltipComponent } from 'echarts/components';
+import { GridComponent, TooltipComponent, DataZoomComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import VChart from 'vue-echarts';
 
-// Register necessary ECharts modules
-use([LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
+use([LineChart, GridComponent, TooltipComponent, DataZoomComponent, CanvasRenderer]);
 
 const props = defineProps({
   portName: {
@@ -62,14 +63,27 @@ const props = defineProps({
     type: [Number, String],
     default: 0
   },
-  // Array of data points: [ { time: '10:00', in: 15, out: 20 }, ... ]
   historyData: {
     type: Array,
     default: () => []
   }
 });
 
-// Computed Stats (Min, Max, Avg)
+const emit = defineEmits(['audit-at']);
+
+const formatKbps = (val) => {
+  if (val == null || isNaN(val)) return '0 Kbps';
+  const num = Number(val);
+  if (num >= 1000000) return (num / 1000000).toFixed(2) + ' Gbps';
+  if (num >= 1000) return (num / 1000).toFixed(2) + ' Mbps';
+  if (num % 1 === 0) return num + ' Kbps';
+  return num.toFixed(1) + ' Kbps';
+};
+
+const cleanPortName = computed(() => {
+  return props.portName.replace('()', '').trim();
+});
+
 const stats = computed(() => {
   const inSeries = props.historyData.map(d => d.in || 0);
   const outSeries = props.historyData.map(d => d.out || 0);
@@ -88,9 +102,34 @@ const stats = computed(() => {
   };
 });
 
-// Configure the Sparkline chart
+const resolveClock = (point) => {
+  if (!point) return null;
+  if (point.clock) return Number(point.clock);
+  if (!point.time) return null;
+  const [hh, mm] = String(point.time).split(':').map(Number);
+  if (!Number.isFinite(hh)) return null;
+  const now = new Date();
+  now.setHours(hh, mm || 0, 0, 0);
+  return Math.floor(now.getTime() / 1000);
+};
+
+const onChartClick = (params) => {
+  const idx = params?.dataIndex;
+  if (idx == null || !props.historyData[idx]) return;
+  const point = props.historyData[idx];
+  const clock = resolveClock(point);
+  emit('audit-at', {
+    portName: cleanPortName.value,
+    timeLabel: point.time || '',
+    clock,
+    start: clock ? clock - 180 : null,
+    end: clock ? clock + 180 : null,
+    inKbps: point.in || 0,
+    outKbps: point.out || 0
+  });
+};
+
 const chartOptions = computed(() => {
-  // Extract times and data arrays for ECharts
   const xData = props.historyData.map(d => d.time || '');
   const inSeries = props.historyData.map(d => d.in || 0);
   const outSeries = props.historyData.map(d => d.out || 0);
@@ -99,38 +138,55 @@ const chartOptions = computed(() => {
     tooltip: {
       trigger: 'axis',
       textStyle: { fontSize: 10 },
-      padding: [4, 8],
+      padding: [6, 10],
       formatter: (params) => {
         let res = `<div class="font-bold mb-1">${params[0].name}</div>`;
         params.forEach(p => {
           const color = p.seriesName === 'Download' ? '#10b981' : '#f43f5e';
           res += `<div style="color: ${color}; font-family: monospace; font-size: 11px;">
-                    ${p.seriesName}: ${p.value} Kbps
+                    ${p.seriesName}: ${formatKbps(p.value)}
                   </div>`;
         });
+        res += `<div style="margin-top:4px;color:#64748b;font-size:10px;">Clic para auditar este momento</div>`;
         return res;
       }
     },
     grid: {
-      top: 15,
-      bottom: 25,
-      left: 10,
-      right: 15,
+      top: 12,
+      bottom: 36,
+      left: 12,
+      right: 12,
       containLabel: true
     },
+    dataZoom: [
+      { type: 'inside', xAxisIndex: 0, filterMode: 'none' },
+      {
+        type: 'slider',
+        height: 16,
+        bottom: 4,
+        borderColor: '#e2e8f0',
+        fillerColor: 'rgba(16,185,129,0.12)',
+        handleSize: 12,
+        textStyle: { fontSize: 9, color: '#94a3b8' }
+      }
+    ],
     xAxis: {
       type: 'category',
       data: xData,
       show: true,
       axisLine: { lineStyle: { color: '#cbd5e1' } },
-      axisLabel: { color: '#64748b', fontSize: 10, margin: 12 },
+      axisLabel: { color: '#64748b', fontSize: 10, margin: 8 },
       axisTick: { show: false }
     },
     yAxis: {
       type: 'value',
       show: true,
       splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } },
-      axisLabel: { color: '#64748b', fontSize: 10, formatter: '{value} K' },
+      axisLabel: { 
+        color: '#64748b', 
+        fontSize: 10, 
+        formatter: (value) => formatKbps(value)
+      },
       axisLine: { show: false },
       axisTick: { show: false }
     },
@@ -139,18 +195,15 @@ const chartOptions = computed(() => {
         name: 'Download',
         type: 'line',
         data: inSeries,
-        smooth: false, // Changed from true to false for raw network look
+        smooth: false,
         showSymbol: false,
-        lineStyle: {
-          color: '#10b981', // Emerald 500
-          width: 1.5
-        },
+        lineStyle: { color: '#10b981', width: 1.5 },
         areaStyle: {
           color: {
             type: 'linear',
             x: 0, y: 0, x2: 0, y2: 1,
             colorStops: [
-              { offset: 0, color: 'rgba(16, 185, 129, 0.4)' },
+              { offset: 0, color: 'rgba(16, 185, 129, 0.35)' },
               { offset: 1, color: 'rgba(16, 185, 129, 0)' }
             ]
           }
@@ -160,18 +213,15 @@ const chartOptions = computed(() => {
         name: 'Upload',
         type: 'line',
         data: outSeries,
-        smooth: false, // Changed from true to false
+        smooth: false,
         showSymbol: false,
-        lineStyle: {
-          color: '#f43f5e', // Rose 500
-          width: 1.5
-        },
+        lineStyle: { color: '#f43f5e', width: 1.5 },
         areaStyle: {
           color: {
             type: 'linear',
             x: 0, y: 0, x2: 0, y2: 1,
             colorStops: [
-              { offset: 0, color: 'rgba(244, 63, 94, 0.4)' },
+              { offset: 0, color: 'rgba(244, 63, 94, 0.28)' },
               { offset: 1, color: 'rgba(244, 63, 94, 0)' }
             ]
           }

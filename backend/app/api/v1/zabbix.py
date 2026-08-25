@@ -3,15 +3,16 @@ from typing import Dict, Any
 import logging
 from app.services.zabbix_service import ZabbixService
 from app.api.v1.auth import get_current_user
+import os
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 zabbix_service = ZabbixService(
-    url="http://192.168.20.4/api_jsonrpc.php",
-    username="Admin",
-    password="zabbix"
+    url=os.getenv("ZABBIX_URL"),
+    username=os.getenv("ZABBIX_USER"),
+    password=os.getenv("ZABBIX_PASSWORD")
 )
 
 @router.get("/dashboard/summary", response_model=Dict[str, Any])

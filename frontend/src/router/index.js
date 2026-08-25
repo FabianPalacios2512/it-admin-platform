@@ -114,6 +114,11 @@ const routes = [
         component: ZabbixMonitoringView,
       },
       {
+        path: 'fortigate-admin',
+        name: 'FortiGateAdmin',
+        component: () => import('@/pages/FortiGateAdminView.vue'),
+      },
+      {
         path: 'printers',
         name: 'Printers',
         component: PrintersView,

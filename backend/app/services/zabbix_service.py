@@ -12,7 +12,7 @@ class ZabbixService:
         "guest", "interrupt", "softirq", "kernel"
     )
 
-    def __init__(self, url: str = "http://192.168.20.4/api_jsonrpc.php", username: str = "Admin", password: str = "zabbix"):
+    def __init__(self, url: str, username: str, password: str):
         self.url = url
         self.username = username
         self.password = password
@@ -46,6 +46,8 @@ class ZabbixService:
             return None
 
     async def _authenticate(self):
+        if not self.url or not self.username:
+            raise Exception("Credenciales de Zabbix no configuradas en el archivo .env")
         payload = {
             "jsonrpc": "2.0",
             "method": "user.login",

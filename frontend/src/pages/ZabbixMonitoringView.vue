@@ -3,7 +3,7 @@
     <!-- Header -->
     <header class="flex justify-between items-center shrink-0">
       <div>
-        <h1 class="text-xl font-bold text-slate-800 tracking-tight leading-tight">Monitoreo Zabbix V2</h1>
+        <h1 class="text-xl font-bold text-slate-800 tracking-tight leading-tight">Centro de Telemetría</h1>
         <p class="text-xs text-slate-500 mt-0.5">Estado en tiempo real de todos los servidores monitoreados</p>
       </div>
       <div class="flex items-center gap-4">
@@ -11,7 +11,7 @@
         <div class="inline-flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200">
           <button @click="currentTemplate = 'global'" :class="currentTemplate === 'global' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'" class="px-4 py-1.5 text-xs font-bold uppercase tracking-wider rounded-md transition-all whitespace-nowrap">Global</button>
           <button @click="currentTemplate = 'issabel'" :class="currentTemplate === 'issabel' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'" class="px-4 py-1.5 text-xs font-bold uppercase tracking-wider rounded-md transition-all whitespace-nowrap">PBX Issabel</button>
-          <button @click="currentTemplate = 'fortigate'" :class="currentTemplate === 'fortigate' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'" class="px-4 py-1.5 text-xs font-bold uppercase tracking-wider rounded-md transition-all whitespace-nowrap">FortiGate V2</button>
+          <button @click="currentTemplate = 'fortigate'" :class="currentTemplate === 'fortigate' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'" class="px-4 py-1.5 text-xs font-bold uppercase tracking-wider rounded-md transition-all whitespace-nowrap">Nodos de Red</button>
         </div>
 
         <!-- Time Picker (Compact Dropdown) -->
@@ -199,10 +199,10 @@
             <i class="fas fa-sitemap text-blue-500 text-xs"></i> Opciones de Menú
           </h3>
           <div class="flex flex-wrap gap-2 mt-1">
-            <div v-for="i in 9" :key="i" class="px-2 py-1 rounded-full border flex items-center shadow-sm"
-                 :class="(pbxData.ivr_options?.[i]?.value === 1) ? 'bg-white border-emerald-200 text-slate-700' : 'bg-slate-50 border-slate-200 text-slate-400'">
-              <span class="w-1.5 h-1.5 rounded-full inline-block mr-1.5" :class="(pbxData.ivr_options?.[i]?.value === 1) ? 'bg-emerald-500' : 'bg-red-400'"></span>
-              <span class="text-xs font-mono font-semibold">{{ getOptionName(i, pbxData.ivr_options?.[i]?.name) }}</span>
+            <div v-for="i in 9" :key="i" class="px-2 py-1 rounded-full border flex items-center shadow-sm transition-colors"
+                 :class="(!pbxData.server_down && !pbxData.asterisk_down && pbxData.ivr_options?.[i]?.value === 1) ? 'bg-white border-emerald-200 text-slate-700' : ((pbxData.server_down || pbxData.asterisk_down || pbxData.ivr_options?.[i]?.value === 0) ? 'bg-red-50 border-red-200 text-red-600' : 'bg-slate-50 border-slate-200 text-slate-400')">
+              <span class="w-1.5 h-1.5 rounded-full inline-block mr-1.5" :class="(!pbxData.server_down && !pbxData.asterisk_down && pbxData.ivr_options?.[i]?.value === 1) ? 'bg-emerald-500' : ((pbxData.server_down || pbxData.asterisk_down || pbxData.ivr_options?.[i]?.value === 0) ? 'bg-red-500' : 'bg-slate-300')"></span>
+              <span class="text-xs font-mono font-semibold" :class="(pbxData.server_down || pbxData.asterisk_down) ? 'opacity-70 line-through' : ''">{{ getOptionName(i, pbxData.ivr_options?.[i]?.name) }}</span>
             </div>
           </div>
         </div>
@@ -733,8 +733,12 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import FortiGateMonitorView from './FortiGateMonitorView.vue';
 import zabbixService from '../services/zabbix.service';
+import { useChartDownsampling } from '@/composables/useChartDownsampling';
+
+const { downsampleSeries } = useChartDownsampling();
 
 const pbxData = ref({
+  has_fetched: false,
   loading: false,
   asterisk_down: false,
   server_down: false,
@@ -797,7 +801,9 @@ const fetchPbxStats = async () => {
     const res = await zabbixService.getPbxTelephony();
     if (res.status === 'success') {
       const wasDown = pbxData.value.asterisk_down;
+      const wasFetched = pbxData.value.has_fetched;
       pbxData.value = {
+        has_fetched: true,
         loading: false,
         asterisk_down: res.data.asterisk_down,
         server_down: res.data.server_down,
@@ -809,7 +815,7 @@ const fetchPbxStats = async () => {
         ivr_options: res.data.ivr_options || {}
       };
       
-      if (res.data.asterisk_down && !wasDown) {
+      if (wasFetched && res.data.asterisk_down && !wasDown) {
         playAlertSound();
       }
     } else {
@@ -1098,10 +1104,8 @@ const sanitizeHistory = (data, isPercentage = true) => {
     .filter(Boolean)
     .sort((a, b) => a[0] - b[0]);
     
-  // NOTA: Se eliminó la inyección de ceros en huecos grandes.
-  // Zabbix nativo interpola (dibuja la diagonal) entre puntos lejanos,
-  // y el usuario prefiere esa estética a ver picos (spikes) que caen a cero.
-  return cleanData;
+  // Aplicar nuestro downsampling para agrupar y promediar puntos en rangos largos
+  return downsampleSeries(cleanData, 250);
 };
 
 const downsample = (data, maxPoints = 24) => {
@@ -1160,18 +1164,26 @@ let globalAudioCtx = null;
 
 const playAlertSound = () => {
   try {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContext) return;
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
     
-    // Usar singleton para no exceder límite de contextos del navegador
+    // Crear el contexto solo si ya hubo interacción del usuario (no en auto-play)
     if (!globalAudioCtx) {
-      globalAudioCtx = new AudioContext();
+      // Si no existe aún, intentar crearlo; si el navegador lo bloquea lo atrapamos silenciosamente
+      try {
+        globalAudioCtx = new AudioContextClass();
+      } catch {
+        return; // Browser blocked autoplay - silent fail
+      }
     }
     
     // Si fue suspendido por política del navegador, reanudar
     if (globalAudioCtx.state === 'suspended') {
-      globalAudioCtx.resume();
+      globalAudioCtx.resume().catch(() => {}); // catch promise silenciosamente
     }
+    
+    // Solo reproducir si el contexto está activo (no suspended)
+    if (globalAudioCtx.state !== 'running') return;
     
     const duration = 10;
     const oscillator = globalAudioCtx.createOscillator();
@@ -1190,8 +1202,8 @@ const playAlertSound = () => {
     
     oscillator.start(globalAudioCtx.currentTime);
     oscillator.stop(globalAudioCtx.currentTime + duration);
-  } catch (err) {
-    console.warn("Audio autoplay blocked", err);
+  } catch {
+    // Audio blocked silently - no console noise
   }
 };
 
@@ -1539,47 +1551,62 @@ const renderTrendTooltip = ({ seriesIndex, dataPointIndex, w }) => {
 
 
 
-const trendOptions = (forceDir) => ({
-  chart: {
-    type: 'area',
-    toolbar: { show: false },
-    zoom: { enabled: false },
-    animations: { enabled: true, dynamicAnimation: { speed: 300 } },
-    fontFamily: 'inherit',
-    parentHeightOffset: 0
-  },
-  fill: {
-    type: 'gradient',
-    gradient: {
-      shadeIntensity: 1,
-      opacityFrom: 0.2,
-      opacityTo: 0.05,
-      stops: [0, 100]
-    }
-  },
-  stroke: { width: 1.5, curve: 'smooth' },
-  markers: {
-    size: 0,
-    hover: { sizeOffset: 4 }
-  },
-  states: {
-    hover: { filter: { type: 'none' } },
-    active: { filter: { type: 'none' } }
-  },
-  xaxis: {
-    type: 'datetime',
-    labels: { datetimeUTC: false, datetimeFormatter: { hour: 'HH:mm', minute: 'HH:mm' }, style: { fontSize: '9px', colors: '#64748b' } },
-    axisBorder: { show: true, color: '#e2e8f0' },
-    axisTicks: { show: true, color: '#e2e8f0' },
-    tooltip: { enabled: false },
-    crosshairs: {
-      show: true,
-      width: 1,
-      position: 'back',
-      opacity: 1,
-      stroke: { color: '#94a3b8', width: 1, dashArray: 4 }
-    }
-  },
+const trendOptions = (forceDir) => {
+  const isLongRange = selectedRange.value > 86400; // mayor a 24 horas (86400 segundos)
+  
+  return {
+    chart: {
+      type: 'area',
+      toolbar: { show: false },
+      zoom: { enabled: false },
+      animations: { enabled: !isLongRange, dynamicAnimation: { speed: 300 } },
+      fontFamily: 'inherit',
+      parentHeightOffset: 0
+    },
+    fill: {
+      type: 'gradient',
+      gradient: {
+        shadeIntensity: 1,
+        opacityFrom: 0.15,
+        opacityTo: 0.0,
+        stops: [0, 100]
+      }
+    },
+    stroke: { width: 2, curve: 'smooth' },
+    markers: {
+      size: 0,
+      hover: { size: 4 }
+    },
+    states: {
+      hover: { filter: { type: 'none' } },
+      active: { filter: { type: 'none' } }
+    },
+    xaxis: {
+      type: 'datetime',
+      labels: {
+        datetimeUTC: false, 
+        hideOverlappingLabels: true,
+        formatter: function(val) {
+          const d = new Date(val);
+          if (isLongRange) {
+             return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+          }
+          return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+        },
+        style: { fontSize: '9px', colors: '#64748b' }
+      },
+      axisBorder: { show: true, color: '#e2e8f0' },
+      axisTicks: { show: true, color: '#e2e8f0' },
+      tickAmount: isLongRange ? 6 : undefined,
+      tooltip: { enabled: false },
+      crosshairs: {
+        show: true,
+        width: 1,
+        position: 'back',
+        opacity: 1,
+        stroke: { color: '#94a3b8', width: 1, dashArray: 4 }
+      }
+    },
   yaxis: {
     min: 0,
     max: (max) => max < 5 ? 5 : Math.ceil(max * 1.2),
@@ -1606,16 +1633,17 @@ const trendOptions = (forceDir) => ({
     cssClass: `force-tooltip-${forceDir}`,
     custom: renderTrendTooltip
   },
-  grid: {
-    show: true,
-    borderColor: '#e2e8f0',
-    strokeDashArray: 0,
-    position: 'back',
-    xaxis: { lines: { show: false } },
-    yaxis: { lines: { show: false } }, // Grid minimalista: quitamos líneas Y también
-    padding: { left: 8, right: 8, top: 4, bottom: 0 }
-  }
-});
+    grid: {
+      show: true,
+      borderColor: '#e2e8f0',
+      strokeDashArray: 0,
+      position: 'back',
+      xaxis: { lines: { show: false } },
+      yaxis: { lines: { show: false } }, // Grid minimalista: quitamos líneas Y también
+      padding: { left: 8, right: 8, top: 4, bottom: 0 }
+    }
+  };
+};
 
 const sparklineRamOptions = (val) => {
   let color = '#10b981'; // Verde sólido

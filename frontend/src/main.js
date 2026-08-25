@@ -89,9 +89,7 @@ window.alert = function(message) {
 
 const app = createApp(App)
 app.use(router)
-// Registro global del componente <apexchart>. Sin esto, todas las gráficas
-// (tendencias, sparklines y el panel de detalle) no se resuelven y el
-// dashboard de Zabbix se ve roto ("Failed to resolve component: apexchart").
+// app.use(VueApexCharts) registra automáticamente el componente global <apexchart>.
+// NO agregar app.component('apexchart', ...) o quedará registrado dos veces.
 app.use(VueApexCharts)
-app.component('apexchart', VueApexCharts)
 app.mount('#app')

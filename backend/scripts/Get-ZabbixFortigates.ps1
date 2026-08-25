@@ -70,10 +70,10 @@ $hostIds = $hosts | Select-Object -ExpandProperty hostid
 
 # 3. Get Items for these hosts (CPU, Mem, Sessions, VPN, Traffic)
 $itemsParams = @{
-    output = @("itemid", "hostid", "name", "key_", "lastvalue", "lastclock")
+    output = @("itemid", "hostid", "name", "key_", "lastvalue", "lastclock", "value_type")
     hostids = $hostIds
     search = @{ 
-        key_ = @("system.cpu.util", "vm.memory.util", "fortignw.sessions", "vpn", "ipsec", "net.if.in", "net.if.out", "system.uptime", "fgsyssesscount", "fgvpntunupcount", "fgipsintrusionsblocked")
+        key_ = @("system.cpu.util", "vm.memory.util", "vm.memory.size", "fgSysCpu", "fgSysMem", "session", "sescount", "vpn", "ipsec", "net.if.in", "net.if.out", "system.uptime", "fgsyssesscount", "fgSysSesCount", "fgvpntunupcount", "fgipsintrusionsblocked")
     }
     searchByAny = $true
 }
@@ -105,15 +105,47 @@ foreach ($h in $hosts) {
     $uptimeSeconds = 0
     $ipsBlocked = 0
     $interfaces = @{}
+    $cpuItemId = $null
+    $ramItemId = $null
+    $cpuValueType = 0
+    $ramValueType = 0
+    $memUsed = $null
+    $memTotal = $null
 
     foreach ($item in $hostItems) {
         $key = $item.key_.ToLower()
+        $itemName = if ($item.name) { $item.name.ToLower() } else { "" }
         $val = 0
         if ([double]::TryParse($item.lastvalue, [ref]$val)) {
-            if ($key -like "*system.cpu.util*") { $cpu = [Math]::Round($val, 1) }
-            elseif ($key -like "*vm.memory.util*") { $ram = [Math]::Round($val, 1) }
+            $isPct = ($val -ge 0 -and $val -le 100)
+            $looksBytes = ($val -gt 1000) -or (
+                ($key -match "used|free|total|size|available|capacity") -and
+                ($key -notmatch "util|pused|usage|percent")
+            )
+
+            if ($isPct -and ($key -match "cpu\.(util|usage)" -or $key -match "fgsyscpuusage" -or $itemName -match "cpu util")) {
+                $cpu = [Math]::Round($val, 1)
+                $cpuItemId = $item.itemid
+                $cpuValueType = [int]$item.value_type
+            }
+            elseif ($isPct -and -not $looksBytes -and (
+                $key -match "memory\.util|mem\.util|memory\.pused|mem\.pused|fgsysmemusage" -or
+                ($itemName -match "memory util|mem util|memory usage \(%\)|used memory \(%\)")
+            )) {
+                $ram = [Math]::Round($val, 1)
+                $ramItemId = $item.itemid
+                $ramValueType = [int]$item.value_type
+            }
+            elseif ($key -match "memory\.size\[used\]|vm\.memory\.size\[used\]|fgsysmemused") {
+                $memUsed = $val
+            }
+            elseif ($key -match "memory\.size\[total\]|vm\.memory\.size\[total\]|fgsysmemcapacity") {
+                $memTotal = $val
+            }
             elseif ($key -like "*system.uptime*") { $uptimeSeconds = $val }
-            elseif ($key -match "fortignw.sessions|fgsyssesscount") { $sessions = $val }
+            elseif (($key -match "sescount|sesscount|session|fgsysses") -or ($itemName -match "session")) {
+                if ($key -notmatch "vpn|ipsec|timeout|expire") { $sessions = [Math]::Round($val, 0) }
+            }
             elseif ($key -match "fgipsintrusionsblocked") { $ipsBlocked = $val }
             elseif ($key -match "fgvpntunupcount") { $vpnUp = $val }
             elseif ($key -match "vpn|ipsec" -and $key -notmatch "fgvpntunupcount") {
@@ -140,6 +172,11 @@ foreach ($h in $hosts) {
                 }
             }
         }
+    }
+
+    if ((-not $ramItemId) -and $memUsed -and $memTotal -and $memTotal -gt 0) {
+        $ram = [Math]::Round((100.0 * $memUsed / $memTotal), 1)
+        if ($ram -gt 100) { $ram = 100 }
     }
 
     $hostTriggers = if ($activeTriggers) { $activeTriggers | Where-Object { $_.hosts.hostid -contains $hid -or $_.hosts[0].hostid -eq $hid } } else { @() }
@@ -194,9 +231,15 @@ foreach ($h in $hosts) {
         hostname = $h.name
         ip = if ($h.interfaces) { $h.interfaces[0].ip } else { "N/A" }
         status = $statusText
+        cpu_itemid = $cpuItemId
+        ram_itemid = $ramItemId
+        cpu_value_type = $cpuValueType
+        ram_value_type = $ramValueType
         metrics = @{
             cpu = $cpu
             ram = $ram
+            cpu_history = @()
+            ram_history = @()
             active_sessions = $sessions
             uptime_str = $uptimeStr
             ips_blocked = $ipsBlocked
@@ -266,9 +309,67 @@ if ($historyItemIds.Count -gt 0) {
                 $dt = [DateTimeOffset]::FromUnixTimeSeconds([long]$clockToUse).ToLocalTime()
                 $timeStr = $dt.ToString("HH:mm")
                 
-                $ifaceHistory += @{ time = $timeStr; in = [Math]::Round($inVal, 1); out = [Math]::Round($outVal, 1) }
+                $ifaceHistory += @{ time = $timeStr; clock = [long]$clockToUse; in = [Math]::Round($inVal, 1); out = [Math]::Round($outVal, 1) }
             }
             $iface.history = $ifaceHistory
+        }
+    }
+}
+
+# 6. Historial real de CPU/RAM (última hora) — sin curvas inventadas
+$cpuRamIds = @()
+foreach ($h in $finalData) {
+    if ($h.cpu_itemid) { $cpuRamIds += $h.cpu_itemid }
+    if ($h.ram_itemid) { $cpuRamIds += $h.ram_itemid }
+}
+$cpuRamIds = $cpuRamIds | Select-Object -Unique
+
+if ($cpuRamIds.Count -gt 0) {
+    $timeFromCpu = [int][DateTimeOffset]::Now.AddMinutes(-60).ToUnixTimeSeconds()
+    $cpuRamLookup = @{}
+
+    foreach ($histType in @(0, 3)) {
+        $pendingIds = @($cpuRamIds | Where-Object { -not $cpuRamLookup.ContainsKey($_) })
+        if ($pendingIds.Count -eq 0) { break }
+        $cpuHistParams = @{
+            output = @("itemid", "clock", "value")
+            history = $histType
+            itemids = $pendingIds
+            time_from = $timeFromCpu
+            sortfield = "clock"
+            sortorder = "ASC"
+        }
+        $cpuHistRaw = Invoke-ZabbixAPI -Method "history.get" -Params $cpuHistParams -AuthToken $auth
+        if ($cpuHistRaw) {
+            foreach ($row in $cpuHistRaw) {
+                if (-not $cpuRamLookup.ContainsKey($row.itemid)) { $cpuRamLookup[$row.itemid] = @() }
+                $cpuRamLookup[$row.itemid] += [double]$row.value
+            }
+        }
+    }
+
+    function Compress-History([object[]]$points, [int]$maxPoints = 24) {
+        if (-not $points -or $points.Count -eq 0) { return @() }
+        if ($points.Count -le $maxPoints) {
+            return @($points | ForEach-Object { [Math]::Round($_, 1) })
+        }
+        $step = [Math]::Max(1, [Math]::Floor($points.Count / $maxPoints))
+        $out = @()
+        for ($i = 0; $i -lt $points.Count; $i += $step) {
+            $out += [Math]::Round($points[$i], 1)
+        }
+        if ($out.Count -gt $maxPoints) {
+            $out = $out[($out.Count - $maxPoints)..($out.Count - 1)]
+        }
+        return $out
+    }
+
+    foreach ($h in $finalData) {
+        if ($h.cpu_itemid -and $cpuRamLookup.ContainsKey($h.cpu_itemid)) {
+            $h.metrics.cpu_history = @(Compress-History $cpuRamLookup[$h.cpu_itemid] | Where-Object { $_ -ge 0 -and $_ -le 100 })
+        }
+        if ($h.ram_itemid -and $cpuRamLookup.ContainsKey($h.ram_itemid)) {
+            $h.metrics.ram_history = @(Compress-History $cpuRamLookup[$h.ram_itemid] | Where-Object { $_ -ge 0 -and $_ -le 100 })
         }
     }
 }
