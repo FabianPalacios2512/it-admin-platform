@@ -6,7 +6,7 @@
         <div>
           <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-neutral-500">Sesiones globales</div>
           <div class="mt-1 text-3xl font-semibold tracking-tight text-neutral-900 font-mono leading-none">
-            {{ Number(totalSessions || 0) }}
+            {{ totalSessions.toLocaleString() }}
           </div>
           <div class="mt-1.5 text-[11px] text-neutral-400">Sesiones de firewall activas</div>
         </div>
@@ -179,7 +179,7 @@
                   <!-- Sesiones Activas -->
                   <td class="py-3 px-4 text-center">
                     <span class="font-mono text-xs" :class="metricTone(fg.metrics?.active_sessions)">
-                      {{ Number(fg.metrics?.active_sessions || 0) }}
+                      {{ (fg.metrics?.active_sessions || 0).toLocaleString() }}
                     </span>
                   </td>
 
@@ -765,7 +765,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { use } from 'echarts/core';
 import { LineChart } from 'echarts/charts';
 import { GridComponent, TooltipComponent } from 'echarts/components';
