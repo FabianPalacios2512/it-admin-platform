@@ -300,7 +300,11 @@
     </div>
 
     <!-- Vista Dedicada: Nodos de Red (FortiGate) -->
-    <FortiGateMonitorView v-if="currentTemplate === 'fortigate'" />
+    <div v-if="renderError" class="bg-red-50 border-l-4 border-red-500 p-4 m-4">
+      <h3 class="text-red-800 font-bold">Error fatal al cargar Nodos de Red:</h3>
+      <pre class="text-xs text-red-600 mt-2 whitespace-pre-wrap">{{ renderError }}</pre>
+    </div>
+    <FortiGateMonitorView v-if="currentTemplate === 'fortigate' && !renderError" />
 
     <!-- Data Table: Solo para Global (servidores Zabbix) -->
     <div v-if="currentTemplate === 'global'" class="bg-white rounded-xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] relative">
@@ -738,10 +742,17 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch, nextTick, onErrorCaptured } from 'vue';
 import FortiGateMonitorView from './FortiGateMonitorView.vue';
 import zabbixService from '../services/zabbix.service';
 import { useChartDownsampling } from '@/composables/useChartDownsampling';
+
+const renderError = ref(null);
+onErrorCaptured((err, instance, info) => {
+  renderError.value = `${err.toString()} \nInfo: ${info}`;
+  console.error("Caught error:", err, info);
+  return false; // prevent propagation
+});
 
 const { downsampleSeries } = useChartDownsampling();
 
