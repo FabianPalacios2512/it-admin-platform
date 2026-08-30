@@ -14,6 +14,9 @@ param(
     [string]$OutputFile = "fortigates_data.json"
 )
 
+# Ignorar errores de certificado SSL (auto-firmado)
+[System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+
 Function Invoke-ZabbixAPI {
     param (
         [string]$Method,
@@ -55,7 +58,7 @@ if (-not $auth) { exit 1 }
 $hostsParams = @{
     output = @("hostid", "name", "host", "available", "snmp_available", "status")
     selectInterfaces = @("ip")
-    search = @{ name = "Forti" }
+    search = @{ name = @("Forti", "FGT") }
     searchByAny = $true
 }
 $hosts = Invoke-ZabbixAPI -Method "host.get" -Params $hostsParams -AuthToken $auth

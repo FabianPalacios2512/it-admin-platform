@@ -13,3 +13,4 @@ websockets
 pywinpty
 google-genai
 paramiko
+openpyxl

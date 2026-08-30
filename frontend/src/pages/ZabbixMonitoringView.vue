@@ -299,11 +299,10 @@
 
     </div>
 
-    <!-- Global Trends (Modo Seguridad) -->
-    <!-- Vista Dedicada FortiGate -->
+    <!-- Vista Dedicada: Nodos de Red (FortiGate) -->
     <FortiGateMonitorView v-if="currentTemplate === 'fortigate'" />
 
-    <!-- Data Table (Solo Global) -->
+    <!-- Data Table: Solo para Global (servidores Zabbix) -->
     <div v-if="currentTemplate === 'global'" class="bg-white rounded-xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] relative">
       <div v-if="loadingHosts" class="absolute inset-0 bg-white/80 flex items-center justify-center z-10 rounded-xl"><div class="spinner"></div></div>
       
@@ -317,6 +316,11 @@
             </span>
             <input v-model="searchQuery" type="text" placeholder="Buscar por servidor o IP..." class="pl-9 pr-3 py-1.5 border border-slate-200 rounded-lg text-[13px] text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-64 bg-slate-50 hover:bg-white transition-colors" />
           </div>
+          <!-- Group Filter Dropdown -->
+          <select v-model="selectedGroup" @change="refreshAll(true)" class="border border-slate-200 rounded-lg text-[13px] px-2 py-1.5 text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 hover:bg-white transition-colors max-w-[200px] truncate">
+            <option value="all">Todos los Grupos</option>
+            <option v-for="g in groups" :key="g.groupid" :value="g.groupid">{{ g.name }}</option>
+          </select>
           <!-- OS Filter Dropdown -->
           <select v-model="osFilter" class="border border-slate-200 rounded-lg text-[13px] px-2 py-1.5 text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 hover:bg-white transition-colors">
             <option value="all">Todos los Sistemas</option>
@@ -326,28 +330,22 @@
         </div>
       </div>
 
-      <div class="w-full">
-        <table class="w-full text-left border-collapse">
-          <thead class="sticky top-0 bg-white z-[1]">
-            <tr class="border-b border-slate-100 shadow-[0_2px_3px_-2px_rgba(0,0,0,0.05)]">
-              <th class="py-2.5 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-50 text-center w-16">Estado</th>
-              <th class="py-2.5 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-50">Servidor</th>
-              <th class="py-2.5 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-50">IP</th>
-              <th class="py-2.5 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-50 text-center">OS</th>
-              <template v-if="currentTemplate === 'global'">
-                <th class="py-2.5 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-50">CPU (%)</th>
-                <th class="py-2.5 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-50">RAM Usada (%)</th>
-                <th class="py-2.5 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-50">RED (IN / OUT)</th>
-              </template>
-              <template v-else>
-                <th class="py-2.5 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-50">Túneles VPN</th>
-                <th class="py-2.5 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-50">Sesiones Activas</th>
-                <th class="py-2.5 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-50">Tráfico Global (In/Out)</th>
-              </template>
+      <div class="w-full overflow-x-auto">
+        <table class="w-full text-left border-collapse min-w-[800px]">
+          <thead class="bg-slate-50 border-b border-slate-200">
+            <tr>
+              <th class="py-3 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center w-16">Estado</th>
+              <th class="py-3 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Servidor</th>
+              <th class="py-3 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">IP</th>
+              <th class="py-3 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">OS</th>
+              <th class="py-3 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">CPU (%)</th>
+              <th class="py-3 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">RAM Usada (%)</th>
+              <th class="py-3 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">RED (IN / OUT)</th>
             </tr>
           </thead>
+
           <tbody>
-            <tr v-for="host in filteredHosts" :key="host.hostid" 
+            <tr v-for="host in paginatedHosts" :key="host.hostid" 
                 class="transition-colors cursor-pointer"
                 :class="host.status === 'Offline' ? 'bg-red-50 border-l-4 border-red-500 hover:bg-red-100/50' : 'border-b border-slate-50 hover:bg-blue-50/40'" 
                 @click="openDetail(host)">
@@ -477,6 +475,16 @@
             </tr>
           </tbody>
         </table>
+
+        <!-- Paginator -->
+        <div v-if="filteredHosts.length > itemsPerPage" class="px-4 py-3 border-t border-slate-100 flex items-center justify-between bg-slate-50 rounded-b-xl">
+          <span class="text-[11px] text-slate-500 font-medium">Mostrando {{ (currentPage - 1) * itemsPerPage + 1 }} - {{ Math.min(currentPage * itemsPerPage, filteredHosts.length) }} de {{ filteredHosts.length }} servidores</span>
+          <div class="flex gap-1.5 items-center">
+            <button @click="currentPage--" :disabled="currentPage === 1" class="px-3 py-1.5 text-[11px] font-bold rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all">Anterior</button>
+            <span class="px-3 py-1.5 text-[11px] font-black text-slate-700 bg-white border border-slate-200 rounded-md shadow-sm">{{ currentPage }} / {{ totalPages }}</span>
+            <button @click="currentPage++" :disabled="currentPage === totalPages" class="px-3 py-1.5 text-[11px] font-bold rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all">Siguiente</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -836,6 +844,9 @@ const ramTrendSeries = ref([]);
 const searchQuery = ref('');
 const osFilter = ref('all');
 
+const groups = ref([]);
+const selectedGroup = ref('');
+
 const loadingHosts = ref(true);
 const loadingTrends = ref(true);
 
@@ -1033,7 +1044,6 @@ watch(currentTemplate, async (newVal) => {
       issabelHostId.value = h.hostid;
       if (!comparisonData.value[h.hostid]) {
         loadingIssabelDetail.value = true;
-        // Inyectar en hosts temporalmente si no estaba en selectedHosts
         if (!selectedHosts.value.find(sh => sh.hostid === h.hostid)) {
            // Si se necesita para fetchDetailForHost
         }
@@ -1043,6 +1053,7 @@ watch(currentTemplate, async (newVal) => {
     }
   }
 });
+
 
 const timeRanges = [
   { label: '10 Min', value: 600 },
@@ -1150,7 +1161,7 @@ const mapSeries = (series = []) =>
 
 const fetchTrends = async (time_from, time_till) => {
   try {
-    const res = await zabbixService.getGlobalTrends(time_from, time_till);
+    const res = await zabbixService.getGlobalTrends(time_from, time_till, selectedGroup.value);
     if (res.status === 'success') {
       cpuTrendSeries.value = mapSeries(res.data.cpu_trends);
       ramTrendSeries.value = mapSeries(res.data.ram_trends);
@@ -1209,7 +1220,7 @@ const playAlertSound = () => {
 
 const fetchHosts = async (time_from, time_till) => {
   try {
-    const res = await zabbixService.getAllHosts(time_from, time_till);
+    const res = await zabbixService.getAllHosts(time_from, time_till, selectedGroup.value);
     if (res.status === 'success') {
       hosts.value = res.data.map(h => {
         const cpuHistory = sanitizeHistory(h.cpu_history);
@@ -1251,11 +1262,30 @@ const fetchHosts = async (time_from, time_till) => {
   loadingHosts.value = false;
 };
 
+const fetchGroups = async () => {
+  try {
+    const res = await zabbixService.getGroups();
+    if (res.status === 'success') {
+      groups.value = res.data;
+      if (groups.value.length > 0 && !selectedGroup.value) {
+        const servGroup = groups.value.find(g => g.name.toLowerCase().includes('servidor'));
+        selectedGroup.value = servGroup ? servGroup.groupid : groups.value[0].groupid;
+      }
+    }
+  } catch (e) {
+    console.error("Error fetching groups:", e);
+  }
+};
+
 const refreshAll = async (showLoading = true) => {
   if (showLoading) {
     loadingTrends.value = loadingHosts.value = true;
   }
   const { time_from, time_till } = getTimeParams();
+  
+  if (groups.value.length === 0) {
+    await fetchGroups();
+  }
   
   const promises = [fetchTrends(time_from, time_till), fetchHosts(time_from, time_till), fetchPbxStats()];
   
@@ -1864,7 +1894,7 @@ const filteredHosts = computed(() => {
     let match = true;
     
     const nameStr = (h.hostname || h.name || '').toLowerCase();
-    const isFirewall = nameStr.includes('forti') || nameStr.includes('firewall');
+    const isFirewall = nameStr.includes('forti') || nameStr.includes('firewall') || nameStr.includes('fgt');
     
     // Filter by template
     if (currentTemplate.value === 'fortigate') match = isFirewall;
@@ -1895,6 +1925,21 @@ const filteredHosts = computed(() => {
     if (b.status === 'Offline' && a.status !== 'Offline') return 1;
     return a.hostname.localeCompare(b.hostname);
   });
+});
+
+const currentPage = ref(1);
+const itemsPerPage = ref(15);
+
+const totalPages = computed(() => Math.ceil(filteredHosts.value.length / itemsPerPage.value) || 1);
+
+const paginatedHosts = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage.value;
+  const end = start + itemsPerPage.value;
+  return filteredHosts.value.slice(start, end);
+});
+
+watch([searchQuery, osFilter, selectedGroup, currentTemplate], () => {
+  currentPage.value = 1;
 });
 
 const globalFirewallSessions = computed(() => {

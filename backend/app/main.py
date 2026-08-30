@@ -14,6 +14,7 @@ from app.core.database import Base, engine
 from app.models.server import ServerConfig
 from app.models.rds import RdsConfig  # Ensure table is created
 from app.models.delegation import TemporaryDelegation
+from app.models.license_audit import LicenseAudit
 from apscheduler.schedulers.background import BackgroundScheduler
 from app.services.ad_event_sync import sync_ad_events
 from app.services.monitoring_service import sync_monitoring_stats

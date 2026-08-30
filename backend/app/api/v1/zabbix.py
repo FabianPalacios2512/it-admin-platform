@@ -24,19 +24,28 @@ async def get_zabbix_dashboard_summary(current_user: dict = Depends(get_current_
         logger.error(f"Error fetching Zabbix summary: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch summary: {str(e)}")
 
-@router.get("/dashboard/trends", response_model=Dict[str, Any])
-async def get_zabbix_dashboard_trends(time_from: int = None, time_till: int = None, current_user: dict = Depends(get_current_user)):
+@router.get("/groups", response_model=Dict[str, Any])
+async def get_zabbix_groups(current_user: dict = Depends(get_current_user)):
     try:
-        trends = await zabbix_service.get_global_trends(time_from=time_from, time_till=time_till)
+        groups = await zabbix_service.get_host_groups()
+        return {"status": "success", "data": groups}
+    except Exception as e:
+        logger.error(f"Error fetching Zabbix groups: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch groups: {str(e)}")
+
+@router.get("/dashboard/trends", response_model=Dict[str, Any])
+async def get_zabbix_dashboard_trends(time_from: int = None, time_till: int = None, groupid: str = None, current_user: dict = Depends(get_current_user)):
+    try:
+        trends = await zabbix_service.get_global_trends(time_from=time_from, time_till=time_till, groupid=groupid)
         return {"status": "success", "data": trends}
     except Exception as e:
         logger.error(f"Error fetching Zabbix trends: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch trends: {str(e)}")
 
 @router.get("/hosts", response_model=Dict[str, Any])
-async def get_zabbix_hosts(time_from: int = None, time_till: int = None, current_user: dict = Depends(get_current_user)):
+async def get_zabbix_hosts(time_from: int = None, time_till: int = None, groupid: str = None, current_user: dict = Depends(get_current_user)):
     try:
-        hosts = await zabbix_service.get_all_hosts(time_from=time_from, time_till=time_till)
+        hosts = await zabbix_service.get_all_hosts(time_from=time_from, time_till=time_till, groupid=groupid)
         return {"status": "success", "data": hosts}
     except Exception as e:
         logger.error(f"Error fetching Zabbix hosts: {str(e)}")
@@ -74,7 +83,14 @@ def get_fortigates_data(current_user: dict = Depends(get_current_user)):
         output_path = os.path.join(base_dir, "scripts", "fortigates_data.json")
         
         # Ejecutamos el script de PowerShell sincrónicamente (es más estable en Windows/uvicorn)
-        cmd = ["powershell.exe", "-ExecutionPolicy", "Bypass", "-File", ps1_path, "-OutputFile", output_path]
+        cmd = [
+            "powershell.exe", "-ExecutionPolicy", "Bypass", 
+            "-File", ps1_path, 
+            "-ZabbixURL", os.getenv("ZABBIX_URL"),
+            "-ZabbixUser", os.getenv("ZABBIX_USER"),
+            "-ZabbixPass", os.getenv("ZABBIX_PASSWORD"),
+            "-OutputFile", output_path
+        ]
         
         process = subprocess.run(cmd, capture_output=True, text=True)
         

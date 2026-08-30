@@ -10,6 +10,11 @@ class EnvSettings(BaseSettings):
     ENTRA_TENANT_ID: str = ""
     ENTRA_CLIENT_ID: str = ""
     ENTRA_CLIENT_SECRET: str = ""
+    ENTRA_TENANT_NAME: str = "Primary"
+    ENTRA_TENANT_ID_2: str = ""
+    ENTRA_CLIENT_ID_2: str = ""
+    ENTRA_CLIENT_SECRET_2: str = ""
+    ENTRA_TENANT_NAME_2: str = "Secondary"
     UNIFI_HOST: str = "192.168.1.111"
     UNIFI_PORT: int = 8443
     UNIFI_USER: str = "admin"

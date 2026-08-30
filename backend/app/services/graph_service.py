@@ -2,17 +2,18 @@ import httpx
 import time
 from app.core.config import env_settings
 
-_license_summary_cache = {"time": 0, "data": None}
-_subscribed_skus_cache = {"time": 0, "data": None}
-_user_id_cache = {}
+_license_summary_cache = {} # Keyed by tenant_id
+_subscribed_skus_cache = {} # Keyed by tenant_id
+_user_id_cache = {} # Keyed by f"{tenant_id}_{username_lower}"
 _LICENSE_CACHE_TTL = 300
 _USER_CACHE_TTL = 3600
 
 class MicrosoftGraphService:
-    def __init__(self):
-        self.tenant_id = env_settings.ENTRA_TENANT_ID
-        self.client_id = env_settings.ENTRA_CLIENT_ID
-        self.client_secret = env_settings.ENTRA_CLIENT_SECRET
+    def __init__(self, tenant_id: str = None, client_id: str = None, client_secret: str = None, tenant_name: str = ""):
+        self.tenant_id = tenant_id or env_settings.ENTRA_TENANT_ID
+        self.client_id = client_id or env_settings.ENTRA_CLIENT_ID
+        self.client_secret = client_secret or env_settings.ENTRA_CLIENT_SECRET
+        self.tenant_name = tenant_name
         self._token = None
         self._token_expires_at = 0
 
@@ -64,14 +65,15 @@ class MicrosoftGraphService:
     async def get_subscribed_skus(self):
         """Termómetro de Licencias"""
         global _subscribed_skus_cache
-        if time.time() - _subscribed_skus_cache["time"] < _LICENSE_CACHE_TTL and _subscribed_skus_cache["data"]:
-            return _subscribed_skus_cache["data"]
+        cache = _subscribed_skus_cache.setdefault(self.tenant_id, {"time": 0, "data": None})
+        if time.time() - cache["time"] < _LICENSE_CACHE_TTL and cache["data"]:
+            return cache["data"]
             
         data = await self._request("GET", "/subscribedSkus")
         skus = data.get("value", [])
         
-        _subscribed_skus_cache["data"] = skus
-        _subscribed_skus_cache["time"] = time.time()
+        cache["data"] = skus
+        cache["time"] = time.time()
         return skus
 
     async def get_sync_status(self):
@@ -126,9 +128,11 @@ class MicrosoftGraphService:
     async def resolve_user_id(self, username: str) -> str:
         """Encuentra el ID del usuario en Entra ID utilizando su username local o UPN."""
         username_lower = username.lower().strip()
-        if username_lower in _user_id_cache:
-            if time.time() - _user_id_cache[username_lower]["time"] < _USER_CACHE_TTL:
-                cached_id = _user_id_cache[username_lower]["id"]
+        cache_key = f"{self.tenant_id}_{username_lower}"
+        
+        if cache_key in _user_id_cache:
+            if time.time() - _user_id_cache[cache_key]["time"] < _USER_CACHE_TTL:
+                cached_id = _user_id_cache[cache_key]["id"]
                 if not cached_id:
                     raise ValueError(f"No se encontró el usuario '{username}' en Microsoft Entra ID. Verifica la sincronización.")
                 return cached_id
@@ -138,7 +142,7 @@ class MicrosoftGraphService:
             try:
                 data = await self._request("GET", f"/users/{username_lower}?$select=id,userPrincipalName")
                 if data and "id" in data:
-                    _user_id_cache[username_lower] = {"id": data["id"], "time": time.time()}
+                    _user_id_cache[cache_key] = {"id": data["id"], "time": time.time()}
                     return data["id"]
             except Exception:
                 pass
@@ -148,23 +152,31 @@ class MicrosoftGraphService:
         # 2. Intentamos buscar por varios campos (por si enviaron el SAMAccountName o un alias)
         data = await self._request("GET", f"/users?$filter=onPremisesSamAccountName eq '{username_lower}' or userPrincipalName eq '{username_lower}' or mail eq '{username_lower}'&$select=id,userPrincipalName&$count=true", headers=headers)
         if data.get("value"):
-            _user_id_cache[username_lower] = {"id": data["value"][0]["id"], "time": time.time()}
+            _user_id_cache[cache_key] = {"id": data["value"][0]["id"], "time": time.time()}
             return data["value"][0]["id"]
             
         # Fallback: mailNickname (usualmente coincide con el username si es nube nativa)
         data = await self._request("GET", f"/users?$filter=mailNickname eq '{username}'&$select=id,userPrincipalName&$count=true", headers=headers)
         if data.get("value"):
-            _user_id_cache[username_lower] = {"id": data["value"][0]["id"], "time": time.time()}
+            _user_id_cache[cache_key] = {"id": data["value"][0]["id"], "time": time.time()}
             return data["value"][0]["id"]
             
         # Fallback 2: userPrincipalName empiece con el username
         data = await self._request("GET", f"/users?$filter=startsWith(userPrincipalName,'{username}@')&$select=id,userPrincipalName&$count=true", headers=headers)
         if data.get("value"):
-            _user_id_cache[username_lower] = {"id": data["value"][0]["id"], "time": time.time()}
+            _user_id_cache[cache_key] = {"id": data["value"][0]["id"], "time": time.time()}
             return data["value"][0]["id"]
 
-        _user_id_cache[username_lower] = {"id": None, "time": time.time()}
+        _user_id_cache[cache_key] = {"id": None, "time": time.time()}
         raise ValueError(f"No se encontró el usuario '{username}' en Microsoft Entra ID. Verifica la sincronización.")
+
+    async def get_user_licenses(self, user_id: str) -> list:
+        """Obtiene las licencias asignadas actualmente a un usuario por su ID"""
+        try:
+            data = await self._request("GET", f"/users/{user_id}?$select=assignedLicenses")
+            return data.get("assignedLicenses", [])
+        except Exception as e:
+            raise ValueError(f"No se pudieron consultar las licencias del usuario: {e}")
 
     async def search_cloud_users(self, query: str = "*", limit: int = 50) -> list:
         """Busca usuarios en Entra ID por nombre, apellido, correo o userPrincipalName."""
@@ -218,8 +230,10 @@ class MicrosoftGraphService:
         
         # Bust the caches to reflect updated counts immediately
         global _subscribed_skus_cache, _license_summary_cache
-        _subscribed_skus_cache["time"] = 0
-        _license_summary_cache["time"] = 0
+        if self.tenant_id in _subscribed_skus_cache:
+            _subscribed_skus_cache[self.tenant_id]["time"] = 0
+        if self.tenant_id in _license_summary_cache:
+            _license_summary_cache[self.tenant_id]["time"] = 0
         
         return result
 
@@ -239,8 +253,10 @@ class MicrosoftGraphService:
         
         # Bust the caches to reflect updated counts immediately
         global _subscribed_skus_cache, _license_summary_cache
-        _subscribed_skus_cache["time"] = 0
-        _license_summary_cache["time"] = 0
+        if self.tenant_id in _subscribed_skus_cache:
+            _subscribed_skus_cache[self.tenant_id]["time"] = 0
+        if self.tenant_id in _license_summary_cache:
+            _license_summary_cache[self.tenant_id]["time"] = 0
         
         return result
 
@@ -297,8 +313,9 @@ class MicrosoftGraphService:
     async def get_all_users_license_summary(self):
         """Devuelve un diccionario {username_lower: bool} indicando si tienen licencias."""
         global _license_summary_cache
-        if time.time() - _license_summary_cache["time"] < _LICENSE_CACHE_TTL and _license_summary_cache["data"]:
-            return _license_summary_cache["data"]
+        cache = _license_summary_cache.setdefault(self.tenant_id, {"time": 0, "data": None})
+        if time.time() - cache["time"] < _LICENSE_CACHE_TTL and cache["data"]:
+            return cache["data"]
 
         token = await self._get_access_token()
         base_url = "https://graph.microsoft.com/v1.0"
@@ -321,8 +338,8 @@ class MicrosoftGraphService:
                         users_map[uname.lower()] = len(licenses) > 0
                 url = data.get("@odata.nextLink")
                 
-        _license_summary_cache["time"] = time.time()
-        _license_summary_cache["data"] = users_map
+        cache["time"] = time.time()
+        cache["data"] = users_map
         return users_map
 
     async def revoke_sessions(self, username: str):
@@ -600,67 +617,83 @@ class MicrosoftGraphService:
         """Encuentra usuarios con licencias y devuelve sus fechas de último inicio de sesión (AD y Outlook)."""
         import datetime
         now = datetime.datetime.utcnow()
-        
-        endpoint = f"/users?$select=id,displayName,userPrincipalName,assignedLicenses,signInActivity&$top=999"
+        # Añadimos accountEnabled, onPremisesSamAccountName y onPremisesImmutableId al select
+        endpoint = f"/users?$select=id,displayName,userPrincipalName,assignedLicenses,signInActivity,onPremisesSyncEnabled,accountEnabled,onPremisesSamAccountName,onPremisesImmutableId&$top=999"
         
         try:
-            data = await self._request("GET", endpoint)
-            
-            # Obtener los SKUs para filtrar solo las licencias de interés
+            # Obtener TODOS los SKUs reales del tenant para que no quede nada excluido
             subscribed_skus = await self.get_subscribed_skus()
-            target_sku_parts = {"SPB", "O365_BUSINESS_PREMIUM", "O365_BUSINESS_ESSENTIALS"}
-            target_sku_ids = {sku["skuId"] for sku in subscribed_skus if sku.get("skuPartNumber") in target_sku_parts}
+            target_sku_ids = {sku["skuId"] for sku in subscribed_skus}
             
             users_data = []
-            for user in data.get("value", []):
-                licenses = user.get("assignedLicenses", [])
-                if not licenses:
-                    continue
+            
+            fallback_mode = False
+            
+            # Loop de paginación para traer TODOS los usuarios
+            while endpoint:
+                # Si el endpoint viene de nextLink, limpiamos la base url para _request
+                if endpoint.startswith("https://graph.microsoft.com/v1.0/"):
+                    endpoint = endpoint.replace("https://graph.microsoft.com/v1.0/", "")
                     
-                # Verificar si el usuario tiene alguna de las licencias de interés
-                has_target_license = any(lic.get("skuId") in target_sku_ids for lic in licenses)
-                if not has_target_license:
-                    continue
-                    
-                ad_sign_in = None
-                outlook_sign_in = None
+                try:
+                    data = await self._request("GET", endpoint)
+                except ValueError as e:
+                    if "Authentication_RequestFromNonPremiumTenantOrB2CTenant" in str(e) and not fallback_mode:
+                        fallback_mode = True
+                        print(f"[GraphService] Tenant sin licencia Premium. Reintentando sin signInActivity.")
+                        endpoint = endpoint.replace(",signInActivity", "").replace("signInActivity,", "")
+                        data = await self._request("GET", endpoint)
+                    else:
+                        raise e
                 
-                if "signInActivity" in user and user["signInActivity"]:
-                    ad_sign_in_str = user["signInActivity"].get("lastSignInDateTime")
-                    outlook_sign_in_str = user["signInActivity"].get("lastNonInteractiveSignInDateTime")
-                    
-                    if ad_sign_in_str:
-                        ad_sign_in = ad_sign_in_str
-                    if outlook_sign_in_str:
-                        outlook_sign_in = outlook_sign_in_str
-                
-                def calc_days(date_str):
-                    if not date_str:
-                        return 9999
-                    try:
-                        # Parse ISO format string (e.g. 2023-01-01T00:00:00Z)
-                        dt = datetime.datetime.strptime(date_str[:19], "%Y-%m-%dT%H:%M:%S")
-                        return max(0, (now - dt).days)
-                    except Exception:
-                        return 9999
+                for user in data.get("value", []):
+                    licenses = user.get("assignedLicenses", [])
                         
-                user_target_licenses = []
-                for lic in licenses:
-                    if lic.get("skuId") in target_sku_ids:
-                        sku_part = next((s["skuPartNumber"] for s in subscribed_skus if s["skuId"] == lic.get("skuId")), "Unknown")
+                    ad_sign_in = None
+                    outlook_sign_in = None
+                    
+                    if "signInActivity" in user and user["signInActivity"]:
+                        ad_sign_in_str = user["signInActivity"].get("lastSignInDateTime")
+                        outlook_sign_in_str = user["signInActivity"].get("lastNonInteractiveSignInDateTime")
+                        
+                        if ad_sign_in_str:
+                            ad_sign_in = ad_sign_in_str
+                        if outlook_sign_in_str:
+                            outlook_sign_in = outlook_sign_in_str
+                    
+                    def calc_days(date_str):
+                        if not date_str:
+                            return 9999
+                        try:
+                            # Parse ISO format string (e.g. 2023-01-01T00:00:00Z)
+                            dt = datetime.datetime.strptime(date_str[:19], "%Y-%m-%dT%H:%M:%S")
+                            return max(0, (now - dt).days)
+                        except Exception:
+                            return 9999
+                            
+                    user_target_licenses = []
+                    for lic in licenses:
+                        # Buscamos el nombre de cualquier licencia que tenga, coincida o no
+                        sku_part = next((s["skuPartNumber"] for s in subscribed_skus if s["skuId"] == lic.get("skuId")), "Desconocida")
                         user_target_licenses.append(sku_part)
 
-                users_data.append({
-                    "id": user["id"],
-                    "displayName": user.get("displayName", ""),
-                    "userPrincipalName": user.get("userPrincipalName", ""),
-                    "lastSignInDateTimeAd": ad_sign_in,
-                    "lastSignInDateTimeOutlook": outlook_sign_in,
-                    "daysInactiveAd": calc_days(ad_sign_in),
-                    "daysInactiveOutlook": calc_days(outlook_sign_in),
-                    "licensesCount": len(licenses),
-                    "licenses": user_target_licenses
-                })
+                    users_data.append({
+                        "id": user["id"],
+                        "displayName": user.get("displayName", ""),
+                        "userPrincipalName": user.get("userPrincipalName", ""),
+                        "onPremisesSamAccountName": user.get("onPremisesSamAccountName", ""),
+                        "onPremisesImmutableId": user.get("onPremisesImmutableId", ""),
+                        "accountEnabled": user.get("accountEnabled", True),
+                        "onPremisesSyncEnabled": user.get("onPremisesSyncEnabled", False),
+                        "lastSignInDateTimeAd": ad_sign_in,
+                        "lastSignInDateTimeOutlook": outlook_sign_in,
+                        "daysInactiveAd": calc_days(ad_sign_in),
+                        "daysInactiveOutlook": calc_days(outlook_sign_in),
+                        "licensesCount": len(licenses),
+                        "licenses": user_target_licenses
+                    })
+                
+                endpoint = data.get("@odata.nextLink")
             
             return users_data
         except Exception as e:
@@ -700,7 +733,51 @@ class MicrosoftGraphService:
         except Exception as e:
             raise ValueError(f"Error generando link de OneDrive: {e}")
 
-graph_service = MicrosoftGraphService()
+# --- Multitenant Support ---
+_services_cache = {}
+
+def get_graph_service(tenant_id: str = "1") -> MicrosoftGraphService:
+    """Obtiene la instancia de Graph para el tenant seleccionado."""
+    if not tenant_id:
+        tenant_id = "1"
+        
+    if tenant_id in _services_cache:
+        return _services_cache[tenant_id]
+        
+    if tenant_id == "1":
+        svc = MicrosoftGraphService(
+            tenant_id=env_settings.ENTRA_TENANT_ID,
+            client_id=env_settings.ENTRA_CLIENT_ID,
+            client_secret=env_settings.ENTRA_CLIENT_SECRET,
+            tenant_name=getattr(env_settings, "ENTRA_TENANT_NAME", "Principal")
+        )
+        _services_cache["1"] = svc
+        return svc
+    elif tenant_id == "2":
+        if not getattr(env_settings, "ENTRA_TENANT_ID_2", None):
+            raise ValueError("El Tenant secundario (2) no está configurado en .env")
+        svc = MicrosoftGraphService(
+            tenant_id=env_settings.ENTRA_TENANT_ID_2,
+            client_id=env_settings.ENTRA_CLIENT_ID_2,
+            client_secret=env_settings.ENTRA_CLIENT_SECRET_2,
+            tenant_name=getattr(env_settings, "ENTRA_TENANT_NAME_2", "Secundario")
+        )
+        _services_cache["2"] = svc
+        return svc
+    else:
+        raise ValueError(f"Tenant index {tenant_id} no soportado.")
+
+def get_available_tenants():
+    """Retorna la lista de tenants configurados para el Frontend."""
+    tenants = []
+    if env_settings.ENTRA_TENANT_ID:
+        tenants.append({"id": "1", "name": getattr(env_settings, "ENTRA_TENANT_NAME", "Principal")})
+    if getattr(env_settings, "ENTRA_TENANT_ID_2", None):
+        tenants.append({"id": "2", "name": getattr(env_settings, "ENTRA_TENANT_NAME_2", "Secundario")})
+    return tenants
+
+# Mantenemos graph_service apuntando al Tenant 1 para retrocompatibilidad
+graph_service = get_graph_service("1")
 
 import subprocess
 import json

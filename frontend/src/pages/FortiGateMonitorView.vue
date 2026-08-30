@@ -113,9 +113,9 @@
               </template>
               
               <!-- Data Rows -->
-              <template v-else-if="filteredFortigates.length > 0">
+              <template v-else-if="paginatedFortigates.length > 0">
                 <tr 
-                  v-for="fg in filteredFortigates" 
+                  v-for="fg in paginatedFortigates" 
                   :key="fg.hostid" 
                   @click="openSidePanel(fg)"
                   class="bg-white border-b border-neutral-200 hover:bg-neutral-50 transition-colors cursor-pointer group"
@@ -215,6 +215,44 @@
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- Paginación UI -->
+        <div class="px-6 py-4 border-t border-neutral-200 bg-neutral-50 flex items-center justify-between" v-if="totalPages > 1">
+          <span class="text-sm text-neutral-500">
+            Mostrando {{ (currentPage - 1) * itemsPerPage + 1 }} a 
+            {{ Math.min(currentPage * itemsPerPage, filteredFortigates.length) }} de {{ filteredFortigates.length }}
+          </span>
+          
+          <div class="flex items-center gap-1">
+            <button 
+              @click="currentPage > 1 ? currentPage-- : null"
+              :disabled="currentPage === 1"
+              class="p-1.5 rounded text-neutral-500 hover:bg-neutral-200 hover:text-neutral-700 disabled:opacity-50 disabled:hover:bg-transparent transition-colors"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+            </button>
+            
+            <div class="flex items-center gap-1">
+              <button 
+                v-for="p in totalPages" 
+                :key="p"
+                @click="currentPage = p"
+                class="w-8 h-8 rounded text-sm font-medium transition-colors"
+                :class="currentPage === p ? 'bg-blue-50 text-blue-600' : 'text-neutral-600 hover:bg-neutral-200'"
+              >
+                {{ p }}
+              </button>
+            </div>
+
+            <button 
+              @click="currentPage < totalPages ? currentPage++ : null"
+              :disabled="currentPage === totalPages"
+              class="p-1.5 rounded text-neutral-500 hover:bg-neutral-200 hover:text-neutral-700 disabled:opacity-50 disabled:hover:bg-transparent transition-colors"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1434,6 +1472,23 @@ const filteredFortigates = computed(() => {
   );
 });
 
+// --- Paginación ---
+const currentPage = ref(1);
+const itemsPerPage = 15;
+
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredFortigates.value.length / itemsPerPage)));
+
+const paginatedFortigates = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage;
+  const end = start + itemsPerPage;
+  return filteredFortigates.value.slice(start, end);
+});
+
+watch(searchQuery, () => {
+  currentPage.value = 1;
+});
+
+
 const metricTone = (value) => {
   const n = Number(value);
   return n > 0 ? 'font-bold text-neutral-800' : 'font-medium text-neutral-300';
@@ -1685,6 +1740,9 @@ const fetchFortigates = async (isSilent = false) => {
     }
 
     // Trigger background fetch for DHCP counts for all hosts (if first load or periodic)
+    // COMENTADO PARA EVITAR CONGELAMIENTO AL TENER MÁS DE 300 EQUIPOS
+    // Si realmente lo necesitan, debería implementarse una carga progresiva solo para los visibles
+    /*
     fortigates.value.forEach(async (fg) => {
       if (fg.dhcp_count === '-' || fg.dhcp_loading) return; // already know it's unconfigured or loading
       try {
@@ -1706,6 +1764,7 @@ const fetchFortigates = async (isSilent = false) => {
         fg.dhcp_loading = false;
       }
     });
+    */
 
   } catch (error) {
     console.error("Error cargando datos de Zabbix:", error);

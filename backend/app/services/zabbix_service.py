@@ -54,7 +54,7 @@ class ZabbixService:
             "params": {"username": self.username, "password": self.password},
             "id": 1
         }
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(verify=False) as client:
             try:
                 response = await client.post(self.url, json=payload, timeout=10.0)
                 response.raise_for_status()
@@ -71,7 +71,7 @@ class ZabbixService:
         if not self.auth_token:
             await self._authenticate()
         
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(verify=False) as client:
             # Get Total and Online servers
             payload_hosts = {
                 "jsonrpc": "2.0", "method": "host.get",
@@ -99,7 +99,23 @@ class ZabbixService:
                 "critical_problems": critical_problems
             }
 
-    async def get_all_hosts(self, time_from: int = None, time_till: int = None):
+    async def get_host_groups(self):
+        if not self.auth_token:
+            await self._authenticate()
+        
+        payload = {
+            "jsonrpc": "2.0", "method": "hostgroup.get",
+            "params": {"output": ["groupid", "name"]},
+            "auth": self.auth_token, "id": 1
+        }
+        async with httpx.AsyncClient(verify=False) as client:
+            resp = await client.post(self.url, json=payload, timeout=10.0)
+            groups = resp.json().get("result", [])
+            # Sort alphabetically by name
+            groups.sort(key=lambda x: x.get("name", "").lower())
+            return groups
+
+    async def get_all_hosts(self, time_from: int = None, time_till: int = None, groupid: str = None):
         if not self.auth_token:
             await self._authenticate()
         
@@ -118,7 +134,10 @@ class ZabbixService:
             "auth": self.auth_token, "id": 2
         }
         
-        async with httpx.AsyncClient() as client:
+        if groupid and groupid != "all":
+            payload_hosts["params"]["groupids"] = groupid
+        
+        async with httpx.AsyncClient(verify=False) as client:
             resp_hosts = await client.post(self.url, json=payload_hosts, timeout=15.0)
             hosts = resp_hosts.json().get("result", [])
             
@@ -349,7 +368,7 @@ class ZabbixService:
         ]
         param_filter = {"hostids": host_id_or_name} if host_id_or_name.isdigit() else {"host": host_id_or_name}
         
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(verify=False) as client:
             payload = {
                 "jsonrpc": "2.0", "method": "item.get",
                 "params": {
@@ -499,8 +518,8 @@ class ZabbixService:
 
             return metrics
 
-    async def get_global_trends(self, time_from: int = None, time_till: int = None):
-        hosts = await self.get_all_hosts(time_from=time_from, time_till=time_till)
+    async def get_global_trends(self, time_from: int = None, time_till: int = None, groupid: str = None):
+        hosts = await self.get_all_hosts(time_from=time_from, time_till=time_till, groupid=groupid)
         if not hosts: return {"cpu_trends": [], "ram_trends": []}
         
         top_cpu = sorted(hosts, key=lambda x: x["cpu"], reverse=True)[:5]
@@ -515,7 +534,7 @@ class ZabbixService:
         if not self.auth_token:
             await self._authenticate()
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(verify=False) as client:
             # 1. Buscar el host Issabel-PBX
             payload_host = {
                 "jsonrpc": "2.0", "method": "host.get",

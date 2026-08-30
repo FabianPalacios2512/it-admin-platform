@@ -352,6 +352,87 @@ def get_ad_health_stats() -> dict:
     
     return result
 
+_last_logon_cache = {"time": 0, "data": None}
+
+def get_all_users_last_logon() -> dict:
+    """Retorna un diccionario con datos cruzables del AD."""
+    global _last_logon_cache
+    import time
+    
+    # 10 minute cache TTL
+    if time.time() - _last_logon_cache["time"] < 600 and _last_logon_cache["data"] is not None:
+        return _last_logon_cache["data"]
+        
+    conn = _get_admin_connection()
+    search_base = _get_search_base()
+    
+    entries = _paged_search(
+        conn=conn,
+        search_base=search_base,
+        search_filter="(&(objectCategory=person)(objectClass=user))",
+        attributes=['sAMAccountName', 'lastLogonTimestamp', 'lastLogon', 'objectGUID']
+    )
+    
+    result = {
+        "by_guid": {},
+        "by_sam": {}
+    }
+    import datetime
+    import base64
+    
+    for entry in entries:
+        username = str(entry.sAMAccountName).lower() if 'sAMAccountName' in entry and entry.sAMAccountName else None
+        
+        immutable_id = None
+        if 'objectGUID' in entry and entry.objectGUID.raw_values:
+            raw_guid = entry.objectGUID.raw_values[0]
+            immutable_id = base64.b64encode(raw_guid).decode('utf-8')
+            
+        file_time = 0
+        iso_val = None
+        
+        for attr in ['lastLogonTimestamp', 'lastLogon']:
+            if attr in entry and entry[attr].value:
+                val = entry[attr].value
+                try:
+                    if hasattr(val, 'isoformat'):
+                        iso_str = val.isoformat()
+                        if not iso_str.startswith('1601'):
+                            iso_val = iso_str
+                            break
+                    else:
+                        file_time = int(val)
+                        if file_time > 0 and file_time != 94668480000000000: # not epoch or weird
+                            break
+                except Exception:
+                    pass
+                    
+        final_iso = None
+        if iso_val:
+            final_iso = iso_val
+        elif file_time > 0:
+            try:
+                unix_time = (file_time / 10000000) - 11644473600
+                if unix_time > 0:
+                    dt = datetime.datetime.fromtimestamp(unix_time, tz=datetime.timezone.utc)
+                    if dt.year > 1900:
+                        final_iso = dt.isoformat()
+            except Exception:
+                pass
+                
+        if final_iso:
+            if immutable_id:
+                result["by_guid"][immutable_id] = final_iso
+            if username:
+                result["by_sam"][username] = final_iso
+                
+    conn.unbind()
+    
+    _last_logon_cache["time"] = time.time()
+    _last_logon_cache["data"] = result
+    
+    return result
+
 
 # ══════════════════════════════════════════════════════════════
 # DESBLOQUEAR CUENTA

@@ -278,7 +278,7 @@ let inactivityTimer = null
 
 const getInactivityLimit = () => {
   const p = route.path
-  if (p.startsWith('/monitoring-zabbix')) return null // Nunca cerrar sesión
+  if (p.startsWith('/monitoring-zabbix') || p.startsWith('/licencias-inactivas')) return null // Nunca cerrar sesión
   if (p.startsWith('/diagnostico') || p.startsWith('/cuentas')) return 60 * 60 * 1000 // 1 hora
   return 5 * 60 * 1000 // 5 minutos por defecto
 }
