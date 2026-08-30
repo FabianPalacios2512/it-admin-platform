@@ -738,7 +738,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue';
 import FortiGateMonitorView from './FortiGateMonitorView.vue';
 import zabbixService from '../services/zabbix.service';
 import { useChartDownsampling } from '@/composables/useChartDownsampling';
