@@ -290,8 +290,8 @@ const paginatedUsers = computed(() => {
   return filteredAndSortedUsers.value.slice(start, end)
 })
 
-// Resetear a página 1 cuando cambien los filtros
-watch([searchQuery, inactivityDaysFilter, accountStateFilter, selectedLicenses], () => {
+// Resetear a página 1 cuando cambien los filtros o el ordenamiento
+watch([searchQuery, inactivityDaysFilter, accountStateFilter, selectedLicenses, sortColumn, sortDesc], () => {
   currentPage.value = 1
 })
 

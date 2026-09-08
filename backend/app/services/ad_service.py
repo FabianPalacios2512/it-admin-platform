@@ -353,14 +353,17 @@ def get_ad_health_stats() -> dict:
     return result
 
 _last_logon_cache = {"time": 0, "data": None}
+_groups_cache = {"time": 0, "data": None}
+_GROUPS_CACHE_TTL = 300   # 5 minutos
+_LOGON_CACHE_TTL  = 1800  # 30 minutos
 
 def get_all_users_last_logon() -> dict:
     """Retorna un diccionario con datos cruzables del AD."""
     global _last_logon_cache
     import time
     
-    # 10 minute cache TTL
-    if time.time() - _last_logon_cache["time"] < 600 and _last_logon_cache["data"] is not None:
+    # 30 minute cache TTL (extended from 10)
+    if time.time() - _last_logon_cache["time"] < _LOGON_CACHE_TTL and _last_logon_cache["data"] is not None:
         return _last_logon_cache["data"]
         
     conn = _get_admin_connection()
@@ -579,6 +582,23 @@ def get_ad_groups() -> list:
         
     conn.unbind()
     return groups_list
+
+
+def get_ad_groups_cached() -> list:
+    """Versión cacheada de get_ad_groups (TTL 5 min). Retorna cache si existe, sino llama get_ad_groups."""
+    global _groups_cache
+    if time.time() - _groups_cache["time"] < _GROUPS_CACHE_TTL and _groups_cache["data"] is not None:
+        return _groups_cache["data"]
+    result = get_ad_groups()
+    _groups_cache["time"] = time.time()
+    _groups_cache["data"] = result
+    return result
+
+
+def invalidate_groups_cache():
+    """Invalida el caché de grupos AD. Llamar después de crear/modificar grupos."""
+    global _groups_cache
+    _groups_cache = {"time": 0, "data": None}
 
 
 def create_ad_group(data: dict) -> dict:

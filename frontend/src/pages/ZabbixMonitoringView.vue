@@ -28,6 +28,11 @@
           <i class="fas fa-sync-alt" :class="{'animate-spin': loadingTrends || loadingHosts}"></i>
           Refrescar
         </button>
+        <!-- Last Updated Badge (like Zabbix) -->
+        <div v-if="lastRefreshed" class="text-[10px] text-slate-400 font-mono bg-slate-50 border border-slate-200 px-2 py-1 rounded-lg flex items-center gap-1.5">
+          <i class="fas fa-clock text-slate-300"></i>
+          <span>{{ lastRefreshed }}</span>
+        </div>
       </div>
     </header>
 
@@ -95,16 +100,16 @@
       <!-- Fila 1: Core Metrics (NOC Light Theme) -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <!-- Tarjeta 1: Estado del Motor -->
-        <div class="bg-white rounded-md shadow-sm border border-gray-200 p-4 flex flex-col justify-between relative overflow-hidden transition-all">
-          <div class="flex justify-between items-start mb-1">
+        <div class="bg-white rounded-md shadow-sm border border-gray-200 px-3 py-2 flex flex-col justify-between relative overflow-hidden transition-all">
+          <div class="flex justify-between items-start mb-0.5">
             <span class="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500">Estado del Motor</span>
           </div>
-          <div class="flex items-center gap-3 mt-2">
-            <div class="w-10 h-10 rounded-full flex items-center justify-center shrink-0" :class="pbxData.asterisk_down ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-500'">
-              <i class="fas fa-server text-xl drop-shadow-sm"></i>
+          <div class="flex items-center gap-3 mt-1">
+            <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0" :class="pbxData.asterisk_down ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-500'">
+              <i class="fas fa-server text-lg drop-shadow-sm"></i>
             </div>
             <div class="min-w-0 flex-1">
-              <div class="text-xl font-black tracking-tight truncate" :class="pbxData.asterisk_down ? 'text-red-600' : 'text-slate-800'">
+              <div class="text-lg font-black tracking-tight truncate" :class="pbxData.asterisk_down ? 'text-red-600' : 'text-slate-800'">
                 {{ pbxData.asterisk_down ? 'CAÍDO' : 'EN LÍNEA' }}
               </div>
               <div class="text-[9px] font-semibold text-slate-500 flex items-center gap-1.5 truncate">
@@ -115,102 +120,175 @@
           </div>
         </div>
 
-        <!-- Tarjeta 2: Llamadas Activas -->
-        <div class="bg-white rounded-md shadow-sm border border-gray-200 p-4 flex flex-col justify-between items-center text-center relative overflow-hidden transition-all">
-          <span class="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-1">Llamadas Activas</span>
-          <div class="flex items-center gap-2 mt-1">
-            <div class="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center shrink-0">
-              <i class="fas fa-phone-alt text-sm text-blue-500 drop-shadow-sm"></i>
+        <!-- Tarjeta 2: Llamadas Activas (clickable) -->
+        <div
+          @click="!pbxData.asterisk_down && (showActiveCalls = true)"
+          class="bg-white rounded-md shadow-sm border border-gray-200 px-3 py-2 flex flex-col justify-between items-center text-center relative overflow-hidden transition-all"
+          :class="!pbxData.asterisk_down ? 'cursor-pointer hover:border-blue-300 hover:shadow-blue-100 hover:shadow-md group' : ''"
+        >
+          <span class="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-0.5">Llamadas Activas</span>
+          <div class="flex items-center gap-2 mt-0.5">
+            <div class="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center shrink-0 group-hover:bg-blue-100 transition-colors">
+              <i class="fas fa-phone-alt text-[11px] text-blue-500 drop-shadow-sm"></i>
             </div>
-            <div class="text-3xl font-black font-mono tracking-tighter leading-none" :class="pbxData.asterisk_down ? 'text-red-500' : 'text-slate-800'">
+            <div class="text-2xl font-black font-mono tracking-tighter leading-none" :class="pbxData.asterisk_down ? 'text-red-500' : 'text-slate-800'">
               {{ pbxData.asterisk_down ? '--' : pbxData.llamadas_activas }}
             </div>
           </div>
-          <span class="text-[8px] text-slate-400 font-bold uppercase mt-2 tracking-[0.1em]">Conexiones Concurrentes</span>
+          <span class="text-[8px] text-slate-400 font-bold uppercase mt-1.5 tracking-[0.1em]">Conexiones Concurrentes</span>
+          <!-- Click hint -->
+          <div v-if="!pbxData.asterisk_down" class="absolute bottom-1 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <span class="text-[8px] text-blue-500 font-bold flex items-center gap-1"><i class="fas fa-eye"></i> Ver detalle</span>
+          </div>
         </div>
 
-        <!-- Tarjeta 3: Troncal SIP 101 -->
-        <div class="bg-white rounded-md shadow-sm p-4 flex flex-col justify-between relative overflow-hidden transition-all"
+        <!-- Tarjeta 3: Troncal SIP IN-HYM -->
+        <div class="bg-white rounded-md shadow-sm px-3 py-2 flex flex-col justify-between relative overflow-hidden transition-all"
              :class="(pbxData.troncal_101 === 0 || pbxData.server_down || pbxData.asterisk_down) ? 'bg-red-50 border-l-4 border-y border-r border-red-500' : 'border border-gray-200'">
-          <div class="flex justify-between items-start mb-1">
+          <div class="flex justify-between items-start mb-0.5">
             <span class="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500" :class="(pbxData.troncal_101 === 0 || pbxData.server_down || pbxData.asterisk_down) ? 'text-red-600' : ''">Troncal SIP (Claro/Tigo)</span>
+            <span class="text-[8px] font-bold text-slate-400 mt-0.5 uppercase" :class="(pbxData.troncal_101 === 0 || pbxData.server_down || pbxData.asterisk_down) ? 'text-red-500' : ''">
+              <span class="w-1.5 h-1.5 rounded-full inline-block shrink-0 mr-0.5 align-middle" :class="(pbxData.troncal_101 === 0 || pbxData.server_down || pbxData.asterisk_down) ? 'bg-red-500' : 'bg-slate-300'"></span>
+              Enlace [IN-HYM]
+            </span>
           </div>
-          <div class="flex items-center gap-3 mt-2">
-            <div class="w-10 h-10 rounded-full flex items-center justify-center shrink-0" :class="(pbxData.troncal_101 === 1 && !pbxData.server_down) ? 'bg-emerald-50 text-emerald-500' : ((pbxData.troncal_101 === 0 || pbxData.server_down || pbxData.asterisk_down) ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-slate-50 text-slate-400')">
-              <i class="fas fa-exclamation-triangle text-xl drop-shadow-sm" v-if="pbxData.troncal_101 === 0 || pbxData.server_down || pbxData.asterisk_down"></i>
-              <i class="fas fa-network-wired text-xl drop-shadow-sm" v-else></i>
+          <div class="flex items-center gap-3 mt-1">
+            <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0" :class="(pbxData.troncal_101 === 1 && !pbxData.server_down) ? 'bg-emerald-50 text-emerald-500' : ((pbxData.troncal_101 === 0 || pbxData.server_down || pbxData.asterisk_down) ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-slate-50 text-slate-400')">
+              <i class="fas fa-exclamation-triangle text-lg drop-shadow-sm" v-if="pbxData.troncal_101 === 0 || pbxData.server_down || pbxData.asterisk_down"></i>
+              <i class="fas fa-network-wired text-lg drop-shadow-sm" v-else></i>
             </div>
             <div class="min-w-0 flex-1">
-              <div class="text-xl font-black tracking-tight truncate" :class="(pbxData.troncal_101 === 1 && !pbxData.server_down && !pbxData.asterisk_down) ? 'text-slate-800' : ((pbxData.troncal_101 === 0 || pbxData.server_down || pbxData.asterisk_down) ? 'text-red-700' : 'text-slate-500')">
+              <div class="text-lg font-black tracking-tight truncate" :class="(pbxData.troncal_101 === 1 && !pbxData.server_down && !pbxData.asterisk_down) ? 'text-slate-800' : ((pbxData.troncal_101 === 0 || pbxData.server_down || pbxData.asterisk_down) ? 'text-red-700' : 'text-slate-500')">
                 {{ pbxData.server_down ? 'DESCONECT' : (pbxData.asterisk_down ? 'CAÍDO' : (pbxData.troncal_101 === 1 ? 'OK' : (pbxData.troncal_101 === 0 ? 'FALLA' : 'N/A'))) }}
               </div>
               <div class="text-[9px] font-semibold flex items-center gap-1.5 truncate" :class="(pbxData.troncal_101 === 0 || pbxData.server_down || pbxData.asterisk_down) ? 'text-red-500' : 'text-slate-500'">
                 <span class="w-1.5 h-1.5 rounded-full inline-block shrink-0" :class="(pbxData.troncal_101 === 1 && !pbxData.server_down && !pbxData.asterisk_down) ? 'bg-emerald-500' : 'bg-red-600'"></span>
-                Enlace [101]
+                Enlace [IN-HYM]
               </div>
             </div>
           </div>
         </div>
 
         <!-- Tarjeta 4: Extensiones Registradas -->
-        <div class="bg-white rounded-md shadow-sm border border-gray-200 p-4 flex flex-col justify-between items-center text-center relative overflow-hidden transition-all">
-          <span class="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-1">Ext. Registradas</span>
-          <div class="flex items-center gap-2 mt-1">
-            <div class="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center shrink-0">
-              <i class="fas fa-users text-sm text-emerald-500 drop-shadow-sm"></i>
+        <div class="bg-white rounded-md shadow-sm border border-gray-200 px-3 py-2 flex flex-col justify-between items-center text-center relative overflow-hidden transition-all">
+          <span class="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-0.5">Ext. Registradas</span>
+          <div class="flex items-center gap-2 mt-0.5">
+            <div class="w-7 h-7 rounded-full bg-emerald-50 flex items-center justify-center shrink-0">
+              <i class="fas fa-users text-[11px] text-emerald-500 drop-shadow-sm"></i>
             </div>
-            <div class="text-2xl font-black font-mono tracking-tighter leading-none" :class="pbxData.asterisk_down ? 'text-red-500' : 'text-slate-800'">
-              {{ pbxData.asterisk_down ? '-- / --' : pbxData.extensiones_registradas }}
+            <div class="text-xl font-black font-mono tracking-tighter leading-none" :class="pbxData.asterisk_down ? 'text-red-500' : 'text-slate-800'">
+              {{ pbxData.asterisk_down ? '-- / --' : `${pbxData.ext_online} / ${pbxData.ext_total}` }}
             </div>
           </div>
-          <span class="text-[8px] text-slate-400 font-bold uppercase mt-2 tracking-[0.1em]">Online / Total</span>
+          <span class="text-[8px] text-slate-400 font-bold uppercase mt-1.5 tracking-[0.1em]">Online / Total</span>
         </div>
       </div>
 
-      <!-- Fila 2: Auditoría e Infraestructura -->
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-2">
-        <!-- Columna Izquierda: Auditor Sintético -->
+      <!-- Fila 2: Infraestructura y Opciones -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-2">
+
+        <!-- Columna Central: Estado de Seguridad (NOC Style) -->
         <div class="bg-white rounded-md shadow-sm border border-gray-200 p-4 transition-all flex flex-col relative overflow-hidden">
-          <h3 class="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-2 flex items-center gap-2 shrink-0 relative z-10">
-            <i class="fas fa-robot text-blue-500 text-xs"></i> Auditor Sintético IVR
+          <!-- Header -->
+          <h3 class="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-3 flex items-center gap-2">
+            Estado de Seguridad
           </h3>
-          <!-- Ondas de fondo sutiles -->
-          <div class="absolute inset-0 opacity-[0.02] bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiPgo8cGF0aCBkPSJNMCA1MCBRIDI1IDMwIDUwIDUwIFQgMTAwIDUwIiBzdHJva2U9IiMzYjgyZjYiIGZpbGw9Im5vbmUiIHN0cm9rZS13aWR0aD0iMiIgLz4KPHBhdGggZD0iTTAgNTAgUSAyNSA3MCA1MCA1MCBUIDEwMCA1MCIgc3Ryb2tlPSIjM2I4MmY2IiBmaWxsPSJub25lIiBzdHJva2Utd2lkdGg9IjIiIC8+Cjwvc3ZnPg==')] bg-center bg-no-repeat bg-cover"></div>
-          
-          <div class="flex-1 flex flex-row items-center gap-4 py-2 relative z-10">
-            <div class="w-12 h-12 rounded-full flex items-center justify-center shrink-0 border" :class="(pbxData.robot_ivr === 1 && !pbxData.server_down && !pbxData.asterisk_down) ? 'bg-emerald-50 border-emerald-200' : ((pbxData.robot_ivr === 0 || pbxData.server_down || pbxData.asterisk_down) ? 'bg-red-50 border-red-200' : 'bg-slate-100 border-slate-200')">
-              <i class="fas fa-robot text-2xl" :class="(pbxData.robot_ivr === 1 && !pbxData.server_down && !pbxData.asterisk_down) ? 'text-emerald-500' : ((pbxData.robot_ivr === 0 || pbxData.server_down || pbxData.asterisk_down) ? 'text-red-500' : 'text-slate-400')"></i>
+
+          <div v-if="pbxSecurityStatus.loading && !pbxSecurityStatus.fetched" class="flex justify-center items-center flex-1">
+            <i class="fas fa-circle-notch fa-spin text-slate-300"></i>
+          </div>
+
+          <div v-else class="flex gap-3 items-stretch flex-1">
+
+            <!-- Columna Izquierda: Estado general (estilo imagen referencia) -->
+            <div class="flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-lg min-w-[90px] shrink-0 transition-all"
+                 :class="pbxSecurityStatus.anomaly
+                   ? 'bg-red-50 border border-red-200'
+                   : 'bg-emerald-50 border border-emerald-200'">
+              <!-- Icono escudo con check o exclamación -->
+              <div class="relative mb-1">
+                <i class="fas fa-shield-alt text-3xl"
+                   :class="pbxSecurityStatus.anomaly ? 'text-red-400' : 'text-emerald-400'"></i>
+                <span class="absolute -bottom-0.5 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-white text-[8px] font-bold"
+                      :class="pbxSecurityStatus.anomaly ? 'bg-red-500' : 'bg-emerald-500'">
+                  <i class="fas" :class="pbxSecurityStatus.anomaly ? 'fa-exclamation' : 'fa-check'"></i>
+                </span>
+              </div>
+              <span class="text-[9px] font-black uppercase tracking-tight text-center leading-tight"
+                    :class="pbxSecurityStatus.anomaly ? 'text-red-600' : 'text-emerald-600'">
+                {{ pbxSecurityStatus.anomaly ? 'ALERTA' : 'SIN ANOMALÍAS' }}
+              </span>
+              <span class="text-[8px] text-slate-500 text-center leading-tight">
+                {{ pbxSecurityStatus.anomaly ? 'Revisar sistema' : 'Sistema estable' }}
+              </span>
             </div>
-            <div class="flex flex-col justify-center">
-              <div class="text-sm font-black tracking-tight uppercase" :class="(pbxData.robot_ivr === 1 && !pbxData.server_down && !pbxData.asterisk_down) ? 'text-emerald-600' : ((pbxData.robot_ivr === 0 || pbxData.server_down || pbxData.asterisk_down) ? 'text-red-600' : 'text-slate-500')">
-                {{ pbxData.server_down ? 'SERVIDOR DESCONECTADO' : (pbxData.asterisk_down ? 'FALLA (MOTOR CAÍDO)' : (pbxData.robot_ivr === 1 ? 'PASANDO CORRECTAMENTE' : (pbxData.robot_ivr === 0 ? '¡FALLA EN PRUEBA!' : 'SIN DATOS'))) }}
+
+            <!-- Separador -->
+            <div class="w-px bg-slate-100 shrink-0"></div>
+
+            <!-- Columna Derecha: KPIs en grid -->
+            <div class="flex flex-1 items-center justify-between gap-4 px-2">
+
+              <!-- KPI 1: Intentos de acceso 24h -->
+              <div class="flex items-center gap-2.5">
+                <div class="text-3xl font-black font-mono leading-none tracking-tighter"
+                     :class="(pbxSecurityStatus.failed_attempts_24h || 0) > 50 ? 'text-red-600' : 'text-slate-800'">
+                  {{ pbxSecurityStatus.failed_attempts_24h ?? '--' }}
+                </div>
+                <div class="flex flex-col text-left">
+                  <div class="flex items-center gap-1.5 text-slate-600">
+                    <span class="text-[9px] font-bold leading-tight">Intentos de acceso</span>
+                  </div>
+                  <div class="flex items-center gap-1 mt-0.5">
+                    <i class="fas fa-door-open text-slate-400 text-[10px]"></i>
+                    <span class="text-[8px] text-slate-400 font-medium">(últimas 24h)</span>
+                  </div>
+                </div>
               </div>
-              <div class="mt-1 flex items-center gap-1.5 text-[9px] font-bold text-slate-500 uppercase tracking-widest">
-                <span class="w-1.5 h-1.5 rounded-full" :class="(pbxData.robot_ivr === 1 && !pbxData.server_down && !pbxData.asterisk_down) ? 'bg-emerald-500' : 'bg-slate-300'"></span>
-                Última ejecución: Hace 1 min
+
+              <!-- KPI 2: IPs bloqueadas -->
+              <div class="flex items-center gap-2.5">
+                <div class="text-3xl font-black font-mono leading-none tracking-tighter"
+                     :class="(pbxSecurityStatus.blocked_ips || 0) > 0 ? 'text-amber-600' : 'text-slate-800'">
+                  {{ pbxSecurityStatus.blocked_ips ?? '--' }}
+                </div>
+                <div class="flex flex-col text-left">
+                  <div class="flex items-center gap-1.5 text-slate-600">
+                    <span class="text-[9px] font-bold leading-tight">Bloqueos activos</span>
+                  </div>
+                  <div class="flex items-center gap-1 mt-0.5">
+                    <i class="fas fa-ban text-slate-400 text-[10px]"></i>
+                    <span class="text-[8px] text-slate-400 font-medium">(por Fail2Ban)</span>
+                  </div>
+                </div>
               </div>
+
+              <!-- KPI 3: IPs sospechosas -->
+              <div class="flex items-center gap-2.5">
+                <div class="text-3xl font-black font-mono leading-none tracking-tighter"
+                     :class="(pbxSecurityStatus.suspicious_ips || 0) > 5 ? 'text-red-600' : 'text-slate-800'">
+                  {{ pbxSecurityStatus.suspicious_ips ?? '--' }}
+                </div>
+                <div class="flex flex-col text-left">
+                  <div class="flex items-center gap-1.5 text-slate-600">
+                    <span class="text-[9px] font-bold leading-tight">IPs sospechosas</span>
+                  </div>
+                  <div class="flex items-center gap-1 mt-0.5">
+                    <i class="fas fa-user-secret text-slate-400 text-[10px]"></i>
+                    <span class="text-[8px] text-slate-400 font-medium">(últimas 24h)</span>
+                  </div>
+                </div>
+              </div>
+
             </div>
           </div>
         </div>
 
-        <!-- Columna Central: Opciones de Menú (Píldoras) -->
-        <div class="bg-white rounded-md shadow-sm border border-gray-200 p-4 transition-all flex flex-col relative overflow-hidden">
-          <h3 class="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-2 flex items-center gap-2">
-            <i class="fas fa-sitemap text-blue-500 text-xs"></i> Opciones de Menú
-          </h3>
-          <div class="flex flex-wrap gap-2 mt-1">
-            <div v-for="i in 9" :key="i" class="px-2 py-1 rounded-full border flex items-center shadow-sm transition-colors"
-                 :class="(!pbxData.server_down && !pbxData.asterisk_down && pbxData.ivr_options?.[i]?.value === 1) ? 'bg-white border-emerald-200 text-slate-700' : ((pbxData.server_down || pbxData.asterisk_down || pbxData.ivr_options?.[i]?.value === 0) ? 'bg-red-50 border-red-200 text-red-600' : 'bg-slate-50 border-slate-200 text-slate-400')">
-              <span class="w-1.5 h-1.5 rounded-full inline-block mr-1.5" :class="(!pbxData.server_down && !pbxData.asterisk_down && pbxData.ivr_options?.[i]?.value === 1) ? 'bg-emerald-500' : ((pbxData.server_down || pbxData.asterisk_down || pbxData.ivr_options?.[i]?.value === 0) ? 'bg-red-500' : 'bg-slate-300')"></span>
-              <span class="text-xs font-mono font-semibold" :class="(pbxData.server_down || pbxData.asterisk_down) ? 'opacity-70 line-through' : ''">{{ getOptionName(i, pbxData.ivr_options?.[i]?.name) }}</span>
-            </div>
-          </div>
-        </div>
 
         <!-- Columna Derecha: Almacenamiento PBX -->
         <div class="bg-white rounded-md shadow-sm border border-gray-200 p-4 transition-all flex flex-col justify-center relative">
           <h3 class="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-2 flex items-center gap-2">
-            <i class="fas fa-hdd text-blue-500 text-xs"></i> Almacenamiento PBX
+            Almacenamiento PBX
           </h3>
           <div class="flex flex-col gap-2 mt-1">
             <div class="flex justify-between items-end">
@@ -218,86 +296,135 @@
                 <span class="text-xs font-semibold text-slate-700">Ruta de Grabaciones</span>
                 <span class="text-[9px] font-mono text-slate-400">/var/spool/asterisk/monitor</span>
               </div>
-              <span class="text-lg font-bold font-mono" :class="pbxData.almacenamiento_pbx > 80 ? 'text-red-600' : 'text-slate-600'">
-                {{ pbxData.almacenamiento_pbx }}%
+              <span class="text-lg font-bold font-mono" :class="pbxData.storage_percent > 80 ? 'text-red-600' : 'text-slate-600'">
+                {{ pbxData.storage_percent || '--' }}%
               </span>
             </div>
             <div class="h-2.5 w-full bg-slate-100 rounded-sm overflow-hidden border border-slate-200">
               <div class="h-full transition-all duration-500"
-                   :class="pbxData.almacenamiento_pbx > 80 ? 'bg-red-500' : (pbxData.almacenamiento_pbx > 60 ? 'bg-amber-400' : 'bg-emerald-500')"
-                   :style="`width: ${pbxData.almacenamiento_pbx}%`">
+                   :class="pbxData.storage_percent > 80 ? 'bg-red-500' : (pbxData.storage_percent > 60 ? 'bg-amber-400' : 'bg-emerald-500')"
+                   :style="`width: ${pbxData.storage_percent || 0}%`">
               </div>
             </div>
-            <div class="text-[9px] text-slate-400 font-medium text-right mt-0.5 uppercase tracking-widest">
-              Uso de Disco Crítico > 80%
+            <div class="text-[9px] text-slate-400 font-medium text-right mt-0.5 uppercase tracking-widest flex justify-between items-center">
+              <button @click="isRecordingsModalOpen = true" class="px-2 py-0.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors flex items-center gap-1">
+                <i class="fas fa-play-circle"></i> Ver Grabaciones
+              </button>
+              <button @click="isSecurityModalOpen = true" class="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded hover:bg-indigo-100 transition-colors flex items-center gap-1 ml-2 mr-auto">
+                <i class="fas fa-shield-alt"></i> Seguridad
+              </button>
+              <span>Uso de Disco Crítico > 80%</span>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Fila 3: Gráfico de Red (Prioridad) -->
-      <div v-if="issabelHostId && comparisonData[issabelHostId]" class="grid grid-cols-1 gap-4 mt-2">
-        <div class="bg-white p-4 rounded-md shadow-sm border border-gray-200 transition-all flex flex-col">
-          <span class="text-[11px] font-bold text-slate-700 tracking-[0.1em] uppercase flex items-center gap-2 mb-2">
-            <i class="fas fa-network-wired text-blue-500 text-sm"></i> TRÁFICO DE RED (IN/OUT)
-          </span>
-          <div class="flex-1 min-h-[220px]">
-            <apexchart type="area" height="220" :options="netTrafficOptions" :series="getIssabelSeries('net')" />
-          </div>
-          <!-- Zabbix Style Data Table -->
-          <div class="mt-0 pt-2 border-t border-gray-100 font-mono text-xs text-gray-600">
-            <div class="grid grid-cols-5 gap-2 px-2 pb-1.5 text-[10px] uppercase text-gray-400 font-bold border-b border-gray-50">
-              <div class="col-span-1">Métrica</div>
-              <div class="text-right">Last</div>
-              <div class="text-right">Min</div>
-              <div class="text-right">Avg</div>
-              <div class="text-right">Max</div>
+      <!-- Fila 3: Servicios PBX -->
+      <div v-if="issabelHostId" class="bg-white rounded-md shadow-sm border border-gray-200 p-4 mt-2 transition-all">
+        <h3 class="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-4">
+          Servicios PBX
+        </h3>
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 divide-x divide-slate-100 items-center">
+          
+          <!-- Asterisk -->
+          <div class="flex items-center gap-3 px-2">
+            <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0" :class="pbxData.asterisk_down ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-500'">
+              <i class="fas fa-asterisk text-[10px]"></i>
             </div>
-            <div class="grid grid-cols-5 gap-2 px-2 py-1.5 hover:bg-gray-50 items-center">
-              <div class="col-span-1 flex items-center gap-2">
-                <span class="w-2.5 h-2.5 bg-[#22C55E] inline-block shadow-sm"></span> Tráfico de Entrada (In)
-              </div>
-              <div class="text-right font-medium">{{ networkStats.in.last }}</div>
-              <div class="text-right text-gray-500">{{ networkStats.in.min }}</div>
-              <div class="text-right text-gray-500">{{ networkStats.in.avg }}</div>
-              <div class="text-right font-bold text-gray-800">{{ networkStats.in.max }}</div>
-            </div>
-            <div class="grid grid-cols-5 gap-2 px-2 py-1.5 hover:bg-gray-50 items-center">
-              <div class="col-span-1 flex items-center gap-2">
-                <span class="w-2.5 h-2.5 bg-[#EF4444] inline-block shadow-sm"></span> Tráfico de Salida (Out)
-              </div>
-              <div class="text-right font-medium">{{ networkStats.out.last }}</div>
-              <div class="text-right text-gray-500">{{ networkStats.out.min }}</div>
-              <div class="text-right text-gray-500">{{ networkStats.out.avg }}</div>
-              <div class="text-right font-bold text-gray-800">{{ networkStats.out.max }}</div>
+            <div>
+              <p class="text-[10px] font-bold text-slate-700 uppercase tracking-wide">Asterisk</p>
+              <p class="text-[9px] font-bold uppercase mt-0.5 flex items-center gap-1" :class="pbxData.asterisk_down ? 'text-red-500' : 'text-emerald-500'">
+                <span class="inline-block w-1.5 h-1.5 rounded-full" :class="pbxData.asterisk_down ? 'bg-red-500' : 'bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]'"></span>
+                {{ pbxData.asterisk_down ? 'Caído' : 'Activo' }}
+              </p>
             </div>
           </div>
+
+          <!-- Firewalld -->
+          <div class="flex items-center gap-3 px-4">
+            <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0" :class="pbxSecurityStatus.firewalld ? 'bg-emerald-50 text-emerald-500' : 'bg-slate-100 text-slate-400'">
+              <i class="fas fa-shield-alt text-[10px]"></i>
+            </div>
+            <div>
+              <p class="text-[10px] font-bold text-slate-700 uppercase tracking-wide">Firewalld</p>
+              <p class="text-[9px] font-bold uppercase mt-0.5 flex items-center gap-1" :class="pbxSecurityStatus.firewalld ? 'text-emerald-500' : 'text-slate-400'">
+                <span class="inline-block w-1.5 h-1.5 rounded-full" :class="pbxSecurityStatus.firewalld ? 'bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]' : 'bg-slate-300'"></span>
+                {{ pbxSecurityStatus.firewalld ? 'Activo' : 'Inactivo' }}
+              </p>
+            </div>
+          </div>
+
+          <!-- Fail2Ban -->
+          <div class="flex items-center gap-3 px-4">
+            <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0" :class="pbxSecurityStatus.fail2ban ? 'bg-emerald-50 text-emerald-500' : 'bg-red-50 text-red-500'">
+              <i class="fas fa-ban text-[10px]"></i>
+            </div>
+            <div>
+              <p class="text-[10px] font-bold text-slate-700 uppercase tracking-wide">Fail2Ban</p>
+              <p class="text-[9px] font-bold uppercase mt-0.5 flex items-center gap-1" :class="pbxSecurityStatus.fail2ban ? 'text-emerald-500' : 'text-red-500'">
+                <span class="inline-block w-1.5 h-1.5 rounded-full" :class="pbxSecurityStatus.fail2ban ? 'bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]' : 'bg-red-500'"></span>
+                {{ pbxSecurityStatus.fail2ban ? 'Activo' : 'Inactivo' }}
+              </p>
+            </div>
+          </div>
+
+          <!-- Web Panel / HTTPS -->
+          <div class="flex items-center gap-3 px-4">
+            <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0" :class="pbxSecurityStatus.httpd ? 'bg-emerald-50 text-emerald-500' : (pbxSecurityStatus.httpd === false ? 'bg-red-50 text-red-500' : 'bg-slate-100 text-slate-400')">
+              <i class="fas fa-globe text-[10px]"></i>
+            </div>
+            <div>
+              <p class="text-[10px] font-bold text-slate-700 uppercase tracking-wide">Panel Web</p>
+              <p class="text-[9px] font-bold uppercase mt-0.5 flex items-center gap-1" :class="pbxSecurityStatus.httpd ? 'text-emerald-500' : (pbxSecurityStatus.httpd === false ? 'text-red-500' : 'text-slate-400')">
+                <span class="inline-block w-1.5 h-1.5 rounded-full" :class="pbxSecurityStatus.httpd ? 'bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]' : (pbxSecurityStatus.httpd === false ? 'bg-red-500' : 'bg-slate-300')"></span>
+                {{ pbxSecurityStatus.httpd ? 'Activo' : (pbxSecurityStatus.httpd === false ? 'Caído' : 'Cargando...') }}
+              </p>
+            </div>
+          </div>
+
+          <!-- Tiempo de operación -->
+          <div class="flex items-center gap-3 px-4">
+            <div class="w-8 h-8 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center shrink-0">
+              <i class="fas fa-clock text-[10px]"></i>
+            </div>
+            <div>
+              <p class="text-[10px] font-bold text-slate-700 uppercase tracking-wide">Uptime</p>
+              <p class="text-[10px] font-bold font-mono mt-0.5 text-slate-600">
+                {{ pbxSecurityStatus.uptime || 'Calculando...' }}
+              </p>
+            </div>
+          </div>
+
         </div>
       </div>
 
-      <!-- Fila 4: Gráficos de Hardware (CPU y RAM) -->
-      <div v-if="issabelHostId && comparisonData[issabelHostId]" class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-        <!-- CPU Issabel -->
-        <div class="bg-white p-4 rounded-md shadow-sm border border-gray-200 transition-all flex flex-col">
-          <span class="text-[11px] font-bold text-slate-700 tracking-[0.1em] uppercase flex items-center gap-2 mb-2">
-            <i class="fas fa-microchip text-blue-500 text-sm"></i> CONSUMO DE CPU (%)
-          </span>
-          <div class="flex-1 min-h-[256px]">
-            <apexchart type="area" height="256" :options="{ ...detailAreaOptions, colors: ['#3b82f6'] }" :series="getIssabelSeries('cpu')" />
+      <!-- Fila 4: Tráfico de Red (Full Width) -->
+      <div v-if="issabelHostId && comparisonData[issabelHostId]" class="mt-2 mb-2 w-full h-[350px]">
+        <div class="bg-white p-3 rounded-md shadow-sm border border-gray-200 flex flex-col h-full w-full">
+          <div class="flex justify-between items-center mb-1 shrink-0">
+            <span class="text-[11px] font-bold text-slate-700 tracking-[0.1em] uppercase flex items-center gap-2">
+              TRÁFICO DE RED (IN/OUT)
+            </span>
+            <div class="font-mono text-[10px] text-gray-500 flex gap-4 flex-wrap">
+              <span><span class="w-2 h-2 bg-[#22c55e] inline-block mr-1"></span>In: <b class="text-gray-700">{{ networkStats.in.last }}</b> avg {{ networkStats.in.avg }} max {{ networkStats.in.max }}</span>
+              <span><span class="w-2 h-2 bg-[#ef4444] inline-block mr-1"></span>Out: <b class="text-gray-700">{{ networkStats.out.last }}</b> avg {{ networkStats.out.avg }} max {{ networkStats.out.max }}</span>
+            </div>
           </div>
-        </div>
-        <!-- RAM Issabel -->
-        <div class="bg-white p-4 rounded-md shadow-sm border border-gray-200 transition-all flex flex-col">
-          <span class="text-[11px] font-bold text-slate-700 tracking-[0.1em] uppercase flex items-center gap-2 mb-2">
-            <i class="fas fa-memory text-purple-500 text-sm"></i> CONSUMO DE RAM (%)
-          </span>
-          <div class="flex-1 min-h-[256px]">
-            <apexchart type="area" height="256" :options="{ ...detailAreaOptions, colors: ['#a855f7'] }" :series="getIssabelSeries('ram')" />
+          <div class="flex-1 w-full relative min-h-0">
+            <apexchart
+              :key="netChartKey"
+              type="line"
+              height="100%"
+              class="absolute inset-0"
+              :options="netTrafficOptions"
+              :series="issabelNetSeries"
+            />
           </div>
         </div>
       </div>
 
     </div>
+
 
     <!-- Vista Dedicada: Nodos de Red (FortiGate) -->
     <div v-if="renderError" class="bg-red-50 border-l-4 border-red-500 p-4 m-4">
@@ -325,12 +452,7 @@
             <option value="all">Todos los Grupos</option>
             <option v-for="g in groups" :key="g.groupid" :value="g.groupid">{{ g.name }}</option>
           </select>
-          <!-- OS Filter Dropdown -->
-          <select v-model="osFilter" class="border border-slate-200 rounded-lg text-[13px] px-2 py-1.5 text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 hover:bg-white transition-colors">
-            <option value="all">Todos los Sistemas</option>
-            <option value="windows">Windows</option>
-            <option value="linux">Linux</option>
-          </select>
+
         </div>
       </div>
 
@@ -341,7 +463,7 @@
               <th class="py-3 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center w-16">Estado</th>
               <th class="py-3 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Servidor</th>
               <th class="py-3 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">IP</th>
-              <th class="py-3 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">OS</th>
+
               <th class="py-3 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">CPU (%)</th>
               <th class="py-3 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">RAM Usada (%)</th>
               <th class="py-3 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">RED (IN / OUT)</th>
@@ -374,15 +496,7 @@
                   </button>
                 </div>
               </td>
-              <td class="py-2 px-4 text-center">
-                <div class="flex items-center justify-center" :title="getDetectedOS(host).osName">
-                  <!-- Ícono SVGs para OS -->
-                  <svg v-if="getDetectedOS(host).osName.includes('Windows')" class="w-4 h-4 text-blue-500" viewBox="0 0 88 88" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M0 12.402l35.687-4.86.016 34.423L0 41.965v-29.563zm35.67 33.529l.016 34.453L0 75.485V46.068l35.67-4.137zm4.326-39.011L87.314 0v41.26L39.996 41.95V6.92zm47.318 39.011V87.31l-47.318-6.66.015-34.72 47.303-4.009z"/></svg>
-                  <svg v-else-if="getDetectedOS(host).osName.includes('Linux')" class="w-4 h-4 text-slate-500" viewBox="0 0 448 512" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M220.8 123.3c1 .5 1.8 1.7 3 1.7 1.1 0 2.8-.4 2.9-1.5.2-1.4-1.9-2.3-3.2-2.9-1.7-.7-3.9-1-5.5-.1-.4.2-.8.7-.6 1.1.3 1.3 2.3 1.1 3.4 1.7zm-21.9 1.7c1.2 0 2-1.2 3-1.7 1.1-.6 3.1-.4 3.5-1.7.2-.4-.2-.9-.6-1.1-1.6-.9-3.8-.6-5.5.1-1.3.6-3.4 1.5-3.2 2.9.1 1 1.8 1.5 2.8 1.5zM420.2 392.5c-5.1-9.7-16.3-15.4-30.8-19.1-14.9-3.9-29.1-8-36.8-14.8-17.6-15.5-27.1-39.3-35.3-60.6-2.6-6.7-5.1-13.4-7.8-20.1C333.1 230 352 178.6 352 144 352 64.2 293 0 224 0 154.9 0 96 64.2 96 144c0 34.6 18.9 86 42.5 133.9-2.7 6.7-5.2 13.4-7.8 20.1-8.3 21.3-17.7 45.1-35.3 60.6-7.8 6.8-21.9 10.9-36.8 14.8-14.5 3.7-25.7 9.4-30.8 19.1C8.7 428.8 28.5 487.6 28.5 487.6c1 2.3 3.3 3.8 5.8 4.1l2.4.2c.4 0 1 .1 1.4.1 48 4 96.5 15.6 144.1 19.8 11.2 1 22.3 1.7 33.5 1.7s22.3-.7 33.5-1.7c47.7-4.2 96.1-15.8 144.1-19.8.5 0 1-.1 1.4-.1l2.4-.2c2.5-.3 4.8-1.9 5.8-4.1 0 0 19.8-58.8.8-95.1zM224 496c-27 0-54.6-2-83.3-4.6l-50.6-3.8c-24.1-1.6-47-2.6-70-3.3 5.4-9.9 16.4-18.7 32-23.3 12.3-3.6 28-7.3 36.1-12 18-10.4 28.6-33.1 36.9-57 5.1-14.7 9.8-29.3 14.7-43.2.1 0 .2-.1.3-.1 1.7-4.9 3.5-9.8 5.3-14.7 13.2-36.7 26.2-72.9 26.2-120.2V112.5c0-1.8.2-3.4.6-5 .6 0 1.2.1 1.8.1h30.2c.6 0 1.2-.1 1.8-.1.4 1.6.6 3.2.6 5v121.2c0 47.3 13 83.5 26.2 120.2 1.8 4.9 3.6 9.8 5.3 14.7.1 0 .2.1.3.1 4.9 13.9 9.6 28.5 14.7 43.2 8.3 23.9 18.9 46.5 36.9 57 8.1 4.7 23.8 8.4 36.1 12 15.6 4.6 26.6 13.3 32 23.3-23 1-45.9 2-70 3.3l-50.6 3.8C278.6 494 251 496 224 496z" /></svg>
-                  <svg v-else-if="getDetectedOS(host).osName.includes('FortiOS')" class="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                  <svg v-else class="w-4 h-4 text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10" stroke-width="2"/></svg>
-                </div>
-              </td>
+
               <template v-if="currentTemplate === 'global'">
                 <td class="py-1.5 px-4">
                   <div class="flex items-center gap-2">
@@ -468,8 +582,8 @@
                 <td class="py-1.5 px-4 text-xs font-black text-slate-700 tabular-nums">{{ (host.sessions || 0).toLocaleString() }}</td>
                 <td class="py-1.5 px-4 text-[11px] font-semibold text-slate-500">
                   <div class="flex flex-col">
-                    <span class="text-blue-600">↓ {{ ((host.net_in || 0) / 1000).toFixed(1) }} Mbps</span>
-                    <span class="text-purple-600">↑ {{ ((host.net_out || 0) / 1000).toFixed(1) }} Mbps</span>
+                    <span class="text-blue-600">↓ {{ formatTrafficVal((host.net_in || 0) / 1000) }}</span>
+                    <span class="text-purple-600">↑ {{ formatTrafficVal((host.net_out || 0) / 1000) }}</span>
                   </div>
                 </td>
               </template>
@@ -738,16 +852,27 @@
         </div>
       </div>
     </div>
+    
+    <!-- Modals -->
+    <RecordingsModal :isOpen="isRecordingsModalOpen" @close="isRecordingsModalOpen = false" />
+    <ActiveCallsModal :isOpen="isActiveCallsModalOpen" @close="isActiveCallsModalOpen = false" />
+    <SecurityModal :isOpen="isSecurityModalOpen" @close="isSecurityModalOpen = false" />
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch, nextTick, onErrorCaptured } from 'vue';
+import RecordingsModal from '@/components/pbx/RecordingsModal.vue';
+import ActiveCallsModal from '@/components/pbx/ActiveCallsModal.vue';
+import SecurityModal from '@/components/pbx/SecurityModal.vue';
 import FortiGateMonitorView from './FortiGateMonitorView.vue';
 import zabbixService from '../services/zabbix.service';
 import { useChartDownsampling } from '@/composables/useChartDownsampling';
 
 const renderError = ref(null);
+const isRecordingsModalOpen = ref(false);
+const isActiveCallsModalOpen = ref(false);
+const isSecurityModalOpen = ref(false);
 onErrorCaptured((err, instance, info) => {
   renderError.value = `${err.toString()} \nInfo: ${info}`;
   console.error("Caught error:", err, info);
@@ -762,6 +887,7 @@ const pbxData = ref({
   asterisk_down: false,
   server_down: false,
   llamadas_activas: 0,
+  trunks: [],
   robot_ivr: -1,
   ruta_opcion1: -1,
   ruta_opcion2: -1,
@@ -770,6 +896,38 @@ const pbxData = ref({
   almacenamiento_pbx: 45, // Mock data (%)
   ivr_options: {}
 });
+
+const pbxSecurityStatus = ref({
+  firewalld: false,
+  fail2ban: false,
+  iptables: false,
+  anomaly: false,
+  failed_attempts_24h: null,
+  blocked_ips: null,
+  suspicious_ips: null,
+  fetched: false,
+  loading: false
+});
+
+const fetchPbxSecurityStatus = async () => {
+  pbxSecurityStatus.value.loading = true;
+  try {
+    const token = localStorage.getItem('access_token');
+    const res = await fetch('/api/v1/pbx/recordings/security/status', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.status === 'success') {
+        pbxSecurityStatus.value = { ...data.data, fetched: true, loading: false };
+      }
+    }
+  } catch (e) {
+    console.error("Error fetching PBX security status", e);
+  } finally {
+    pbxSecurityStatus.value.loading = false;
+  }
+};
 
 // Helper functions para el diseño NOC de opciones
 const ivrOptionNames = {
@@ -824,6 +982,7 @@ const fetchPbxStats = async () => {
       pbxData.value = {
         has_fetched: true,
         loading: false,
+        hostid: res.data.hostid,
         asterisk_down: res.data.asterisk_down,
         server_down: res.data.server_down,
         llamadas_activas: res.data.llamadas_activas,
@@ -831,8 +990,16 @@ const fetchPbxStats = async () => {
         ruta_opcion1: res.data.ruta_opcion1,
         ruta_opcion2: res.data.ruta_opcion2,
         troncal_101: res.data.troncal_101,
-        ivr_options: res.data.ivr_options || {}
+        ext_online: res.data.ext_online,
+        ext_total: res.data.ext_total,
+        storage_percent: res.data.storage_percent,
+        ivr_options: res.data.ivr_options || {},
+        trunks: res.data.trunks || []
       };
+      
+      if (res.data.hostid) {
+        issabelHostId.value = res.data.hostid;
+      }
       
       if (wasFetched && res.data.asterisk_down && !wasDown) {
         playAlertSound();
@@ -966,7 +1133,7 @@ const expandedStats = computed(() => {
 const expandedOptions = computed(() => {
   let baseObj = {};
   if (expandedChart.value === 'cpu' || expandedChart.value === 'ram') baseObj = detailAreaOptions.value;
-  else if (expandedChart.value === 'net') baseObj = netTrafficOptions;
+  else if (expandedChart.value === 'net') baseObj = netTrafficOptions.value;
   else if (expandedChart.value === 'latency') baseObj = latencyOptions.value;
   else if (expandedChart.value === 'ping') baseObj = pingOptions.value;
   else if (expandedChart.value === 'sessions') baseObj = { ...sessionOptions, chart: { ...sessionOptions.chart, sparkline: { enabled: false } }, stroke: { width: 2 }, xaxis: { type: 'datetime', labels: { style: { fontSize: '9px', colors: '#94a3b8' } } }, grid: { borderColor: '#f1f5f9' }, yaxis: { labels: { style: { fontSize: '9px', colors: '#94a3b8' } } } };
@@ -1020,51 +1187,113 @@ const currentTemplate = ref('global'); // 'global', 'fortigate', 'issabel'
 const issabelHostId = ref(null);
 const loadingIssabelDetail = ref(false);
 
-const getIssabelSeries = (type) => {
+// IMPORTANTE: getIssabelSeries debe ser un computed por tipo, NO una función normal.
+// Las funciones normales no son reactivas en Vue 3 — Vue no re-ejecuta la plantilla
+// cuando cambia comparisonData a menos que la dependencia esté dentro de un computed.
+const issabelCpuSeries = computed(() => {
   if (!issabelHostId.value || !comparisonData.value[issabelHostId.value]) return [];
   const comp = comparisonData.value[issabelHostId.value];
-  if (type === 'cpu') return [{ name: 'CPU (%)', data: comp.cpu?.history || [] }];
-  if (type === 'ram') return [{ name: 'RAM (%)', data: comp.ram?.history || [] }];
-  if (type === 'net') {
-    const ifaceNames = Object.keys(comp.interfaces || {});
-    if (ifaceNames.length > 0) {
-      // Find the main interface, prefer eth*, ens*, eno*, lan*
-      let bestIface = ifaceNames[0];
-      for (const name of ifaceNames) {
-        const lower = name.toLowerCase();
-        if (lower.startsWith('eth') || lower.startsWith('ens') || lower.startsWith('eno') || lower.startsWith('lan')) {
-          bestIface = name;
-          break;
-        }
-      }
-      return [
-        { name: 'Tráfico de Entrada (In)', type: 'area', data: mapTraffic(comp.interfaces[bestIface].in?.history, true) },
-        { name: 'Tráfico de Salida (Out)', type: 'line', data: mapTraffic(comp.interfaces[bestIface].out?.history, false) }
-      ];
+  return [{ name: 'CPU (%)', data: comp.cpu?.history || [] }];
+});
+
+const issabelRamSeries = computed(() => {
+  if (!issabelHostId.value || !comparisonData.value[issabelHostId.value]) return [];
+  const comp = comparisonData.value[issabelHostId.value];
+  return [{ name: 'RAM (%)', data: comp.ram?.history || [] }];
+});
+
+const issabelNetSeries = computed(() => {
+  if (!issabelHostId.value || !comparisonData.value[issabelHostId.value]) return [];
+  const comp = comparisonData.value[issabelHostId.value];
+  const ifaceNames = Object.keys(comp.interfaces || {});
+  if (ifaceNames.length === 0) return [];
+
+  // Encontrar la interfaz física con más tráfico (ignorar lo, loopback)
+  let bestIface = ifaceNames[0];
+  let maxTraffic = -1;
+  for (const name of ifaceNames) {
+    const lower = name.toLowerCase();
+    if (lower.includes('lo') || lower.includes('loopback')) continue;
+    const inVal = comp.interfaces[name].in?.value || 0;
+    const outVal = comp.interfaces[name].out?.value || 0;
+    const totalTraffic = inVal + outVal;
+    if (totalTraffic > maxTraffic) {
+      maxTraffic = totalTraffic;
+      bestIface = name;
     }
-    return [];
   }
+
+  const [alignedIn, alignedOut] = alignSeries(
+    comp.interfaces[bestIface].in?.history || [],
+    comp.interfaces[bestIface].out?.history || []
+  );
+  return [
+    { name: 'Tráfico de Entrada (In)', type: 'area', data: mapTraffic(alignedIn, true) },
+    { name: 'Tráfico de Salida (Out)', type: 'line', data: mapTraffic(alignedOut, false) }
+  ];
+});
+
+// Alias para compatibilidad con el template (CPU y RAM aún pueden usarlo)
+const getIssabelSeries = (type) => {
+  if (type === 'cpu') return issabelCpuSeries.value;
+  if (type === 'ram') return issabelRamSeries.value;
   return [];
 };
 
+// Series reactivas para las 2 gráficas extra
+const issabelLoadSeries = computed(() => {
+  if (!issabelHostId.value || !comparisonData.value[issabelHostId.value]) return [];
+  const comp = comparisonData.value[issabelHostId.value];
+  return [{ name: 'Carga Sistema', data: comp.load?.history || [] }];
+});
+
+const issabelProcsSeries = computed(() => {
+  if (!issabelHostId.value || !comparisonData.value[issabelHostId.value]) return [];
+  const comp = comparisonData.value[issabelHostId.value];
+  return [{ name: 'Procesos', data: comp.procs?.history || [] }];
+});
+
+// Alias para el click del KPI de llamadas activas
+const showActiveCalls = isActiveCallsModalOpen;
+
 watch(currentTemplate, async (newVal) => {
   if (newVal === 'issabel') {
-    // Buscar hostid de Issabel
-    const h = hosts.value.find(h => h.hostname.toLowerCase().includes('issabel') || h.hostname.toLowerCase().includes('pbx'));
+    // Buscar hostid de Issabel en hosts filtrados
+    let h = hosts.value.find(h => h.hostname.toLowerCase().includes('issabel') || h.hostname.toLowerCase().includes('pbx'));
+    
+    // Si no está en el grupo seleccionado, pero el backend lo encontró globalmente:
+    if (!h && pbxData.value.hostid) {
+      h = { hostid: pbxData.value.hostid, hostname: 'Issabel_PBX' };
+    }
+
     if (h) {
       issabelHostId.value = h.hostid;
       if (!comparisonData.value[h.hostid]) {
         loadingIssabelDetail.value = true;
-        if (!selectedHosts.value.find(sh => sh.hostid === h.hostid)) {
-           // Si se necesita para fetchDetailForHost
+        // Solo intentamos cargar el detalle si el host existe (el dummy podría fallar en detalle si no hay IPs, pero fetchDetailForHost lo maneja)
+        try {
+          await fetchDetailForHost(h);
+        } catch (e) {
+          console.error("Error fetching detail for Issabel via fallback", e);
         }
-        await fetchDetailForHost(h);
         loadingIssabelDetail.value = false;
       }
     }
   }
 });
 
+
+// Key que fuerza un remontaje completo de ApexCharts para la red.
+// ApexCharts no detecta cambios en series mixtas (area+line) via prop diff,
+// así que lo forzamos montándolo de nuevo cada vez que llega un nuevo punto.
+const netChartKey = ref(0);
+watch(issabelNetSeries, (newSeries) => {
+  const inData = newSeries?.[0]?.data;
+  const lastPoint = inData?.[inData.length - 1];
+  if (lastPoint) {
+    netChartKey.value = lastPoint[0]; // timestamp del último dato = key única
+  }
+}, { deep: false });
 
 const timeRanges = [
   { label: '10 Min', value: 600 },
@@ -1086,6 +1315,10 @@ const selectedRangeLabel = computed(() => {
 const setTimeRange = (seconds) => {
   if (selectedRange.value === seconds) return;
   selectedRange.value = seconds;
+  // Al cambiar el rango, limpiar los datos del PBX para forzar un refetch con el rango nuevo
+  if (issabelHostId.value && comparisonData.value[issabelHostId.value]) {
+    comparisonData.value = {};
+  }
   refreshAll();
 };
 
@@ -1288,6 +1521,8 @@ const fetchGroups = async () => {
   }
 };
 
+const lastRefreshed = ref('');
+
 const refreshAll = async (showLoading = true) => {
   if (showLoading) {
     loadingTrends.value = loadingHosts.value = true;
@@ -1298,12 +1533,14 @@ const refreshAll = async (showLoading = true) => {
     await fetchGroups();
   }
   
-  const promises = [fetchTrends(time_from, time_till), fetchHosts(time_from, time_till), fetchPbxStats()];
+  const promises = [fetchTrends(time_from, time_till), fetchHosts(time_from, time_till), fetchPbxStats(), fetchPbxSecurityStatus()];
   
-  // Si estamos en la pestaña de Issabel, asegurar que las gráficas de hardware se refresquen en segundo plano
+  // Siempre refrescar el detalle del PBX Issabel cuando estamos en esa pestaña o cuando ya tenemos su hostid
   if (currentTemplate.value === 'issabel' && issabelHostId.value) {
-    const pbxHost = hosts.value.find(h => h.hostid === issabelHostId.value);
-    if (pbxHost) promises.push(fetchDetailForHost(pbxHost));
+    const pbxHost = hosts.value.find(h => h.hostid === issabelHostId.value)
+      || { hostid: issabelHostId.value, hostname: 'Issabel_PBX' };
+    // Pasar siempre el rango seleccionado actualmente
+    promises.push(fetchDetailForHost(pbxHost, selectedRange.value));
   }
   
   if (showDetail.value) {
@@ -1311,6 +1548,10 @@ const refreshAll = async (showLoading = true) => {
   }
   
   await Promise.all(promises);
+  
+  // Actualizar timestamp de última actualización (estilo Zabbix)
+  const now = new Date();
+  lastRefreshed.value = now.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 };
 
 // --- Detail View (Multi-Server) ---
@@ -1325,8 +1566,8 @@ const openDetail = async (host) => {
   comparisonData.value = {};
   showDetail.value = true;
   await fetchDetailForHost(host);
-  if (detailTimer) clearInterval(detailTimer);
-  detailTimer = setInterval(() => fetchAllDetails(true), 60000);
+  // El timer global (refreshAll) ya llama fetchAllDetails cuando showDetail=true.
+  // No necesitamos un timer separado aquí.
 };
 
 const addHost = async (hostid) => {
@@ -1367,20 +1608,8 @@ const fetchDetailForHost = async (host, customRange = null, silent = false) => {
     if (res.status === 'success') {
       const data = res.data;
       
-      // Si es un refresh silencioso con el modal abierto: solo actualizar valores
-      // actuales sin reemplazar el historial completo (preserva zoom y cursor)
-      if (silent && expandedChart.value && comparisonData.value[host.hostid]) {
-        const existing = comparisonData.value[host.hostid];
-        // Parchear valores actuales sin tocar el historial
-        if (data.cpu?.value != null) existing.cpu.value = data.cpu.value;
-        if (data.ram?.value != null) existing.ram.value = data.ram.value;
-        if (data.latency?.value != null && existing.latency) existing.latency.value = data.latency.value;
-        if (data.ping?.value != null && existing.ping) existing.ping.value = data.ping.value;
-        if (data.sessions?.value != null && existing.sessions) existing.sessions.value = data.sessions.value;
-        // No cambiamos comparisonData.value para no disparar re-render de gráficas
-        loadingDetail.value = false;
-        return;
-      }
+      // Eliminamos el early return silencioso que congelaba el historial.
+      // Ahora dejamos que el flujo normal procese las gráficas para que se muevan en tiempo real.
       
       data.cpu.history = sanitizeHistory(data.cpu.history, true);
       let maxCpuClock = data.cpu.history.length > 0 ? data.cpu.history[data.cpu.history.length - 1][0] : Infinity;
@@ -1470,8 +1699,9 @@ const formatTime = (clock) => {
 const mapTraffic = (history, isInbound) => {
   if (!history || !Array.isArray(history)) return [];
   return history.map(([t, v]) => {
-    // Zabbix devuelve Bytes/sec. Convertimos a bits/sec para mostrar en Kbps como Zabbix nativo.
-    let kbps = (v * 8) / 1000;
+    // Zabbix devuelve bits/sec (ya que aplica el custom multiplier *8 en la BD).
+    // Solo dividimos entre 1000 para llevar a Kbps.
+    let kbps = v / 1000;
     return [t, parseFloat(kbps.toFixed(4))];
   });
 };
@@ -1494,18 +1724,24 @@ const networkStats = computed(() => {
   }
   
   let bestIface = ifaceNames[0];
+  let maxTraffic = -1;
   for (const name of ifaceNames) {
     const lower = name.toLowerCase();
-    if (lower.startsWith('eth') || lower.startsWith('ens') || lower.startsWith('eno') || lower.startsWith('lan')) {
-      bestIface = name;
-      break;
+    if (lower.includes('eth') || lower.includes('ens') || lower.includes('eno') || lower.includes('lan')) {
+      const inVal = comp.interfaces[name].in?.value || 0;
+      const outVal = comp.interfaces[name].out?.value || 0;
+      const totalTraffic = inVal + outVal;
+      if (totalTraffic > maxTraffic) {
+        maxTraffic = totalTraffic;
+        bestIface = name;
+      }
     }
   }
   
   const calcStats = (history) => {
     if (!history || history.length === 0) return { ...defaultStats };
-    // Zabbix API = Bytes/sec -> * 8 para bits -> / 1000 para Kbps
-    const values = history.map(p => Math.abs((p[1] * 8) / 1000));
+    // Zabbix API = bits/sec (por el custom multiplier) -> / 1000 para Kbps
+    const values = history.map(p => Math.abs(p[1] / 1000));
     const last = values[values.length - 1];
     const min = Math.min(...values);
     const max = Math.max(...values);
@@ -1867,6 +2103,34 @@ watch(availableInterfaces, (newVal) => {
   }
 });
 
+// Align two time series so they share the exact same X timestamps.
+// Zabbix collects net.if.in and net.if.out at slightly different clock ticks,
+// which causes one line to start earlier than the other in ApexCharts.
+// We build a merged sorted list of all timestamps and fill missing values via
+// nearest-neighbour (not linear interpolation) to keep traffic data realistic.
+const alignSeries = (histA, histB) => {
+  if (!histA.length || !histB.length) return [histA, histB];
+  const tsA = new Map(histA.map(([t, v]) => [t, v]));
+  const tsB = new Map(histB.map(([t, v]) => [t, v]));
+  const allTs = [...new Set([...tsA.keys(), ...tsB.keys()])].sort((a, b) => a - b);
+
+  const fill = (map, ts) => {
+    const keys = [...map.keys()].sort((a, b) => a - b);
+    return ts.map(t => {
+      if (map.has(t)) return [t, map.get(t)];
+      // find nearest key
+      let best = keys[0], bestDist = Math.abs(keys[0] - t);
+      for (const k of keys) {
+        const d = Math.abs(k - t);
+        if (d < bestDist) { bestDist = d; best = k; }
+      }
+      return [t, map.get(best)];
+    });
+  };
+
+  return [fill(tsA, allTs), fill(tsB, allTs)];
+};
+
 const netSeries = computed(() => {
   const series = [];
   const iface = selectedInterface.value;
@@ -1874,9 +2138,13 @@ const netSeries = computed(() => {
 
   selectedHosts.value.forEach(h => {
     const d = comparisonData.value[h.hostid];
-    if(d && d.interfaces && d.interfaces[iface]) {
-      series.push({ name: `${h.hostname} - Recibido (Bajada)`, type: 'area', data: mapTraffic(d.interfaces[iface].in.history, true) });
-      series.push({ name: `${h.hostname} - Enviado (Subida)`, type: 'line', data: mapTraffic(d.interfaces[iface].out.history, false) });
+    if (d && d.interfaces && d.interfaces[iface]) {
+      const [alignedIn, alignedOut] = alignSeries(
+        d.interfaces[iface].in.history || [],
+        d.interfaces[iface].out.history || []
+      );
+      series.push({ name: `${h.hostname} - Recibido (Bajada)`, type: 'area', data: mapTraffic(alignedIn, true) });
+      series.push({ name: `${h.hostname} - Enviado (Subida)`, type: 'line', data: mapTraffic(alignedOut, false) });
     }
   });
   return series;
@@ -2095,57 +2363,71 @@ const formatNetAxisLabel = (val) => {
   return '0';
 };
 
-const netTrafficOptions = {
+const netTrafficOptions = computed(() => {
+  const rangeMs = selectedRange.value * 1000;
+  // Adaptar el formatter del eje X según el rango seleccionado
+  const xFormatter = (val) => {
+    const d = new Date(val);
+    if (selectedRange.value <= 1800) {
+      // <= 30 min: mostrar HH:mm:ss
+      return d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+    return d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+  };
+  const now = Date.now();
+  return {
   chart: {
     type: 'line',
     stacked: false,
     toolbar: { show: false },
     animations: { enabled: false },
     fontFamily: 'Inter, sans-serif',
-    zoom: { enabled: false }
+    zoom: { enabled: false },
+    parentHeightOffset: 0
   },
   stroke: { curve: 'straight', width: [1.5, 1.5] },
-  colors: ['#22C55E', '#EF4444'],
+  colors: ['#22c55e', '#ef4444'], // Verde para IN, Rojo para OUT
   fill: {
     type: ['gradient', 'solid'],
     gradient: {
       shadeIntensity: 1,
-      opacityFrom: 0.8,
-      opacityTo: 0.3,
+      opacityFrom: 0.6,
+      opacityTo: 0.2,
       stops: [0, 100]
     },
-    opacity: [0.8, 1]
+    opacity: [1, 1] // La serie 2 (OUT) es tipo 'line' por lo que no tendrá relleno de todas formas, pero opacity 1 asegura que la línea sea visible
   },
   dataLabels: { enabled: false },
-  markers: { size: 0 },
+  markers: { size: 0, strokeWidth: 0, hover: { size: 3 } },
   xaxis: {
     type: 'datetime',
     labels: {
       datetimeUTC: false,
-      style: { fontSize: '9px', colors: '#94a3b8' },
-      datetimeFormatter: { hour: 'HH:mm', minute: 'HH:mm:ss' }
+      style: { fontSize: '9px', colors: '#64748b' },
+      formatter: xFormatter,
+      offsetY: 2
     },
     axisBorder: { show: false },
-    axisTicks: { show: false },
+    axisTicks: { show: true, color: '#e2e8f0' },
     tooltip: { enabled: false }
   },
   yaxis: {
     min: 0,
-    forceNiceScale: true,
-    tickAmount: 4,
+    forceNiceScale: false,
+    tickAmount: 5,
     labels: {
-      style: { fontSize: '9px', colors: '#94a3b8' },
-      formatter: formatNetAxisLabel
+      style: { fontSize: '9px', colors: '#64748b' },
+      formatter: formatNetAxisLabel,
+      offsetX: -10
     }
   },
-  legend: { show: true, position: 'bottom', fontSize: '10px', markers: { radius: 12 } },
+  legend: { show: false }, // Movido al header del div
   grid: {
-    borderColor: '#e8edf2',
+    borderColor: '#e2e8f0',
     strokeDashArray: 3,
-    xaxis: { lines: { show: false } },
+    xaxis: { lines: { show: true } },
     yaxis: { lines: { show: true } },
-    row: { colors: ['#f1f5f9', '#f1f5f9'], opacity: 1 },
-    padding: { top: 4, bottom: 0, left: 8, right: 12 }
+    padding: { top: 0, bottom: 0, left: 0, right: 0 }
   },
   tooltip: {
     theme: 'dark',
@@ -2160,7 +2442,8 @@ const netTrafficOptions = {
     },
     x: { format: 'HH:mm:ss' }
   }
-};
+  };
+});
 
 const sessionOptions = {
   chart: { type: 'area', toolbar: { show: false }, animations: { enabled: false }, fontFamily: 'Inter, sans-serif' },
@@ -2206,13 +2489,21 @@ const diskPieOptions = {
 };
 
 
+// Usa setTimeout recursivo en lugar de setInterval para evitar condiciones de carrera:
+// el siguiente ciclo solo arranca cuando el anterior terminó completamente.
+const scheduleRefresh = () => {
+  globalTimer = setTimeout(async () => {
+    await refreshAll(false);
+    scheduleRefresh(); // encadenar el siguiente ciclo
+  }, 5000);
+};
+
 onMounted(() => {
-  refreshAll();
-  globalTimer = setInterval(() => refreshAll(false), 10000); // 10 seconds refresh, invisible
+  refreshAll().then(() => scheduleRefresh());
 });
 
 onUnmounted(() => {
-  if (globalTimer) clearInterval(globalTimer);
+  if (globalTimer) clearTimeout(globalTimer);
   if (detailTimer) clearInterval(detailTimer);
 });
 </script>

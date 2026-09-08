@@ -69,42 +69,33 @@ async def get_zabbix_pbx_telephony(current_user: dict = Depends(get_current_user
         logger.error(f"Error fetching PBX data: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch PBX data: {str(e)}")
 
+@router.get("/pbx/active-calls", response_model=Dict[str, Any])
+async def get_pbx_active_calls(current_user: dict = Depends(get_current_user)):
+    """
+    Obtiene las llamadas activas en tiempo real via SSH al PBX Issabel.
+    Comando ejecutado: asterisk -rx 'core show channels concise' (solo lectura).
+    """
+    try:
+        calls = await zabbix_service.get_active_calls()
+        return {"status": "success", "calls": calls, "total": len(calls)}
+    except Exception as e:
+        logger.error(f"Error fetching active calls: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch active calls: {str(e)}")
+
 import os
 import json
 import asyncio
-
 import subprocess
+from app.services.zabbix_fortigates import get_zabbix_fortigates
 
 @router.get("/fortigates")
-def get_fortigates_data(current_user: dict = Depends(get_current_user)):
+async def get_fortigates_data(hostid: str = None, current_user: dict = Depends(get_current_user)):
     try:
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        ps1_path = os.path.join(base_dir, "scripts", "Get-ZabbixFortigates.ps1")
-        output_path = os.path.join(base_dir, "scripts", "fortigates_data.json")
+        url = os.getenv("ZABBIX_URL")
+        user = os.getenv("ZABBIX_USER")
+        pwd = os.getenv("ZABBIX_PASSWORD")
         
-        # Ejecutamos el script de PowerShell sincrónicamente (es más estable en Windows/uvicorn)
-        cmd = [
-            "powershell.exe", "-ExecutionPolicy", "Bypass", 
-            "-File", ps1_path, 
-            "-ZabbixURL", os.getenv("ZABBIX_URL"),
-            "-ZabbixUser", os.getenv("ZABBIX_USER"),
-            "-ZabbixPass", os.getenv("ZABBIX_PASSWORD"),
-            "-OutputFile", output_path
-        ]
-        
-        process = subprocess.run(cmd, capture_output=True, text=True)
-        
-        if process.returncode != 0:
-            logger.error(f"PowerShell Script Failed: {process.stderr}")
-            raise Exception(f"PowerShell script failed: {process.stderr}")
-            
-        if os.path.exists(output_path):
-            with open(output_path, "r", encoding="utf-8-sig") as f:
-                data = json.load(f)
-            return data
-        else:
-            return []
-            
+        return await get_zabbix_fortigates(url, user, pwd, hostid)
     except Exception as e:
-        logger.exception(f"Error executing PS1 script: {str(e)}")
+        logger.error(f"Error en get_fortigates_data: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")

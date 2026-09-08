@@ -1,3 +1,9 @@
+"""
+@copyright 2026 Fabian Paternina. Todos los derechos reservados.
+Este código es propiedad intelectual de Fabian Paternina.
+Uso autorizado exclusivamente para Hogar y Moda S.A.S.
+Prohibida su copia, distribución o modificación sin autorización explícita.
+"""
 import sys
 import asyncio
 
@@ -18,6 +24,7 @@ from app.models.license_audit import LicenseAudit
 from apscheduler.schedulers.background import BackgroundScheduler
 from app.services.ad_event_sync import sync_ad_events
 from app.services.monitoring_service import sync_monitoring_stats
+from app.services.pbx_alerts import check_pbx_and_alert
 import contextlib
 
 import sqlite3
@@ -40,6 +47,14 @@ async def lifespan(app: FastAPI):
     # scheduler.add_job(sync_monitoring_stats, 'interval', minutes=1) # Desactivado: ahora usamos Zabbix
     from app.services.exchange_service import revoke_expired_delegations
     scheduler.add_job(revoke_expired_delegations, 'cron', hour=2, minute=0)
+    
+    # Nuevo job de seguridad de PBX cada 10 minutos
+    def run_pbx_alert():
+        import asyncio
+        asyncio.run(check_pbx_and_alert())
+        
+    scheduler.add_job(run_pbx_alert, 'interval', minutes=10)
+    
     scheduler.start()
     
     # Ejecutar una vez al inicio en el background (no bloqueante)
@@ -80,6 +95,8 @@ from app.api.v1 import delegation
 app.include_router(delegation.router, prefix="/api/v1/delegation", tags=["delegation"])
 from app.api.v1 import diagnostics
 app.include_router(diagnostics.router, prefix="/api/v1/diagnostics", tags=["diagnostics"])
+from app.api.v1 import pbx_recordings
+app.include_router(pbx_recordings.router, prefix="/api/v1", tags=["pbx_recordings"])
 from app.api.v1 import zabbix
 app.include_router(zabbix.router, prefix="/api/v1/zabbix", tags=["zabbix"])
 from app.api.v1 import gpo

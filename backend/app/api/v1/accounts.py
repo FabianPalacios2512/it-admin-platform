@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Request
 from pydantic import BaseModel
 from typing import Optional
 from app.services.ad_service import (
@@ -116,13 +116,58 @@ async def api_search_users(q: str = "", limit: int = 50):
             if cu_uname and cu_uname not in ad_usernames and cu_upn not in ad_upns:
                 merged_results.append(cu)
                 
-        # Opcional: ordenar alfabéticamente
+        # Ordenar alfabéticamente
         merged_results.sort(key=lambda x: x.get("fullName", "").lower())
         
         return merged_results[:limit] if len(merged_results) > limit else merged_results
     except Exception as e:
         print(f"[ERROR] [BÚSQUEDA] Error unificado: {e}")
         raise HTTPException(status_code=500, detail=f"Error consultando usuarios: {str(e)}")
+
+
+@router.get("/stream")
+async def api_stream_users(request: Request):
+    """
+    Endpoint SSE (Server-Sent Events) que envía usuarios en lotes de 100
+    a medida que se leen del LDAP. El cliente recibe datos desde el primer segundo
+    sin esperar a que terminen los 4.000+ usuarios.
+    """
+    from fastapi.responses import StreamingResponse
+    from fastapi.concurrency import run_in_threadpool
+    import json as json_lib
+    
+    async def event_generator():
+        try:
+            # Obtener todos los usuarios del AD en el threadpool (no bloquea el event loop)
+            all_users = await run_in_threadpool(search_users, "*", 10000)
+            
+            batch_size = 100
+            total = len(all_users)
+            
+            # Enviar total al inicio para que el frontend muestre el progreso
+            yield f"data: {json_lib.dumps({'type': 'meta', 'total': total})}\n\n"
+            
+            # Enviar en lotes
+            for i in range(0, total, batch_size):
+                if await request.is_disconnected():
+                    break
+                batch = all_users[i:i + batch_size]
+                yield f"data: {json_lib.dumps({'type': 'batch', 'users': batch, 'offset': i})}\n\n"
+            
+            # Señal de fin
+            yield f"data: {json_lib.dumps({'type': 'done', 'total': total})}\n\n"
+        except Exception as e:
+            yield f"data: {json_lib.dumps({'type': 'error', 'message': str(e)})}\n\n"
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        }
+    )
+
 
 
 @router.get("/profile/{username}")

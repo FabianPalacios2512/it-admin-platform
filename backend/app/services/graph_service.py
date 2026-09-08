@@ -58,7 +58,7 @@ class MicrosoftGraphService:
             if response.status_code >= 400:
                 print(f"[GraphService] API Error ({endpoint}): {response.text}")
                 raise ValueError(f"Graph API Error {response.status_code}: {response.text}")
-            if response.status_code == 204:
+            if response.status_code in [202, 204] or not response.text:
                 return {}
             return response.json()
 
@@ -716,7 +716,35 @@ class MicrosoftGraphService:
             result = await self._request("POST", endpoint, json=payload)
             return {"success": True, "data": result}
         except Exception as e:
-            raise ValueError(f"Error transfiriendo OneDrive: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def send_mail(self, sender_upn: str, to_email: str, subject: str, body_html: str) -> dict:
+        """
+        Envía un correo electrónico usando Microsoft Graph.
+        Requiere permiso de aplicación: Mail.Send
+        """
+        try:
+            source_id = await self.resolve_user_id(sender_upn)
+            endpoint = f"/users/{source_id}/sendMail"
+            payload = {
+                "message": {
+                    "subject": subject,
+                    "body": {
+                        "contentType": "HTML",
+                        "content": body_html
+                    },
+                    "toRecipients": [
+                        {"emailAddress": {"address": to_email}}
+                    ]
+                },
+                "saveToSentItems": "false"
+            }
+            await self._request("POST", endpoint, json=payload)
+            return {"success": True}
+        except Exception as e:
+            import logging
+            logging.error(f"Error enviando correo via Graph a {to_email}: {e}")
+            return {"success": False, "error": str(e)}
 
     async def generate_onedrive_master_link(self, source_username: str):
         """Genera un link mágico para el OneDrive."""

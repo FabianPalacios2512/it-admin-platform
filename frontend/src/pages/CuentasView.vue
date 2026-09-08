@@ -12,8 +12,12 @@ const showCreateDrawer = ref(false)
 const showDiagnoseModal = ref(false)
 const searchQuery = ref('')
 const users = ref([])
-const isLoading = ref(false)
+const isLoading = ref(false)  // true solo mientras no tenemos NINGÚN dato
+const isStreaming = ref(false) // true mientras el SSE sigue trayendo más datos
+const streamProgress = ref(0)  // usuarios recibidos hasta ahora
+const streamTotal = ref(0)     // total estimado del servidor
 let searchTimeout = null
+let sseController = null       // AbortController para cancelar SSE si el usuario navega
 
 const activeFilter = ref('activos') // todos, activos, deshabilitados, bloqueados
 
@@ -395,34 +399,91 @@ function markLockedAsSeen() {
 }
 
 async function fetchUsers() {
-  isLoading.value = true
+  // Si ya hay usuarios en memoria, no mostrar pantalla de carga completa
+  if (users.value.length === 0) isLoading.value = true
+  isStreaming.value = true
+  streamProgress.value = 0
+  streamTotal.value = 0
+
+  // Cancelar SSE anterior si existe
+  if (sseController) sseController.abort()
+  sseController = new AbortController()
+
+  const token = localStorage.getItem('access_token')
+
   try {
-    const [resSearch, resLocked] = await Promise.all([
-      authFetch(`${API_BASE}/accounts/search?q=${encodeURIComponent(searchQuery.value)}&limit=5000`),
-      authFetch(`${API_BASE}/accounts/locked`).catch(() => ({ ok: false, json: () => [] }))
-    ])
-    
+    // Cargar usuarios bloqueados en paralelo (es rápido)
+    const resLocked = await authFetch(`${API_BASE}/accounts/locked`).catch(() => ({ ok: false, json: () => [] }))
     if (resLocked.ok) {
       const lockedData = await resLocked.json()
       lockedUsers.value = new Set(lockedData.map(u => u.username))
-      if (activeFilter.value === 'bloqueados') {
-        markLockedAsSeen()
-      }
     }
 
-    if (resSearch.ok) {
-      const rawUsers = await resSearch.json()
-      users.value = rawUsers.map(u => ({
-        ...u,
-        status: lockedUsers.value.has(u.username) ? 'locked' : u.status
-      }))
-      const token = localStorage.getItem('access_token')
-      fetchLicensesSummary(token)
+    // Iniciar SSE stream
+    const response = await fetch(`${API_BASE}/accounts/stream`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+      signal: sseController.signal
+    })
+
+    if (!response.ok) throw new Error('Error iniciando stream')
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop()
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        try {
+          const msg = JSON.parse(line.slice(6))
+          if (msg.type === 'meta') {
+            streamTotal.value = msg.total
+          } else if (msg.type === 'batch') {
+            if (isLoading.value) isLoading.value = false
+            const newUsers = msg.users.map(u => ({
+              ...u,
+              status: lockedUsers.value.has(u.username) ? 'locked' : u.status
+            }))
+            const existingSet = new Set(users.value.map(u => u.username))
+            const toAdd = newUsers.filter(u => !existingSet.has(u.username))
+            if (msg.offset === 0) {
+              users.value = newUsers  // Primer batch: reemplazar
+            } else {
+              users.value = users.value.concat(toAdd)
+            }
+            streamProgress.value = users.value.length
+
+          } else if (msg.type === 'done') {
+            isStreaming.value = false
+            isLoading.value = false
+            // Cargar licencias en background (no bloquea la UI)
+            fetchLicensesSummary()
+
+          } else if (msg.type === 'error') {
+            console.error('[SSE] Error:', msg.message)
+            isLoading.value = false
+            isStreaming.value = false
+          }
+        } catch (e) { /* línea parcial, ignorar */ }
+      }
     }
   } catch (err) {
-    console.error('Error fetching users:', err)
+    if (err.name !== 'AbortError') {
+      console.error('Error en stream:', err)
+      // Fallback: usar endpoint normal si SSE falla
+      try {
+        const res = await authFetch(`${API_BASE}/accounts/search?q=&limit=5000`)
+        if (res.ok) users.value = await res.json()
+      } catch { /* ignore */ }
+    }
   } finally {
     isLoading.value = false
+    isStreaming.value = false
   }
 }
 
@@ -456,8 +517,24 @@ onMounted(() => {
   fetchUsers()
 })
 
+onUnmounted(() => {
+  // Cancelar SSE al salir de la vista para no desperdiciar recursos
+  if (sseController) sseController.abort()
+})
+
 const filteredUsers = computed(() => {
   let filtered = users.value
+  // Filtro por búsqueda: completamente en memoria, instantáneo
+  if (searchQuery.value.trim()) {
+    const q = searchQuery.value.toLowerCase().trim()
+    filtered = filtered.filter(u =>
+      (u.fullName || '').toLowerCase().includes(q) ||
+      (u.username || '').toLowerCase().includes(q) ||
+      (u.email || '').toLowerCase().includes(q) ||
+      (u.department || '').toLowerCase().includes(q)
+    )
+  }
+  // Filtro por pestaña
   if (activeFilter.value === 'activos') filtered = filtered.filter(u => u.status === 'active')
   else if (activeFilter.value === 'deshabilitados') filtered = filtered.filter(u => u.status === 'disabled')
   else if (activeFilter.value === 'bloqueados') filtered = filtered.filter(u => u.status === 'locked')
@@ -476,7 +553,7 @@ const paginatedUsers = computed(() => {
 function prevPage() { if (currentPage.value > 1) currentPage.value-- }
 function nextPage() { if (currentPage.value < totalPages.value) currentPage.value++ }
 
-watch([searchQuery, activeFilter], () => {
+watch([activeFilter], () => {
   currentPage.value = 1
   selectedUsers.value = new Set()
   selectAll.value = false
@@ -623,13 +700,23 @@ function setFilter(filter) {
             </tr>
           </thead>
           <tbody :class="{'opacity-50 pointer-events-none animate-pulse': isMfaContext && mfaLoading}">
-            <tr v-if="isLoading">
-              <td colspan="9" class="px-2 py-16 text-center">
-                <div class="inline-block w-6 h-6 border-2 border-slate-300 border-t-blue-600 rounded-full animate-spin mb-3"></div>
-                <p class="text-[13px] text-slate-500">Cargando directorio...</p>
+            <!-- Skeleton rows mientras carga el primer batch -->
+            <tr v-if="isLoading" v-for="i in 10" :key="'skel-' + i">
+              <td class="pl-2 py-2 w-10"><div class="w-3.5 h-3.5 bg-gray-200 rounded animate-pulse"></div></td>
+              <td class="px-3 py-2">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-6 h-6 rounded-full bg-gray-200 animate-pulse shrink-0"></div>
+                  <div class="h-3 bg-gray-200 rounded animate-pulse" :style="{ width: (60 + (i * 17) % 80) + 'px' }"></div>
+                </div>
               </td>
+              <td class="px-3 py-2"><div class="h-3 bg-gray-200 rounded animate-pulse w-24"></div></td>
+              <td class="px-3 py-2"><div class="h-3 bg-gray-200 rounded animate-pulse w-20"></div></td>
+              <td class="px-3 py-2"><div class="h-3 bg-gray-200 rounded animate-pulse w-20"></div></td>
+              <td class="px-3 py-2 text-center"><div class="h-3 bg-gray-200 rounded animate-pulse w-6 mx-auto"></div></td>
+              <td class="px-3 py-2 text-center"><div class="h-3 bg-gray-200 rounded animate-pulse w-6 mx-auto"></div></td>
+              <td class="px-3 py-2 text-center"><div class="h-4 bg-gray-200 rounded-full animate-pulse w-14 mx-auto"></div></td>
             </tr>
-            <tr v-else-if="filteredUsers.length === 0">
+            <tr v-else-if="!isLoading && filteredUsers.length === 0 && !isStreaming">
               <td colspan="9" class="px-2 py-16 text-center">
                 <p class="text-[13px] text-slate-500">No se encontraron usuarios que coincidan con la búsqueda o el filtro.</p>
               </td>
@@ -694,7 +781,13 @@ function setFilter(filter) {
       </div>
       <!-- Pagination -->
       <div class="py-4 flex justify-between items-center text-[12px] text-slate-500">
-        <span>Mostrando {{ paginatedUsers.length }} de {{ filteredUsers.length }}</span>
+        <span>
+          Mostrando {{ paginatedUsers.length }} de {{ filteredUsers.length }}
+          <span v-if="isStreaming && streamTotal > 0" class="ml-2 text-blue-500 font-medium">
+            · Cargando {{ streamProgress.toLocaleString() }} / {{ streamTotal.toLocaleString() }}
+            <span class="inline-block w-2.5 h-2.5 ml-1 border border-blue-400 border-t-blue-600 rounded-full animate-spin align-middle"></span>
+          </span>
+        </span>
         <div class="flex items-center gap-1" v-if="totalPages > 1">
           <button @click="prevPage" :disabled="currentPage === 1" class="p-1 hover:text-slate-800 disabled:opacity-30 disabled:hover:text-slate-500 transition-colors"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg></button>
           <span class="px-2 font-medium">{{ currentPage }} / {{ totalPages }}</span>

@@ -218,8 +218,45 @@ function closeSubView() {
   activeSubView.value = null
 }
 
-const upnSuffix = ref('@local.code')
-const preWin2000 = 'CODE\\'
+// Dominio UPN corporativo
+const upnSuffix = ref('@HogaryModa.local')
+const preWin2000 = 'HOGARYMODA\\'
+
+// Estado de validación de UPN
+const upnCheckLoading = ref(false)
+const upnCheckError = ref('')
+
+// Sugerencia de correo (solo se muestra, el usuario decide si aplicarla)
+const emailSuggestion = computed(() => {
+  const first = formData.value.firstName.trim()
+  const last = formData.value.lastName.trim().split(' ')[0] // solo primer apellido
+  if (!first || !last) return ''
+  const normalize = s => s.toLowerCase()
+    .replace(/[\u00e0-\u00e6\u00e0\u00e1\u00e2\u00e3\u00e4\u00e5]/g, 'a')
+    .replace(/[\u00e8-\u00eb]/g, 'e')
+    .replace(/[\u00ec-\u00ef]/g, 'i')
+    .replace(/[\u00f2-\u00f6\u00f8]/g, 'o')
+    .replace(/[\u00f9-\u00fc]/g, 'u')
+    .replace(/\u00f1/g, 'n')
+    .replace(/[^a-z0-9.]/g, '')
+  return `${normalize(first)}.${normalize(last)}@hogarymoda.com.co`
+})
+
+// Si el usuario aplica la sugerencia de correo
+function applyEmailSuggestion() {
+  const email = emailSuggestion.value
+  if (!email) return
+  const alreadySMTP = formData.value.proxyAddresses.some(p => p.toUpperCase().startsWith('SMTP:'))
+  if (!alreadySMTP) {
+    formData.value.proxyAddresses.push(`SMTP:${email}`)  // SMTP en mayúsculas = primario
+    formData.value.proxyAddresses.push(`smtp:${email}`)  // smtp en minúsculas = secundario
+    formData.value.proxyAddresses.push(`SIP:${email}`)   // SIP para Lync/Teams
+  }
+  // También guardar en userParameters (campo mail del AD)
+  formData.value.userParameters = email
+  emailSuggestionApplied.value = true
+}
+const emailSuggestionApplied = ref(false)
 
 // Estado de las OUs
 const ous = ref([])
@@ -317,7 +354,7 @@ function selectOU(node) {
 }
 
 // Lógica del Wizard
-function nextStep() {
+async function nextStep() {
   if (currentStep.value === 1 && !formData.value.ou) {
     alert("Por favor selecciona una Unidad Organizativa (Ubicación) antes de continuar.")
     return
@@ -327,6 +364,33 @@ function nextStep() {
     if (!formData.value.firstName || !formData.value.lastName || !formData.value.upnPrefix || !formData.value.description) {
       alert("Por favor completa los campos obligatorios de identidad (incluyendo el Área/Descripción).")
       return
+    }
+    // Validar que el UPN no exista ya en el AD antes de pasar a Organización
+    upnCheckLoading.value = true
+    upnCheckError.value = ''
+    try {
+      const token = localStorage.getItem('access_token')
+      const upnFull = `${formData.value.upnPrefix}${upnSuffix.value}`
+      const res = await fetch(`${API_BASE}/accounts/search?q=${encodeURIComponent(formData.value.upnPrefix)}&limit=10`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (res.ok) {
+        const results = await res.json()
+        const exists = results.some(u =>
+          (u.username || '').toLowerCase() === formData.value.upnPrefix.toLowerCase() ||
+          (u.userPrincipalName || '').toLowerCase() === upnFull.toLowerCase()
+        )
+        if (exists) {
+          upnCheckError.value = `⚠️ El usuario "${formData.value.upnPrefix}" ya existe en el Directorio Activo. Elige otro nombre de inicio de sesión.`
+          upnCheckLoading.value = false
+          return
+        }
+      }
+    } catch(e) {
+      // Si falla la búsqueda, no bloquear pero advertir
+      console.warn('[UPN Check] No se pudo verificar:', e)
+    } finally {
+      upnCheckLoading.value = false
     }
   }
 
@@ -348,14 +412,27 @@ function prevStep() {
   }
 }
 
-// Autocompletado del nombre
+// Autocompletado del nombre: 2 letras del nombre + primer apellido completo
+// Ej: "Fabian Andres" + "Paternina Rincon" => "fapaternina"
+// Excluye \u00f1 para evitar problemas de sincronización con Entra ID
+function sanitizeForAd(str) {
+  return str.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Quitar diacríticos (tildes)
+    .replace(/\u00f1/g, 'n')                          // \u00f1 -> n
+    .replace(/[^a-z0-9]/g, '')                        // Solo alfanumérico
+}
+
 watch([() => formData.value.firstName, () => formData.value.lastName], ([first, last]) => {
+  emailSuggestionApplied.value = false
   if (first || last) {
     formData.value.fullName = `${first} ${last}`.trim()
     if (first && last) {
-      const sam = (first.charAt(0) + last.split(' ')[0]).toLowerCase().replace(/[^a-z0-9]/g, '')
+      const firstName2 = sanitizeForAd(first).substring(0, 2)   // Primeras 2 letras del nombre
+      const firstLastName = sanitizeForAd(last.trim().split(' ')[0]) // Primer apellido completo
+      const sam = firstName2 + firstLastName
       formData.value.samAccountName = sam
       formData.value.upnPrefix = sam
+      upnCheckError.value = ''
     }
   }
 })
@@ -675,14 +752,22 @@ watch(() => props.isOpen, (val) => {
             <div class="grid grid-cols-6 gap-x-6 gap-y-8">
               <div class="col-span-6 sm:col-span-3">
                 <label class="block text-[12px] font-medium text-slate-700 mb-1">Nombre de inicio de sesión (UPN)</label>
-                <div class="flex items-center border-b border-slate-300 focus-within:border-blue-600 transition-colors">
-                  <input v-model="formData.upnPrefix" type="text" class="w-full text-[13px] border-0 bg-transparent px-0 py-1.5 focus:ring-0 transition-colors font-mono">
+                <div class="flex items-center border-b focus-within:border-blue-600 transition-colors" :class="upnCheckError ? 'border-red-400' : 'border-slate-300'">
+                  <input 
+                    v-model="formData.upnPrefix" 
+                    @input="upnCheckError = ''; formData.upnPrefix = formData.upnPrefix.replace(/[\u00f1\u00d1]/g, 'n').replace(/[^a-zA-Z0-9._-]/g, '').toLowerCase()"
+                    type="text" 
+                    class="w-full text-[13px] border-0 bg-transparent px-0 py-1.5 focus:ring-0 transition-colors font-mono"
+                  >
                   <select v-model="upnSuffix" class="text-slate-500 text-[13px] font-mono border-0 bg-transparent py-1.5 pl-2 pr-6 focus:ring-0 cursor-pointer">
-                    <option value="@local.code" v-if="formData.accountType !== 'cloud'">@local.code</option>
+                    <option value="@HogaryModa.local">@HogaryModa.local</option>
                     <option value="@hogarymoda.com.co">@hogarymoda.com.co</option>
-                    <option value="@105code.cloud">@105code.cloud</option>
                   </select>
                 </div>
+                <!-- Error de UPN existente -->
+                <p v-if="upnCheckError" class="text-[11px] text-red-600 mt-1.5 font-medium">{{ upnCheckError }}</p>
+                <p v-else-if="upnCheckLoading" class="text-[11px] text-slate-400 mt-1.5">Verificando disponibilidad...</p>
+                <p v-else class="text-[10px] text-slate-400 mt-1 font-mono">No se permiten \u00f1 ni caracteres especiales</p>
               </div>
 
               <div class="col-span-6 sm:col-span-3" v-if="formData.accountType !== 'cloud'">
@@ -691,7 +776,12 @@ watch(() => props.isOpen, (val) => {
                   <span class="text-slate-500 text-[13px] font-mono pr-2 select-none">
                     {{ preWin2000 }}
                   </span>
-                  <input v-model="formData.samAccountName" type="text" class="w-full text-[13px] border-0 bg-transparent px-0 py-1.5 focus:ring-0 transition-colors font-mono">
+                  <input 
+                    v-model="formData.samAccountName" 
+                    @input="formData.samAccountName = formData.samAccountName.replace(/[\u00f1\u00d1]/g, 'n').replace(/[^a-zA-Z0-9._-]/g, '').toLowerCase()"
+                    type="text" 
+                    class="w-full text-[13px] border-0 bg-transparent px-0 py-1.5 focus:ring-0 transition-colors font-mono"
+                  >
                 </div>
               </div>
             </div>
@@ -831,7 +921,26 @@ watch(() => props.isOpen, (val) => {
               </div>
             </div>
 
-            <!-- Sugerencias Opcionales -->
+            <!-- Sugerencia de correo (solo sugerencia, no obligatorio) -->
+            <div v-if="emailSuggestion && !emailSuggestionApplied" class="mt-5 p-4 bg-amber-50 border border-amber-200 rounded-md flex items-start gap-3">
+              <svg class="w-4 h-4 text-amber-500 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+              <div class="flex-1">
+                <p class="text-[12px] font-semibold text-amber-800 mb-0.5">Sugerencia de correo corporativo</p>
+                <p class="text-[12px] text-amber-700 font-mono mb-2">{{ emailSuggestion }}</p>
+                <p class="text-[11px] text-amber-600 leading-relaxed mb-3">Si aplicas esta sugerencia se configurarán automáticamente los atributos <strong>SMTP</strong>, <strong>smtp</strong> y <strong>SIP</strong> en ProxyAddresses, y el campo <strong>mail</strong> del usuario. Puedes ignorarla si el correo será diferente.</p>
+                <div class="flex items-center gap-2">
+                  <button @click="applyEmailSuggestion" class="px-3 py-1.5 bg-amber-600 text-white text-[12px] font-semibold rounded hover:bg-amber-700 transition-colors">Aplicar sugerencia</button>
+                  <button @click="emailSuggestionApplied = true" class="px-3 py-1.5 text-[12px] text-amber-700 hover:underline">Ignorar</button>
+                </div>
+              </div>
+            </div>
+            <div v-if="emailSuggestionApplied && emailSuggestion" class="mt-5 p-3 bg-emerald-50 border border-emerald-200 rounded-md flex items-center gap-2">
+              <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+              <span class="text-[12px] text-emerald-700 font-medium">Correo configurado en ProxyAddresses</span>
+              <button @click="emailSuggestionApplied = false; formData.proxyAddresses = formData.proxyAddresses.filter(p => !p.includes(emailSuggestion)); formData.userParameters = ''" class="ml-auto text-[11px] text-slate-400 hover:text-red-500 transition-colors">Deshacer</button>
+            </div>
+
+            <!-- Acciones opcionales antes de guardar -->
             <div class="mt-8 pt-6 border-t border-slate-200">
               <h3 class="text-[13px] font-semibold text-slate-900 mb-3">Acciones opcionales antes de guardar</h3>
               <ul class="space-y-4">

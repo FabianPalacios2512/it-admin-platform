@@ -14,7 +14,7 @@ async def get_sites():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/aps")
-async def get_aps(site: str = Query("default", description="Nombre interno del sitio")):
+async def get_aps(site: str = Query("q0zet7qu", description="Nombre interno del sitio")):
     try:
         devices = await unifi_service.get_devices(site)
         result = []
@@ -35,7 +35,7 @@ async def get_aps(site: str = Query("default", description="Nombre interno del s
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/aps/{mac}/restart")
-async def restart_ap(mac: str, site: str = Query("default")):
+async def restart_ap(mac: str, site: str = Query("q0zet7qu")):
     try:
         res = await unifi_service.restart_ap(mac, site)
         return {"success": True, "data": res}
@@ -43,7 +43,7 @@ async def restart_ap(mac: str, site: str = Query("default")):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/aps/{mac}/history")
-async def get_ap_history(mac: str, site: str = Query("default")):
+async def get_ap_history(mac: str, site: str = Query("q0zet7qu")):
     try:
         users = await unifi_service.get_all_clients(site)
         result = []
@@ -68,7 +68,7 @@ async def get_ap_history(mac: str, site: str = Query("default")):
 
 @router.get("/clients")
 async def get_clients(
-    site: str = Query("default"),
+    site: str = Query("q0zet7qu"),
     ap_mac: Optional[str] = None, 
     is_blocked: Optional[bool] = None
 ):
@@ -116,7 +116,7 @@ async def get_clients(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/clients/{mac}/block")
-async def block_client(mac: str, site: str = Query("default")):
+async def block_client(mac: str, site: str = Query("q0zet7qu")):
     try:
         res = await unifi_service.block_client(mac, site)
         return {"success": True, "data": res}
@@ -124,7 +124,7 @@ async def block_client(mac: str, site: str = Query("default")):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/clients/{mac}/unblock")
-async def unblock_client(mac: str, site: str = Query("default")):
+async def unblock_client(mac: str, site: str = Query("q0zet7qu")):
     try:
         res = await unifi_service.unblock_client(mac, site)
         return {"success": True, "data": res}

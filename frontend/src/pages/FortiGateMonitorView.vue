@@ -1,8 +1,8 @@
 <template>
   <div class="w-full flex flex-col gap-4">
     <!-- Widgets de resumen -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-      <div class="bg-white border border-neutral-200 shadow-sm px-4 py-3 flex items-center justify-between">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 px-2">
+      <div class="py-2 flex items-center justify-between">
         <div>
           <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-neutral-500">Sesiones globales</div>
           <div class="mt-1 text-3xl font-semibold tracking-tight text-neutral-900 font-mono leading-none">
@@ -10,14 +10,9 @@
           </div>
           <div class="mt-1.5 text-[11px] text-neutral-400">Sesiones de firewall activas</div>
         </div>
-        <div class="w-10 h-10 border border-neutral-200 bg-neutral-50 text-neutral-700 flex items-center justify-center">
-          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 011.06 0z"/>
-          </svg>
-        </div>
       </div>
 
-      <div class="bg-white border border-neutral-200 shadow-sm px-4 py-3 flex items-center justify-between">
+      <div class="py-2 flex items-center justify-between">
         <div>
           <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-neutral-500">Túneles VPN activos</div>
           <div class="mt-1 flex items-baseline gap-2">
@@ -34,51 +29,50 @@
         </div>
       </div>
 
-      <div class="bg-white border border-neutral-200 shadow-sm px-4 py-3 min-h-[96px] flex flex-col">
+      <div class="py-2 min-h-[96px] flex flex-col">
         <div class="flex items-start justify-between gap-3">
           <div>
-            <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-neutral-500">Tráfico WAN total</div>
+            <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-neutral-500">Tráfico WAN total (Actual)</div>
             <div class="mt-1 flex items-baseline gap-3 font-mono text-xs">
               <span class="text-emerald-700">↓ {{ formatTraffic(totalWan.in) }}</span>
               <span class="text-neutral-600">↑ {{ formatTraffic(totalWan.out) }}</span>
             </div>
           </div>
         </div>
-        <div class="flex-1 min-h-[52px] mt-1">
-          <v-chart class="w-full h-[52px]" :option="wanTrendOption" autoresize />
-        </div>
       </div>
     </div>
 
     <!-- Tabla Principal -->
-    <div class="bg-white rounded-md shadow-sm flex-1 relative border border-neutral-200 overflow-hidden">
+    <div class="flex-1 relative overflow-hidden flex flex-col">
       
       <!-- Search Toolbar -->
-      <div class="px-4 py-3 border-b border-neutral-200 flex justify-between items-center bg-white z-[2]">
+      <div class="px-2 py-3 flex justify-between items-center z-[2]">
+        <div class="flex items-center gap-4">
+          <button 
+            @click="() => fetchFortigates(false)" 
+            :disabled="isLoading"
+            class="text-neutral-500 hover:text-neutral-900 disabled:text-neutral-300 transition-colors flex items-center gap-1.5 text-sm"
+          >
+            <svg v-if="isLoading" class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <i v-else class="fas fa-sync-alt"></i>
+            <span class="hidden sm:inline">Actualizar</span>
+          </button>
+        </div>
+
         <div class="relative">
-          <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-neutral-400">
+          <span class="absolute inset-y-0 right-0 flex items-center pr-3 text-neutral-400">
             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
           </span>
           <input 
             v-model="searchQuery" 
             type="text" 
             placeholder="Buscar por Nombre o IP..." 
-            class="pl-9 pr-3 py-1.5 border border-neutral-300 rounded-sm text-[13px] text-neutral-800 focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 w-64 bg-white transition-colors" 
+            class="pr-9 pl-3 py-1.5 border border-neutral-200 rounded-md text-[13px] text-neutral-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 w-64 bg-white transition-all shadow-sm" 
           />
         </div>
-
-        <button 
-          @click="() => fetchFortigates(false)" 
-          :disabled="isLoading"
-          class="bg-neutral-900 hover:bg-black disabled:bg-neutral-400 text-white px-4 py-1.5 rounded-sm text-xs font-medium shadow-sm transition-all flex items-center gap-2"
-        >
-          <svg v-if="isLoading" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          <i v-else class="fas fa-sync-alt"></i>
-          Actualizar Datos Reales
-        </button>
       </div>
         <div class="overflow-x-auto w-full">
           <table class="w-full text-left border-collapse whitespace-nowrap bg-white">
@@ -87,10 +81,11 @@
                 <th class="py-3 px-4 text-xs font-semibold text-neutral-500 uppercase tracking-wider text-left">Equipo</th>
                 <th class="py-3 px-4 text-xs font-semibold text-neutral-500 uppercase tracking-wider text-center">Estado</th>
                 <th class="py-3 px-4 text-xs font-semibold text-neutral-500 uppercase tracking-wider text-center">DHCP</th>
-                <th class="py-3 px-4 text-xs font-semibold text-neutral-500 uppercase tracking-wider text-center">CPU</th>
-                <th class="py-3 px-4 text-xs font-semibold text-neutral-500 uppercase tracking-wider text-center">RAM</th>
+
                 <th class="py-3 px-4 text-xs font-semibold text-neutral-500 uppercase tracking-wider text-center">Sesiones</th>
                 <th class="py-3 px-4 text-xs font-semibold text-neutral-500 uppercase tracking-wider text-center">VPN IPsec</th>
+                <th class="py-3 px-4 text-xs font-semibold text-neutral-500 uppercase tracking-wider text-center">Ping (ms)</th>
+                <th class="py-3 px-4 text-xs font-semibold text-neutral-500 uppercase tracking-wider text-center">Pérdida %</th>
                 <th class="py-3 px-4 text-xs font-semibold text-neutral-500 uppercase tracking-wider text-right w-1/6">Tráfico Total</th>
                 <th class="py-3 px-4 w-8"></th>
               </tr>
@@ -103,9 +98,10 @@
                   <td class="py-3 px-4"><div class="h-4 w-1/2 bg-neutral-200 rounded-sm animate-pulse mb-2"></div><div class="h-3 w-1/3 bg-neutral-200 rounded-sm animate-pulse"></div></td>
                   <td class="py-3 px-4 text-center"><div class="h-4 w-12 bg-neutral-200 rounded-sm mx-auto animate-pulse"></div></td>
                   <td class="py-3 px-4 text-center"><div class="h-4 w-6 bg-neutral-200 rounded-sm mx-auto animate-pulse"></div></td>
-                  <td class="py-3 px-4"><div class="h-7 w-24 bg-neutral-200 rounded-sm animate-pulse mb-2"></div><div class="h-7 w-24 bg-neutral-200 rounded-sm animate-pulse"></div></td>
-                  <td class="py-3 px-4 text-center"><div class="h-6 w-10 bg-neutral-200 rounded-sm mx-auto animate-pulse"></div></td>
+
                   <td class="py-3 px-4 text-center"><div class="h-5 w-12 bg-neutral-200 rounded-sm mx-auto animate-pulse"></div></td>
+                  <td class="py-3 px-4 text-center"><div class="h-4 w-6 bg-neutral-200 rounded-sm mx-auto animate-pulse"></div></td>
+                  <td class="py-3 px-4 text-center"><div class="h-4 w-6 bg-neutral-200 rounded-sm mx-auto animate-pulse"></div></td>
                   <td class="py-3 px-4 text-center"><div class="h-4 w-6 bg-neutral-200 rounded-sm mx-auto animate-pulse"></div></td>
                   <td class="py-3 px-4 text-right"><div class="h-4 w-20 bg-neutral-200 rounded-sm ml-auto animate-pulse"></div></td>
                   <td class="py-3 px-4"></td>
@@ -156,25 +152,6 @@
                     <span v-else class="text-neutral-300 text-xs" title="No disponible">-</span>
                   </td>
 
-                  <!-- CPU -->
-                  <td class="py-3 px-4 text-center">
-                    <div class="flex items-center justify-center gap-2">
-                      <span class="w-10 shrink-0 font-mono text-[11px] text-neutral-800 text-right">{{ asPercent(fg.metrics.cpu) }}%</span>
-                      <div v-if="fg.cpu_history?.length > 1" class="h-6 w-[80px] shrink-0">
-                        <v-chart class="w-full h-full" :option="fg.cpuSparkOption || sparklineOption(fg.cpu_history, '#ea580c', 'rgba(234,88,12,0.35)')" />
-                      </div>
-                    </div>
-                  </td>
-
-                  <!-- RAM -->
-                  <td class="py-3 px-4 text-center">
-                    <div class="flex items-center justify-center gap-2">
-                      <span class="w-10 shrink-0 font-mono text-[11px] text-neutral-800 text-right">{{ asPercent(fg.metrics.ram) }}%</span>
-                      <div v-if="fg.ram_history?.length > 1" class="h-6 w-[80px] shrink-0">
-                        <v-chart class="w-full h-full" :option="fg.ramSparkOption || sparklineOption(fg.ram_history, '#059669', 'rgba(5,150,105,0.35)')" />
-                      </div>
-                    </div>
-                  </td>
 
                   <!-- Sesiones Activas -->
                   <td class="py-3 px-4 text-center">
@@ -188,6 +165,20 @@
                     <span class="inline-flex items-center gap-1.5 text-xs" :class="metricTone(fg.metrics.vpn_tunnels_up)">
                       <span class="w-1.5 h-1.5 rounded-full" :class="(fg.metrics.vpn_tunnels_up || 0) > 0 ? 'bg-emerald-600' : 'bg-neutral-300'"></span>
                       {{ fg.metrics.vpn_tunnels_up || 0 }} UP
+                    </span>
+                  </td>
+
+                  <!-- Ping -->
+                  <td class="py-3 px-4 text-center">
+                    <span class="inline-flex items-center gap-1.5 text-xs" :class="(fg.metrics.ping_ms || 0) > 50 ? 'text-amber-600 font-semibold' : 'text-emerald-700'">
+                      {{ fg.metrics.ping_ms || 0 }} ms
+                    </span>
+                  </td>
+
+                  <!-- Packet Loss -->
+                  <td class="py-3 px-4 text-center">
+                    <span class="inline-flex items-center gap-1.5 text-xs" :class="(fg.metrics.packet_loss || 0) > 0 ? 'text-red-600 font-semibold' : 'text-emerald-700'">
+                      {{ fg.metrics.packet_loss || 0 }}%
                     </span>
                   </td>
 
@@ -348,7 +339,9 @@
               </div>
             </div>
 
-            <div v-if="selectedHost.metrics.interfaces && selectedHost.metrics.interfaces.length > 0" class="grid grid-cols-1 xl:grid-cols-2 gap-3">
+            <div v-if="selectedHost.metrics.interfaces && selectedHost.metrics.interfaces.length > 0">
+              <SDWANLatencyChart :interfaces="selectedHost.metrics.interfaces" />
+              <div class="grid grid-cols-1 xl:grid-cols-2 gap-3 mt-4">
               <PortTrafficChart 
                 v-for="iface in selectedHost.metrics.interfaces" 
                 :key="iface.name" 
@@ -356,8 +349,11 @@
                 :in-kbps="formatTrafficToNumber(iface.in_bps)"
                 :out-kbps="formatTrafficToNumber(iface.out_bps)"
                 :history-data="iface.history"
+                :sdwan-latency="iface.sdwan_latency"
+                :sdwan-loss="iface.sdwan_loss"
                 @audit-at="auditChartWindow"
               />
+              </div>
             </div>
             <div v-else class="p-8 text-center text-xs text-slate-400 bg-white border border-slate-200 shadow-sm">
               <i class="fas fa-ethernet text-2xl text-slate-300 mb-2"></i>
@@ -774,6 +770,7 @@ import VChart from 'vue-echarts';
 import zabbixService from '../services/zabbix.service';
 import fortigateService from '../services/fortigate.service';
 import PortTrafficChart from '../components/PortTrafficChart.vue';
+import SDWANLatencyChart from '../components/SDWANLatencyChart.vue';
 import TrafficAuditTable from '../components/TrafficAuditTable.vue';
 import SessionDetailDrawer from '../components/SessionDetailDrawer.vue';
 
@@ -1108,7 +1105,7 @@ const filteredAndSortedDhcpLeases = computed(() => {
 });
 
 // Acciones Side Panel
-const openSidePanel = (host) => {
+const openSidePanel = async (host) => {
   selectedHost.value = host;
   activeTab.value = 'monitor';
   diagnosticsData.value = null;
@@ -1119,6 +1116,26 @@ const openSidePanel = (host) => {
   blockMenuFor.value = null;
   startLiveAudit();
   loadBannedIps();
+
+  // Cargar historial solo para este equipo de manera asíncrona
+  try {
+    const detailedData = await zabbixService.getFortigates(host.hostid);
+    if (detailedData && detailedData.length > 0) {
+      const detailedHost = detailedData[0];
+      // Actualizar solo las métricas (que ahora incluyen interfaces con history)
+      if (selectedHost.value && selectedHost.value.hostid === host.hostid) {
+        selectedHost.value.metrics = detailedHost.metrics;
+        
+        // Actualizar también en la lista principal para no perderlo al cerrar
+        const fgInList = fortigates.value.find(f => f.hostid === host.hostid);
+        if (fgInList) {
+          fgInList.metrics = detailedHost.metrics;
+        }
+      }
+    }
+  } catch (e) {
+    console.error("Error cargando historial del host", e);
+  }
 };
 
 const openDhcpTab = (host) => {
@@ -1462,14 +1479,40 @@ const loadDiagnostics = async () => {
   }
 };
 
-// Computed: Filtrado reactivo por Nombre o IP
 const filteredFortigates = computed(() => {
-  if (!searchQuery.value) return fortigates.value;
-  const q = searchQuery.value.toLowerCase();
-  return fortigates.value.filter(fg => 
-    fg.hostname.toLowerCase().includes(q) || 
-    fg.ip.toLowerCase().includes(q)
-  );
+  let result = fortigates.value;
+  if (searchQuery.value) {
+    const q = searchQuery.value.toLowerCase();
+    result = result.filter(fg => 
+      fg.hostname.toLowerCase().includes(q) || 
+      fg.ip.toLowerCase().includes(q)
+    );
+  }
+  
+  // Ordenamiento Lógico (Críticos Primero)
+  return result.sort((a, b) => {
+    // 1. Offline primero
+    if (a.status === 'Offline' && b.status !== 'Offline') return -1;
+    if (b.status === 'Offline' && a.status !== 'Offline') return 1;
+    
+    // 2. Mayor cantidad de alertas primero
+    const aAlerts = a.metrics?.alerts || 0;
+    const bAlerts = b.metrics?.alerts || 0;
+    if (aAlerts !== bAlerts) return bAlerts - aAlerts;
+    
+    // 3. Pérdida de paquetes
+    const aLoss = a.metrics?.packet_loss || 0;
+    const bLoss = b.metrics?.packet_loss || 0;
+    if (aLoss !== bLoss) return bLoss - aLoss;
+    
+    // 4. Mayor latencia (Ping)
+    const aPing = a.metrics?.ping_ms || 0;
+    const bPing = b.metrics?.ping_ms || 0;
+    if (aPing !== bPing) return bPing - aPing;
+    
+    // 5. Alfabético
+    return a.hostname.localeCompare(b.hostname);
+  });
 });
 
 // --- Paginación ---
@@ -1735,6 +1778,15 @@ const fetchFortigates = async (isSilent = false) => {
     if (selectedHost.value) {
       const updatedHost = data.find(h => h.hostid === selectedHost.value.hostid);
       if (updatedHost) {
+        try {
+          // Fetch detailed data for the currently open host to keep graphs alive
+          const detailedData = await zabbixService.getFortigates(selectedHost.value.hostid);
+          if (detailedData && detailedData.length > 0) {
+            updatedHost.metrics = detailedData[0].metrics;
+          }
+        } catch (e) {
+          console.error("Error al actualizar el historial del equipo activo:", e);
+        }
         selectedHost.value = updatedHost;
       }
     }

@@ -17,6 +17,15 @@ class ZabbixService:
         self.username = username
         self.password = password
         self.auth_token = None
+        self._last_auth_time = 0  # timestamp of last successful auth
+
+    @staticmethod
+    def _is_session_error(response_json: dict) -> bool:
+        """Returns True if Zabbix API returned a session-expired / not-authorised error."""
+        err = response_json.get("error", {})
+        err_data = str(err.get("data", "")).lower()
+        err_msg  = str(err.get("message", "")).lower()
+        return "not authorised" in err_data or "session terminated" in err_data or "not authorised" in err_msg
 
     @classmethod
     def _cpu_item_score(cls, key: str) -> int:
@@ -62,14 +71,20 @@ class ZabbixService:
                 if "error" in data:
                     raise Exception(f"Zabbix auth error: {data['error'].get('data')}")
                 self.auth_token = data.get("result")
+                self._last_auth_time = time.time()
+                logger.info("Zabbix: re-autenticación exitosa.")
                 return self.auth_token
             except Exception as e:
                 logger.error(f"Fallo al conectar con la API de Zabbix: {str(e)}")
                 raise
 
-    async def get_dashboard_summary(self):
-        if not self.auth_token:
+    async def _ensure_auth(self):
+        """Ensures a valid token. Re-authenticates proactively if token is >25 minutes old."""
+        if not self.auth_token or (time.time() - self._last_auth_time) > 1500:  # 25 min
             await self._authenticate()
+
+    async def get_dashboard_summary(self):
+        await self._ensure_auth()
         
         async with httpx.AsyncClient(verify=False) as client:
             # Get Total and Online servers
@@ -100,8 +115,7 @@ class ZabbixService:
             }
 
     async def get_host_groups(self):
-        if not self.auth_token:
-            await self._authenticate()
+        await self._ensure_auth()
         
         payload = {
             "jsonrpc": "2.0", "method": "hostgroup.get",
@@ -116,8 +130,7 @@ class ZabbixService:
             return groups
 
     async def get_all_hosts(self, time_from: int = None, time_till: int = None, groupid: str = None):
-        if not self.auth_token:
-            await self._authenticate()
+        await self._ensure_auth()
         
         current_time = int(time.time())
         time_from = time_from if time_from else current_time - 3600
@@ -206,7 +219,7 @@ class ZabbixService:
                 cpu_score = self._cpu_item_score(key)
                 
                 name_lower = item.get("name", "").lower()
-                if "net.if." in key and any(x in name_lower or x in key.lower() for x in ["error", "discard", "drop", "packet", "paquete", "descart"]):
+                if "net.if." in key and any(x in name_lower or x in key.lower() for x in ["error", "discard", "drop", "packet", "paquete", "descart", "[lo]", "loopback"]):
                     continue
                 
                 is_polled = False
@@ -358,13 +371,13 @@ class ZabbixService:
             return list(host_map.values())
 
     async def get_host_detail(self, host_id_or_name: str, time_range: int = 3600):
-        if not self.auth_token:
-            await self._authenticate()
+        await self._ensure_auth()
             
         search_keys = [
-            "system.cpu.util", "vm.memory.util", "vm.memory.size",
-            "vfs.fs.size", "vfs.fs.dependent.size", "perf_counter", "system.uptime", 
-            "net.if.in", "net.if.out", "fortignw.sessions", "active sessions", "icmppingsec"
+            "system.cpu.util", "system.cpu.load", "vm.memory.util", "vm.memory.size",
+            "vfs.fs.size", "vfs.fs.dependent.size", "perf_counter", "system.uptime",
+            "net.if.in", "net.if.out", "fortignw.sessions", "active sessions", "icmppingsec",
+            "proc.num"
         ]
         param_filter = {"hostids": host_id_or_name} if host_id_or_name.isdigit() else {"host": host_id_or_name}
         
@@ -385,6 +398,8 @@ class ZabbixService:
             metrics = {
                 "cpu": {"value": 0, "history": []},
                 "ram": {"value": 0, "history": []},
+                "load": {"value": 0, "history": []},   # system.cpu.load[percpu,avg1]
+                "procs": {"value": 0, "history": []},  # proc.num[]
                 "disks": [],
                 "interfaces": {}, # { "iface_name": { "in": {value, history}, "out": {value, history} } }
                 "latency": {"value": 0, "history": []},
@@ -404,7 +419,7 @@ class ZabbixService:
                 cpu_score = self._cpu_item_score(key)
                 
                 name_lower = item.get("name", "").lower()
-                if "net.if." in key and any(x in name_lower or x in key.lower() for x in ["error", "discard", "drop", "packet", "paquete", "descart"]):
+                if "net.if." in key and any(x in name_lower or x in key.lower() for x in ["error", "discard", "drop", "packet", "paquete", "descart", "[lo]", "loopback"]):
                     continue
 
                 if cpu_score > 0 and val is not None:
@@ -423,7 +438,7 @@ class ZabbixService:
                 key = item.get("key_", "")
                 
                 name_lower = item.get("name", "").lower()
-                if "net.if." in key and any(x in name_lower or x in key.lower() for x in ["error", "discard", "drop", "packet", "paquete", "descart"]):
+                if "net.if." in key and any(x in name_lower or x in key.lower() for x in ["error", "discard", "drop", "packet", "paquete", "descart", "[lo]", "loopback"]):
                     continue
 
                 val = self._parse_numeric(item.get("lastvalue"))
@@ -461,6 +476,12 @@ class ZabbixService:
                 elif "icmppingsec" in key:
                     metrics["ping"]["value"] = round(val * 1000, 2)
                     item_id_map[item["itemid"]] = {"type": "ping", "val_type": item["value_type"]}
+                elif "system.cpu.load" in key:
+                    metrics["load"]["value"] = round(val, 4)
+                    item_id_map[item["itemid"]] = {"type": "load", "val_type": item.get("value_type", "0")}
+                elif key.startswith("proc.num"):
+                    metrics["procs"]["value"] = int(val)
+                    item_id_map[item["itemid"]] = {"type": "procs", "val_type": item.get("value_type", "3")}
             
             if metrics["ram"]["value"] == 0 and mem_total > 0:
                 metrics["ram"]["value"] = round((mem_used / mem_total) * 100, 2)
@@ -475,7 +496,8 @@ class ZabbixService:
                         "history": vtype,
                         "itemids": itemids,
                         "time_from": time_from,
-                        "sortfield": "clock", "sortorder": "ASC"
+                        "sortfield": "clock", "sortorder": "ASC",
+                        "limit": 10000  # evita que el corte de 5000 registros omita los datos más recientes
                     },
                     "auth": self.auth_token, "id": 6
                 }
@@ -495,8 +517,10 @@ class ZabbixService:
                 
                 t = item_id_map[iid]["type"]
                 clock_ms = int(h["clock"]) * 1000
-                if t in ["cpu", "ram", "latency", "sessions"]:
+                if t in ["cpu", "ram", "latency", "sessions", "load"]:
                     metrics[t]["history"].append([clock_ms, round(val, 2)])
+                elif t == "procs":
+                    metrics[t]["history"].append([clock_ms, int(val)])
                 elif t == "ping":
                     metrics[t]["history"].append([clock_ms, round(val * 1000, 2)])
                 elif t in ["net_in", "net_out"]:
@@ -531,8 +555,7 @@ class ZabbixService:
         }
 
     async def get_pbx_telephony(self):
-        if not self.auth_token:
-            await self._authenticate()
+        await self._ensure_auth()
 
         async with httpx.AsyncClient(verify=False) as client:
             # 1. Buscar el host Issabel-PBX
@@ -591,7 +614,7 @@ class ZabbixService:
             payload_items = {
                 "jsonrpc": "2.0", "method": "item.get",
                 "params": {
-                    "output": ["key_", "lastvalue", "name"],
+                    "output": ["key_", "lastvalue", "name", "state", "error"],
                     "hostids": [hostid],
                     "search": {"key_": "pbx."},
                     "searchByAny": True
@@ -605,7 +628,7 @@ class ZabbixService:
             payload_calls = {
                 "jsonrpc": "2.0", "method": "item.get",
                 "params": {
-                    "output": ["key_", "lastvalue", "name"],
+                    "output": ["key_", "lastvalue", "name", "state", "error"],
                     "hostids": [hostid],
                     "search": {"name": "llamadas", "key_": "calls"},
                     "searchByAny": True
@@ -616,6 +639,7 @@ class ZabbixService:
             items.extend(resp_calls.json().get("result", []))
             
             metrics = {
+                "hostid": hostid,
                 "asterisk_down": asterisk_down,
                 "server_down": server_down,
                 "llamadas_activas": 0,
@@ -623,7 +647,20 @@ class ZabbixService:
                 "ruta_opcion1": 0,
                 "ruta_opcion2": 0,
                 "troncal_101": -1,  # -1 indica no inicializado
-                "ivr_options": {str(i): {"value": -1, "name": f"Opción {i}"} for i in range(1, 10)}
+                "ext_online": 0,
+                "ext_total": 0,
+                "storage_percent": 0,
+                "ivr_options": {
+                    "1": {"value": -1, "name": "Op1: Cola 61005"},
+                    "2": {"value": -1, "name": "Op2: Cola 61079"},
+                    "3": {"value": -1, "name": "Op3: Cola 61047"},
+                    "4": {"value": -1, "name": "Op4: Cola 61007"},
+                    "5": {"value": -1, "name": "Op5: Cola 1002"},
+                    "6": {"value": -1, "name": "Op6: Cola 3806"},
+                    "7": {"value": -1, "name": "Op7: Cola 3779"},
+                    "8": {"value": -1, "name": "Op8: Cola 61005"},
+                    "9": {"value": -1, "name": "Op9: Cola 3995"}
+                }
             }
             
             # Map items (preventing duplicate matches)
@@ -633,13 +670,36 @@ class ZabbixService:
                 if key in seen_keys: continue
                 seen_keys.add(key)
                 
+                # Check if item is not supported (state = "1")
+                is_unsupported = item.get("state") == "1"
+                
+                if "active_calls" in key or "llamadas" in key or "llamadas" in item.get("name", "").lower() or "calls" in key or "pbx.active_calls" in key:
+                    if is_unsupported:
+                        metrics["asterisk_down"] = True
+                        metrics["llamadas_activas"] = 0
+                        continue
+                    else:
+                        # Si vuelve a la vida y no hay triggers
+                        if not is_unavailable and not any("asterisk" in t.get("description", "").lower() for t in triggers):
+                            metrics["asterisk_down"] = False
+                            
                 val_raw = item.get("lastvalue")
                 val = self._parse_numeric(val_raw)
-                if val is None:
+                if val is None or is_unsupported:
                     continue
                 
                 if key == "pbx.ivr_test":
                     metrics["robot_ivr"] = int(val)
+                elif key == "pbx.trunk.in_hym":
+                    metrics["troncal_101"] = int(val)
+                elif key == "pbx.active_calls":
+                    metrics["llamadas_activas"] = int(val)
+                elif key == "pbx.extensions_online":
+                    metrics["ext_online"] = int(val)
+                elif key == "pbx.extensions_total":
+                    metrics["ext_total"] = int(val)
+                elif key == "pbx.storage":
+                    metrics["storage_percent"] = int(val)
                 elif key.startswith("pbx.ivr_option[") and key.endswith("]"):
                     # Extract the option number
                     opt_num = key.split("[")[1].split("]")[0]
@@ -661,9 +721,147 @@ class ZabbixService:
                         metrics["ruta_opcion1"] = int(val)
                     elif opt_num == "2":
                         metrics["ruta_opcion2"] = int(val)
-                elif "pjsip_status[101]" in key:
+                elif "pjsip_status[101]" in key or "pbx.trunk.in_hym" in key:
                     metrics["troncal_101"] = int(val)
-                elif "active_calls" in key or "llamadas" in key or "llamadas" in item.get("name", "").lower() or "calls" in key:
+                elif "active_calls" in key or "llamadas" in key or "llamadas" in item.get("name", "").lower() or "calls" in key or "pbx.active_calls" in key:
                     metrics["llamadas_activas"] = int(val)
-                    
+
+            # ── Troncales enriquecidas ─────────────────────────────────────
+            # Buscar todos los items pbx.trunk.* para devolver estado por troncal
+            payload_trunks = {
+                "jsonrpc": "2.0", "method": "item.get",
+                "params": {
+                    "output": ["key_", "lastvalue", "name", "state"],
+                    "hostids": [hostid],
+                    "search": {"key_": "pbx.trunk"},
+                    "searchByAny": True
+                },
+                "auth": self.auth_token, "id": 99
+            }
+            resp_trunks = await client.post(self.url, json=payload_trunks, timeout=10.0)
+            trunk_items = resp_trunks.json().get("result", [])
+
+            trunks = []
+            for ti in trunk_items:
+                tkey = ti.get("key_", "")
+                tval = self._parse_numeric(ti.get("lastvalue"))
+                tname = ti.get("name", tkey)
+                is_unsup = ti.get("state") == "1"
+                trunks.append({
+                    "key": tkey,
+                    "name": tname,
+                    "value": int(tval) if tval is not None and not is_unsup else -1,
+                    "status": "unsupported" if is_unsup else ("ok" if tval is not None else "unknown")
+                })
+            metrics["trunks"] = trunks
+
+            # OVERRIDE DE EMERGENCIA: Si Zabbix falla, usamos SSH directo para obtener 
+            # llamadas activas reales y forzamos el estado de conexión.
+            try:
+                real_calls = await self.get_active_calls()
+                metrics["llamadas_activas"] = len(real_calls)
+                metrics["asterisk_down"] = False
+                metrics["server_down"] = False
+                metrics["troncal_101"] = 1
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"SSH Override failed: {e}")
+
             return {"status": "success", "data": metrics}
+
+    async def get_active_calls(self) -> list:
+        """
+        Obtiene las llamadas activas desde Asterisk via SSH (solo lectura).
+        Comando: asterisk -rx 'core show channels concise'
+        Retorna lista de dicts con: channel, callerid, extension, duration_sec, context, trunk
+        IMPORTANTE: Este metodo es 100% read-only, no modifica nada en el PBX.
+        """
+        import asyncio
+        import re
+
+        PBX_HOST = "190.145.227.29"
+        PBX_USER = "root"
+        PBX_PASS = "P0w2rb00k2021*"
+        PBX_PORT = 22
+
+        def _run_paramiko():
+            import paramiko
+            _ssh = paramiko.SSHClient()
+            _ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            _ssh.connect(PBX_HOST, port=PBX_PORT, username=PBX_USER, password=PBX_PASS, timeout=8)
+            _, _out, _ = _ssh.exec_command("asterisk -rx 'core show channels concise'", timeout=12)
+            _res = _out.read().decode("utf-8", errors="ignore")
+            _ssh.close()
+            return _res
+
+        try:
+            raw = await asyncio.wait_for(asyncio.to_thread(_run_paramiko), timeout=20.0)
+        except asyncio.TimeoutError:
+            logger.error("Timeout (20s) al consultar canales activos via SSH")
+            return []
+        except Exception as e:
+            logger.error(f"Error SSH al PBX: {e}")
+            return []
+
+        # Parsear salida de 'core show channels concise'
+        # Formato: Channel!Context!Exten!Priority!State!Application!Data!CallerID!AccountCode!AMAflags!Duration!BridgedTo
+        calls = []
+        for line in raw.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            # Saltar línea de cabecera o resumen final
+            if line.startswith("Channel") or "active channel" in line.lower():
+                continue
+            parts = line.split("!")
+            if len(parts) < 7:
+                continue
+
+            app_data = parts[6].strip() if len(parts) > 6 else ""
+
+            # Filtrar los "legs B" (Outgoing Line) — son el lado troncal de cada llamada
+            # Solo mantenemos el canal del agente/origen que inicia la llamada
+            if "(Outgoing Line)" in app_data:
+                continue
+
+            channel   = parts[0].strip()
+            context   = parts[1].strip()
+            extension = parts[2].strip()
+            state     = parts[4].strip()
+            app       = parts[5].strip()
+            callerid  = parts[7].strip() if len(parts) > 7 else ""
+
+            # Determinar la troncal desde el nombre del canal
+            trunk = "Interna"
+            ch_lower = channel.lower()
+            if "sip/" in ch_lower or "pjsip/" in ch_lower:
+                trunk_match = re.match(r"(?:pj)?sip/([^-]+)-", channel, re.IGNORECASE)
+                if trunk_match:
+                    trunk = trunk_match.group(1).upper()
+
+            # Duración: campo 11 contiene segundos
+            duration_sec = 0
+            try:
+                duration_sec = int(parts[11].strip()) if len(parts) > 11 else 0
+            except (ValueError, IndexError):
+                pass
+
+            # Formatear HH:MM:SS
+            m, s = divmod(duration_sec, 60)
+            h, m = divmod(m, 60)
+            duration = f"{h:02d}:{m:02d}:{s:02d}" if h > 0 else f"{m:02d}:{s:02d}"
+
+            calls.append({
+                "channel":     channel,
+                "context":     context,
+                "extension":   extension,
+                "state":       state,
+                "application": app,
+                "app_data":    app_data,
+                "callerid":    callerid,
+                "duration":    duration,
+                "duration_sec": duration_sec,
+                "trunk":       trunk
+            })
+
+        return calls

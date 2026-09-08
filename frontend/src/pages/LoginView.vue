@@ -1,5 +1,13 @@
+<!--
+  @copyright 2026 Fabian Paternina. Todos los derechos reservados.
+  Este código es propiedad intelectual de Fabian Paternina.
+  Uso autorizado exclusivamente para Hogar y Moda S.A.S.
+  Prohibida su copia, distribución o modificación sin autorización explícita.
+-->
 <template>
   <div class="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans relative">
+    
+
     
     <!-- BotÃ³n de ConfiguraciÃ³n de Servidores -->
     <div class="absolute top-4 right-4 sm:top-6 sm:right-6">
@@ -84,6 +92,11 @@
         </form>
 
       </div>
+    </div>
+
+    <!-- Footer de Derechos de Autor -->
+    <div class="absolute bottom-6 left-0 w-full text-center text-[10px] text-slate-400/80 px-4 pointer-events-none">
+      <i class="fas fa-copyright mr-1"></i> 2026 Fabian Paternina. Todos los derechos reservados. Uso exclusivo interno corporativo. Prohibida su modificación o distribución sin autorización.
     </div>
     
     <!-- Modal de Configuración -->

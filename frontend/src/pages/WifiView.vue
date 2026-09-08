@@ -55,7 +55,13 @@ const loadSites = async () => {
       const json = await res.json()
       sites.value = json.data || []
       if (sites.value.length > 0 && !selectedSite.value) {
-        selectedSite.value = sites.value[0].name
+        // Buscar un sitio que se llame POS o Punto de Venta
+        let preferred = sites.value.find(s => s.desc && s.desc.toLowerCase().includes('pos'))
+        if (!preferred) {
+          // Si no hay POS, buscar cualquiera que no sea el 'default'
+          preferred = sites.value.find(s => s.name !== 'default')
+        }
+        selectedSite.value = preferred ? preferred.name : sites.value[0].name
       }
       error.value = ''
     } else {
@@ -421,100 +427,82 @@ onMounted(async () => {
     </div>
 
     <!-- Header Minimalista -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-      <div>
-        <h1 class="text-2xl font-semibold text-gray-900 tracking-tight flex items-center gap-2">
-          <svg class="w-6 h-6 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
-          </svg>
-          Gestión de Red Inalámbrica
-        </h1>
-        <p class="text-sm text-gray-500 mt-1">Monitoreo de Access Points y dispositivos conectados (UniFi).</p>
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+      <div class="flex items-center gap-3">
+        <svg class="w-5 h-5 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
+        </svg>
+        <div>
+          <h1 class="text-lg font-semibold text-gray-900 tracking-tight leading-none">Gestión Inalámbrica</h1>
+          <p class="text-xs text-gray-500 mt-1">Monitoreo de Access Points y clientes (UniFi)</p>
+        </div>
       </div>
       
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2">
         <select 
           v-if="sites.length > 0"
           v-model="selectedSite" 
-          class="border border-gray-200 bg-gray-50 text-gray-700 py-2 pl-3 pr-8 rounded-lg text-sm font-medium focus:ring-2 focus:ring-gray-200 outline-none"
+          class="border border-gray-200 bg-gray-50 text-gray-700 py-1.5 pl-3 pr-8 rounded-md text-xs font-medium focus:ring-1 focus:ring-gray-300 outline-none"
         >
           <option v-for="site in sites" :key="site.name" :value="site.name">{{ site.desc }}</option>
         </select>
-        <button @click="loadData()" class="flex items-center gap-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+        <button @click="loadData()" class="flex items-center gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-3 py-1.5 rounded-md text-xs font-medium transition-colors shadow-sm">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
           Actualizar
         </button>
       </div>
     </div>
 
     <!-- Error State -->
-    <div v-if="error" class="bg-gray-50 border border-gray-200 text-gray-700 p-4 rounded-lg text-sm mb-6 flex gap-3 items-center">
-      <svg class="w-5 h-5 shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+    <div v-if="error" class="bg-gray-50 border border-gray-200 text-gray-700 px-3 py-2 rounded-md text-xs mb-4 flex gap-2 items-center">
+      <svg class="w-4 h-4 shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
       {{ error }}
     </div>
 
     <!-- KPIs Grid (Visible solo en APs) -->
-    <div class="bg-white border border-slate-200 rounded-xl shadow-sm flex w-full divide-x divide-slate-200 mb-6" v-if="currentTab === 'aps'">
+    <div class="flex gap-8 mb-6" v-if="currentTab === 'aps'">
       
       <!-- Total APs -->
-      <div class="flex-1 p-5 flex flex-col justify-center relative overflow-hidden">
-        <div class="flex justify-between items-start mb-2">
-          <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Access Points</span>
-          <span class="p-1.5 bg-gray-100 rounded-md text-gray-500">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-          </span>
-        </div>
-        <div class="flex items-end gap-2">
-          <span class="text-3xl font-light text-slate-800 mt-2">{{ totalAps }}</span>
+      <div class="flex flex-col">
+        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Total Access Points</span>
+        <div class="flex items-center gap-2">
+          <span class="text-2xl font-light text-slate-800 leading-none">{{ totalAps }}</span>
+          <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
         </div>
       </div>
       
       <!-- Online / Health -->
-      <div class="flex-1 p-5 flex flex-col justify-center relative overflow-hidden">
-        <div class="flex justify-between items-start mb-2">
-          <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Online & Health</span>
-          <span class="p-1.5 bg-emerald-50 rounded-md text-emerald-600">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-          </span>
-        </div>
-        <div class="flex items-end gap-3 mt-2">
-          <span class="text-3xl font-light text-emerald-600">{{ onlineAps }}</span>
-          <span class="text-sm text-slate-500 mb-1">Operativos ({{ onlinePercentage }}%)</span>
-        </div>
-        <!-- Progress Bar Background (Very thin) -->
-        <div class="absolute bottom-0 left-0 w-full bg-slate-100 h-1">
-          <div class="bg-emerald-500 h-1" :style="{ width: onlinePercentage + '%' }"></div>
+      <div class="flex flex-col">
+        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Online & Health</span>
+        <div class="flex items-center gap-2">
+          <span class="text-2xl font-light text-emerald-600 leading-none">{{ onlineAps }}</span>
+          <span class="text-xs text-slate-500">({{ onlinePercentage }}%)</span>
         </div>
       </div>
 
       <!-- Offline / Alertas -->
-      <div class="flex-1 p-5 flex flex-col justify-center relative overflow-hidden">
-        <div class="flex justify-between items-start mb-2">
-          <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Offline / Alertas</span>
-          <span class="p-1.5 bg-rose-50 rounded-md text-rose-600">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-          </span>
-        </div>
-        <div class="flex items-end gap-2 mt-2">
-          <span class="text-3xl font-light text-rose-600">{{ offlineAps }}</span>
-          <span class="text-sm text-slate-500 mb-1" v-if="offlineAps > 0">Requieren atención</span>
+      <div class="flex flex-col">
+        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Offline / Alertas</span>
+        <div class="flex items-center gap-2">
+          <span class="text-2xl font-light leading-none" :class="offlineAps > 0 ? 'text-rose-600' : 'text-slate-400'">{{ offlineAps }}</span>
+          <span v-if="offlineAps > 0" class="text-[10px] px-1.5 py-0.5 bg-rose-100 text-rose-700 rounded-sm font-semibold uppercase tracking-wider">Alerta</span>
         </div>
       </div>
 
     </div>
 
     <!-- Tabs & Búsqueda alineados -->
-    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-gray-100 pb-4 mb-4 gap-4">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-gray-100 pb-2 mb-2 gap-4">
       <!-- Tabs Izquierda -->
       <div class="flex gap-6">
         <button 
           @click="currentTab = 'aps'" 
-          :class="['text-sm font-medium transition-colors relative pb-4 -mb-4', currentTab === 'aps' ? 'text-gray-900 after:absolute after:bottom-0 after:left-0 after:w-full after:h-0.5 after:bg-gray-900' : 'text-gray-500 hover:text-gray-700']">
+          :class="['text-sm font-medium transition-colors relative pb-2 -mb-2', currentTab === 'aps' ? 'text-gray-900 after:absolute after:bottom-0 after:left-0 after:w-full after:h-0.5 after:bg-gray-900' : 'text-gray-500 hover:text-gray-700']">
           Access Points
         </button>
         <button 
           @click="currentTab = 'clients'" 
-          :class="['text-sm font-medium transition-colors relative pb-4 -mb-4', currentTab === 'clients' ? 'text-gray-900 after:absolute after:bottom-0 after:left-0 after:w-full after:h-0.5 after:bg-gray-900' : 'text-gray-500 hover:text-gray-700']">
+          :class="['text-sm font-medium transition-colors relative pb-2 -mb-2', currentTab === 'clients' ? 'text-gray-900 after:absolute after:bottom-0 after:left-0 after:w-full after:h-0.5 after:bg-gray-900' : 'text-gray-500 hover:text-gray-700']">
           Clientes Wi-Fi
         </button>
       </div>
@@ -601,10 +589,10 @@ onMounted(async () => {
         </thead>
         <tbody class="text-gray-600">
           <tr v-if="sortedAps.length === 0">
-            <td colspan="6" class="px-4 py-12 text-center text-gray-400">No hay Access Points para mostrar.</td>
+            <td colspan="6" class="px-4 py-8 text-center text-gray-400">No hay Access Points para mostrar.</td>
           </tr>
           <tr v-for="ap in sortedAps" :key="ap.mac" @click="openApDetails(ap)" class="hover:bg-blue-50/40 transition-colors border-b border-slate-100 group cursor-pointer">
-            <td class="px-2 py-3 font-medium text-gray-900 flex items-center gap-2">
+            <td class="px-2 py-2.5 font-medium text-gray-900 flex items-center gap-2">
               <svg class="w-5 h-5 shrink-0 transition-colors" :class="ap.status === 'online' ? 'text-blue-500' : 'text-slate-300 group-hover:text-slate-400'" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 011.06 0z" />
               </svg>
@@ -613,9 +601,9 @@ onMounted(async () => {
                 {{ ap.name }}
               </span>
             </td>
-            <td class="px-4 py-3 font-mono text-xs">{{ ap.ip }}</td>
-            <td class="px-4 py-3">{{ ap.model }}</td>
-            <td class="px-4 py-3">
+            <td class="px-4 py-2.5 font-mono text-xs">{{ ap.ip }}</td>
+            <td class="px-4 py-2.5 text-xs">{{ ap.model }}</td>
+            <td class="px-4 py-2.5">
               <span v-if="ap.status === 'online'" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">
                 <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
                 Online
@@ -625,7 +613,7 @@ onMounted(async () => {
                 {{ ap.status || 'Offline' }}
               </span>
             </td>
-            <td class="px-4 py-3">
+            <td class="px-4 py-2.5">
               <!-- Barra de Experiencia Real -->
               <div v-if="ap.status === 'online' && ap.clients_count > 0" class="flex items-center gap-3">
                 <div class="w-full bg-gray-200 rounded-full h-1.5 flex-1 max-w-[100px]" :title="'Experiencia Wi-Fi: ' + Math.max(0, ap.satisfaction) + '%'">
@@ -648,7 +636,7 @@ onMounted(async () => {
                 <span class="text-[11px] text-slate-400 font-medium">0 Conectados</span>
               </div>
             </td>
-            <td class="px-2 py-3 text-right">
+            <td class="px-2 py-2.5 text-right">
               <button 
                 @click.stop="restartAp(ap)" 
                 :disabled="processingMac === ap.mac || ap.status !== 'online'"

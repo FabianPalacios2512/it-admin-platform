@@ -54,9 +54,38 @@ const simpleCommand = computed(() => {
 })
 
 function copyCommand(text) {
-  navigator.clipboard.writeText(text)
-  commandCopied.value = true
-  setTimeout(() => { commandCopied.value = false }, 3000)
+  // navigator.clipboard solo funciona en HTTPS o localhost.
+  // En HTTP desde IP de red usamos el fallback con execCommand.
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(() => {
+      commandCopied.value = true
+      setTimeout(() => { commandCopied.value = false }, 3000)
+    }).catch(() => {
+      fallbackCopyText(text)
+    })
+  } else {
+    fallbackCopyText(text)
+  }
+}
+
+function fallbackCopyText(text) {
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.style.position = 'fixed'
+  textarea.style.left = '-9999px'
+  textarea.style.top = '-9999px'
+  document.body.appendChild(textarea)
+  textarea.focus()
+  textarea.select()
+  try {
+    document.execCommand('copy')
+    commandCopied.value = true
+    setTimeout(() => { commandCopied.value = false }, 3000)
+  } catch (err) {
+    console.error('No se pudo copiar al portapapeles:', err)
+  } finally {
+    document.body.removeChild(textarea)
+  }
 }
 
 async function generateAndCopyCommand() {

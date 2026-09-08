@@ -28,15 +28,65 @@ class ExportPayload(BaseModel):
 async def get_tenants():
     return {"success": True, "data": get_available_tenants()}
 
+
+# ── Caché global para licencias inactivas ─────────────────────────────────────
+# Keyed by f"{tenant}:{days}" para soportar distintos filtros
+_inactive_cache: dict = {}
+_INACTIVE_CACHE_TTL = 600  # 10 minutos
+
+# Estado de carga activa por clave de caché
+_inactive_loading: dict = {}  # key -> {"running": bool, "progress": int, "total": int}
+
+@router.get("/inactive/status")
+async def get_inactive_licenses_status(days: int = 90, tenant: str = "1"):
+    """Retorna el estado de la carga de licencias inactivas (para mostrar progreso al frontend)."""
+    cache_key = f"{tenant}:{days}"
+    cached = _inactive_cache.get(cache_key)
+    loading = _inactive_loading.get(cache_key, {})
+    
+    if cached and (datetime.datetime.now().timestamp() - cached["ts"]) < _INACTIVE_CACHE_TTL:
+        return {
+            "ready": True,
+            "cached": True,
+            "count": len(cached["data"]),
+            "progress": len(cached["data"]),
+            "total": len(cached["data"])
+        }
+    
+    return {
+        "ready": False,
+        "cached": False,
+        "running": loading.get("running", False),
+        "progress": loading.get("progress", 0),
+        "total": loading.get("total", 0)
+    }
+
 @router.get("/inactive")
 async def get_inactive_licenses(days: int = 90, tenant: str = "1", db: Session = Depends(get_db)):
     """
     Retorna los usuarios que tienen licencias asignadas 
     pero que no han iniciado sesión en los últimos N días.
+    Usa caché en memoria (TTL 10 min) para respuesta instantánea en la segunda visita.
     """
+    cache_key = f"{tenant}:{days}"
+    
+    # Servir desde caché si está fresco
+    cached = _inactive_cache.get(cache_key)
+    if cached and (datetime.datetime.now().timestamp() - cached["ts"]) < _INACTIVE_CACHE_TTL:
+        # Inyectar notas frescas de DB (esto es rápido)
+        all_notes = db.query(LicenseAudit).filter(LicenseAudit.action == "NOTE").all()
+        notes_db = {note.user_id: note.note for note in all_notes}
+        results = [dict(u, note=notes_db.get(u.get("id"), "")) for u in cached["data"]]
+        return {"success": True, "data": results, "from_cache": True}
+    
     try:
+        cache_key_loading = cache_key
+        _inactive_loading[cache_key_loading] = {"running": True, "progress": 0, "total": 0}
+        
         svc = get_graph_service(tenant)
         results = await svc.get_inactive_licensed_users(days_threshold=days)
+        
+        _inactive_loading[cache_key_loading] = {"running": True, "progress": len(results), "total": len(results)}
         
         # Load notes from DB
         all_notes = db.query(LicenseAudit).filter(LicenseAudit.action == "NOTE").all()
@@ -62,7 +112,6 @@ async def get_inactive_licenses(days: int = 90, tenant: str = "1", db: Session =
                 
                 if local_logon_iso:
                     try:
-                        # Parse standard ISO string like 2023-11-09T09:50:29+00:00
                         dt_str = local_logon_iso.replace('Z', '+00:00')
                         dt = datetime.datetime.fromisoformat(dt_str)
                         if dt.tzinfo is None:
@@ -71,16 +120,20 @@ async def get_inactive_licenses(days: int = 90, tenant: str = "1", db: Session =
                     except Exception:
                         pass
                         
-                # Inject notes
-                user_id = user.get("id")
-                user["note"] = notes_db.get(user_id, "")
+                user["note"] = notes_db.get(user.get("id"), "")
                 
         except Exception as ad_err:
             print(f"Error fetching AD logons: {ad_err}")
+
+        # Guardar en caché
+        _inactive_cache[cache_key] = {"ts": datetime.datetime.now().timestamp(), "data": results}
+        _inactive_loading[cache_key_loading] = {"running": False, "progress": len(results), "total": len(results)}
             
-        return {"success": True, "data": results}
+        return {"success": True, "data": results, "from_cache": False}
     except Exception as e:
+        _inactive_loading[cache_key] = {"running": False, "progress": 0, "total": 0}
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/notes")
 async def save_user_note(payload: UserNote, db: Session = Depends(get_db)):

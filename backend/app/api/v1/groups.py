@@ -31,9 +31,9 @@ async def list_m365_groups():
 
 @router.get("/ad")
 def get_ad_groups():
-    """Obtiene todos los grupos locales del AD."""
+    """Obtiene todos los grupos locales del AD (con caché de 5 minutos)."""
     try:
-        return ad_service.get_ad_groups()
+        return ad_service.get_ad_groups_cached()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -44,6 +44,8 @@ def create_ad_group(req: AdGroupCreateRequest):
         result = ad_service.create_ad_group(req.dict())
         if not result.get("success"):
             raise HTTPException(status_code=400, detail=result.get("error"))
+        # Invalidar caché de grupos para que la próxima consulta traiga el nuevo grupo
+        ad_service.invalidate_groups_cache()
         return result
     except HTTPException:
         raise

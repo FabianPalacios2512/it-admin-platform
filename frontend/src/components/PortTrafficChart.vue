@@ -5,7 +5,20 @@
         <div class="w-7 h-7 bg-slate-100 border border-slate-200 flex items-center justify-center">
           <i class="fas fa-ethernet text-slate-600 text-xs"></i>
         </div>
-        <h3 class="text-xs font-semibold text-slate-800">{{ cleanPortName }}</h3>
+        <div class="flex flex-col">
+          <h3 class="text-xs font-semibold text-slate-800">{{ cleanPortName }}</h3>
+          <!-- SD-WAN Badge -->
+          <div v-if="sdwanLatency !== null || sdwanLoss !== null" class="flex items-center gap-1.5 mt-0.5">
+            <span class="text-[9px] font-mono px-1.5 py-0.5 rounded-sm"
+              :class="sdwanLatency > 50 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'">
+              {{ sdwanLatency || 0 }}ms
+            </span>
+            <span class="text-[9px] font-mono px-1.5 py-0.5 rounded-sm"
+              :class="sdwanLoss > 0 ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'">
+              {{ sdwanLoss || 0 }}% loss
+            </span>
+          </div>
+        </div>
       </div>
       <div class="text-[10px] text-slate-400">Clic en un pico o usa el zoom</div>
     </div>
@@ -62,6 +75,14 @@ const props = defineProps({
   outKbps: {
     type: [Number, String],
     default: 0
+  },
+  sdwanLatency: {
+    type: Number,
+    default: null
+  },
+  sdwanLoss: {
+    type: Number,
+    default: null
   },
   historyData: {
     type: Array,
@@ -182,10 +203,18 @@ const chartOptions = computed(() => {
       type: 'value',
       show: true,
       splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } },
+      min: 0,
+      max: (value) => {
+        const curMax = Math.max(Number(props.inKbps) || 0, Number(props.outKbps) || 0);
+        if (value.max === 0) {
+          return curMax > 0 ? Math.ceil(curMax * 1.2) : 1;
+        }
+        return Math.ceil(Math.max(value.max, curMax) * 1.1);
+      },
       axisLabel: { 
         color: '#64748b', 
-        fontSize: 10, 
-        formatter: (value) => formatKbps(value)
+        fontSize: 9, 
+        formatter: (val) => `${val} Kbps`
       },
       axisLine: { show: false },
       axisTick: { show: false }
