@@ -13,6 +13,10 @@ This document serves as the absolute source of truth for the UI/UX architecture 
   - **PROHIBIDO** envolver componentes principales (como el data grid de tablas o la zona de filtros) en `divs` con bordes gruesos (`border-2`, `border-gray-300`, etc.) o sombras pesadas.
   - La arquitectura debe ser abierta y fluida. Utiliza el espacio en blanco (paddings/margins generosos) y fondos muy sutiles (ej. `bg-gray-50`) para crear la jerarquía visual, no cajas delimitadas.
 
+* **Excepción "NOC Mode" (Pantallas de Telemetría):**
+  - Exclusivamente para pantallas de monitoreo proyectadas (ej. Centro de Telemetría - PBX Issabel), se permite un "Modo NOC" (Dark Mode) para mejorar la visibilidad a distancia.
+  - Este modo debe usar fondos oscuros (ej. `#111827`), tarjetas ligeramente más claras, textos en alto contraste y estados (glow/neon) vibrantes para métricas críticas (rojo para caídas, verde para activo).
+
 ---
 
 ## 2. Estándar de Modales (Single Source of Truth)

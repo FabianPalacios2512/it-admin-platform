@@ -234,7 +234,6 @@ def get_auth_logs(limit: int = 100):
                 try:
                     time_part = line[:15]
                     try:
-                        # Sep  7 19:43:05
                         dt_ssh = datetime.strptime(time_part, '%b %d %H:%M:%S')
                         dt_ssh = dt_ssh.replace(year=current_year)
                     except:
@@ -471,7 +470,41 @@ def run_vulnerability_scan():
         cmd_logs = "cat /var/log/asterisk/full.1 /var/log/asterisk/full 2>/dev/null | grep -E 'Wrong password|Registered SIP' | tail -n 15000"
         stdin, stdout, stderr = client.exec_command(cmd_logs)
         logs_raw = stdout.read().decode('utf-8', errors='ignore').splitlines()
+        
+        # 3. Detección de Fraude Telefónico (Toll Fraud) en Master.csv
+        # Buscar llamadas recientes (últimas 2000) a destinos sospechosos (empiezan por 800, 80 o >12 digitos) en horario nocturno (21 a 07)
+        # Formato CSV: "","src","dst",...
+        cmd_cdr = "tail -n 2000 /var/log/asterisk/cdr-csv/Master.csv 2>/dev/null"
+        stdin, stdout, stderr = client.exec_command(cmd_cdr)
+        cdr_raw = stdout.read().decode('utf-8', errors='ignore').splitlines()
+        
         client.close()
+        
+        toll_fraud_calls = []
+        import re
+        import datetime
+        
+        for line in cdr_raw:
+            parts = line.split('","')
+            if len(parts) >= 13:
+                src = parts[1].replace('"', '')
+                dst = parts[2].replace('"', '')
+                date_str = parts[9].replace('"', '') # Start time
+                try:
+                    dt = datetime.datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+                    hour = dt.hour
+                    # Horario restringido: de 21:00 a 07:00
+                    is_night = (hour >= 21 or hour < 7)
+                    
+                    if is_night and dst:
+                        if dst.startswith("800") or dst.startswith("80") or len(dst) > 12:
+                            toll_fraud_calls.append({
+                                "extension": src,
+                                "destination": dst,
+                                "time": date_str
+                            })
+                except Exception:
+                    pass
         
         ext_failures = {}
         compromised_exts = {}
@@ -537,7 +570,8 @@ def run_vulnerability_scan():
             "data": {
                 "compromised": compromised_list,
                 "under_attack": under_attack_list[:20],
-                "weak_passwords": weak_passwords
+                "weak_passwords": weak_passwords,
+                "toll_fraud": toll_fraud_calls
             }
         }
         
@@ -607,8 +641,31 @@ def get_security_status():
             status_data["suspicious_ips"] = int(stdout.read().decode('utf-8').strip() or 0)
         except Exception:
             status_data["suspicious_ips"] = 0
-
+            
+        # --- KPI 4: Toll Fraud Activo ---
+        cmd_cdr = "tail -n 500 /var/log/asterisk/cdr-csv/Master.csv 2>/dev/null"
+        stdin, stdout, stderr = client.exec_command(cmd_cdr)
+        cdr_raw = stdout.read().decode('utf-8', errors='ignore').splitlines()
         client.close()
+
+        toll_fraud = False
+        import datetime
+        for line in cdr_raw:
+            parts = line.split('","')
+            if len(parts) >= 13:
+                dst = parts[2].replace('"', '')
+                date_str = parts[9].replace('"', '')
+                try:
+                    dt = datetime.datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+                    if (dt.hour >= 21 or dt.hour < 7) and dst:
+                        if dst.startswith("800") or dst.startswith("80") or len(dst) > 12:
+                            # Sólo considerar "activo" si ocurrió en los últimos 30 minutos
+                            if (datetime.datetime.now() - dt).total_seconds() < 1800:
+                                toll_fraud = True
+                                break
+                except Exception:
+                    pass
+        status_data["toll_fraud"] = toll_fraud
 
         # Estado general: sin anomalías si fail2ban activo y sin intentos recientes significativos
         status_data["anomaly"] = (

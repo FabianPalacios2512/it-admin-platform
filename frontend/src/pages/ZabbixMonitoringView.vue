@@ -1,10 +1,13 @@
 <template>
-  <div class="zabbix-monitoring-container flex flex-col gap-4 font-sans pb-10">
+  <div class="zabbix-monitoring-container flex flex-col gap-2 font-sans transition-colors duration-500"
+       :class="isNocMode && currentTemplate === 'issabel'
+         ? 'noc-mode p-4 sm:p-6 h-[100dvh] overflow-hidden'
+         : 'gap-4 pb-10'">
     <!-- Header -->
     <header class="flex justify-between items-center shrink-0">
       <div>
-        <h1 class="text-xl font-bold text-slate-800 tracking-tight leading-tight">Centro de Telemetría</h1>
-        <p class="text-xs text-slate-500 mt-0.5">Estado en tiempo real de todos los servidores monitoreados</p>
+        <h1 class="text-xl font-bold text-slate-800 tracking-tight leading-tight">{{ currentTemplate === 'issabel' ? 'PBX Issabel' : 'Centro de Telemetría' }}</h1>
+        <p class="text-xs text-slate-500 mt-0.5">{{ currentTemplate === 'issabel' ? 'Monitoreo de telemetría y seguridad del conmutador IP' : 'Estado en tiempo real de todos los servidores monitoreados' }}</p>
       </div>
       <div class="flex items-center gap-4">
         <!-- Templates Selector (iOS Segmented Control Style) -->
@@ -27,6 +30,11 @@
         <button @click="refreshAll" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all flex items-center gap-2">
           <i class="fas fa-sync-alt" :class="{'animate-spin': loadingTrends || loadingHosts}"></i>
           Refrescar
+        </button>
+        <!-- NOC Mode Toggle (Only for PBX Issabel) -->
+        <button v-if="currentTemplate === 'issabel'" @click="toggleNocMode" :class="isNocMode ? 'bg-indigo-900 text-yellow-300 border-indigo-700 shadow-[0_0_8px_rgba(253,224,71,0.3)]' : 'bg-white text-slate-600 border-slate-200'" class="px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all flex items-center gap-2 border">
+          <i class="fas" :class="isNocMode ? 'fa-moon' : 'fa-sun'"></i>
+          <span class="hidden sm:inline">{{ isNocMode ? 'Modo NOC' : 'Modo Claro' }}</span>
         </button>
         <!-- Last Updated Badge (like Zabbix) -->
         <div v-if="lastRefreshed" class="text-[10px] text-slate-400 font-mono bg-slate-50 border border-slate-200 px-2 py-1 rounded-lg flex items-center gap-1.5">
@@ -95,10 +103,12 @@
     </div>
 
     <!-- Issabel PBX Template -->
-    <div v-if="currentTemplate === 'issabel'" class="flex flex-col gap-4 shrink-0">
+    <div v-if="currentTemplate === 'issabel'"
+         class="transition-colors duration-500 flex flex-col gap-2"
+         :class="isNocMode ? 'flex-1 min-h-0 overflow-hidden' : 'shrink-0 gap-4'">
       
       <!-- Fila 1: Core Metrics (NOC Light Theme) -->
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 shrink-0">
         <!-- Tarjeta 1: Estado del Motor -->
         <div class="bg-white rounded-md shadow-sm border border-gray-200 px-3 py-2 flex flex-col justify-between relative overflow-hidden transition-all">
           <div class="flex justify-between items-start mb-0.5">
@@ -132,7 +142,7 @@
               <i class="fas fa-phone-alt text-[11px] text-blue-500 drop-shadow-sm"></i>
             </div>
             <div class="text-2xl font-black font-mono tracking-tighter leading-none" :class="pbxData.asterisk_down ? 'text-red-500' : 'text-slate-800'">
-              {{ pbxData.asterisk_down ? '--' : pbxData.llamadas_activas }}
+              <span :key="pbxData.llamadas_activas" class="pop-on-change inline-block">{{ pbxData.asterisk_down ? '--' : pbxData.llamadas_activas }}</span>
             </div>
           </div>
           <span class="text-[8px] text-slate-400 font-bold uppercase mt-1.5 tracking-[0.1em]">Conexiones Concurrentes</span>
@@ -177,7 +187,7 @@
               <i class="fas fa-users text-[11px] text-emerald-500 drop-shadow-sm"></i>
             </div>
             <div class="text-xl font-black font-mono tracking-tighter leading-none" :class="pbxData.asterisk_down ? 'text-red-500' : 'text-slate-800'">
-              {{ pbxData.asterisk_down ? '-- / --' : `${pbxData.ext_online} / ${pbxData.ext_total}` }}
+              <span :key="`${pbxData.ext_online}-${pbxData.ext_total}`" class="pop-on-change inline-block">{{ pbxData.asterisk_down ? '-- / --' : `${pbxData.ext_online} / ${pbxData.ext_total}` }}</span>
             </div>
           </div>
           <span class="text-[8px] text-slate-400 font-bold uppercase mt-1.5 tracking-[0.1em]">Online / Total</span>
@@ -185,7 +195,7 @@
       </div>
 
       <!-- Fila 2: Infraestructura y Opciones -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-2">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-2 mt-0 shrink-0">
 
         <!-- Columna Central: Estado de Seguridad (NOC Style) -->
         <div class="bg-white rounded-md shadow-sm border border-gray-200 p-4 transition-all flex flex-col relative overflow-hidden">
@@ -202,24 +212,27 @@
 
             <!-- Columna Izquierda: Estado general (estilo imagen referencia) -->
             <div class="flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-lg min-w-[90px] shrink-0 transition-all"
-                 :class="pbxSecurityStatus.anomaly
-                   ? 'bg-red-50 border border-red-200'
-                   : 'bg-emerald-50 border border-emerald-200'">
+                 :class="pbxSecurityStatus.toll_fraud
+                   ? 'bg-rose-100 border-2 border-rose-500 animate-pulse'
+                   : (pbxSecurityStatus.anomaly
+                     ? 'bg-red-50 border border-red-200'
+                     : 'bg-emerald-50 border border-emerald-200')">
               <!-- Icono escudo con check o exclamación -->
               <div class="relative mb-1">
-                <i class="fas fa-shield-alt text-3xl"
-                   :class="pbxSecurityStatus.anomaly ? 'text-red-400' : 'text-emerald-400'"></i>
-                <span class="absolute -bottom-0.5 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-white text-[8px] font-bold"
+                <i class="fas text-3xl"
+                   :class="pbxSecurityStatus.toll_fraud ? 'fa-skull-crossbones text-rose-600 drop-shadow-md' : (pbxSecurityStatus.anomaly ? 'fa-shield-alt text-red-400' : 'fa-shield-alt text-emerald-400')"></i>
+                <span v-if="!pbxSecurityStatus.toll_fraud" class="absolute -bottom-0.5 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-white text-[8px] font-bold"
                       :class="pbxSecurityStatus.anomaly ? 'bg-red-500' : 'bg-emerald-500'">
                   <i class="fas" :class="pbxSecurityStatus.anomaly ? 'fa-exclamation' : 'fa-check'"></i>
                 </span>
               </div>
               <span class="text-[9px] font-black uppercase tracking-tight text-center leading-tight"
-                    :class="pbxSecurityStatus.anomaly ? 'text-red-600' : 'text-emerald-600'">
-                {{ pbxSecurityStatus.anomaly ? 'ALERTA' : 'SIN ANOMALÍAS' }}
+                    :class="pbxSecurityStatus.toll_fraud ? 'text-rose-700 text-[10px]' : (pbxSecurityStatus.anomaly ? 'text-red-600' : 'text-emerald-600')">
+                {{ pbxSecurityStatus.toll_fraud ? 'FRAUDE (TOLL)' : (pbxSecurityStatus.anomaly ? 'ALERTA' : 'SIN ANOMALÍAS') }}
               </span>
-              <span class="text-[8px] text-slate-500 text-center leading-tight">
-                {{ pbxSecurityStatus.anomaly ? 'Revisar sistema' : 'Sistema estable' }}
+              <span class="text-[8px] text-center leading-tight"
+                    :class="pbxSecurityStatus.toll_fraud ? 'text-rose-600 font-bold' : 'text-slate-500'">
+                {{ pbxSecurityStatus.toll_fraud ? 'Llamadas extrañas' : (pbxSecurityStatus.anomaly ? 'Revisar sistema' : 'Sistema estable') }}
               </span>
             </div>
 
@@ -233,7 +246,7 @@
               <div class="flex items-center gap-2.5">
                 <div class="text-3xl font-black font-mono leading-none tracking-tighter"
                      :class="(pbxSecurityStatus.failed_attempts_24h || 0) > 50 ? 'text-red-600' : 'text-slate-800'">
-                  {{ pbxSecurityStatus.failed_attempts_24h ?? '--' }}
+                  <span :key="pbxSecurityStatus.failed_attempts_24h" class="pop-on-change inline-block">{{ pbxSecurityStatus.failed_attempts_24h ?? '--' }}</span>
                 </div>
                 <div class="flex flex-col text-left">
                   <div class="flex items-center gap-1.5 text-slate-600">
@@ -250,7 +263,7 @@
               <div class="flex items-center gap-2.5">
                 <div class="text-3xl font-black font-mono leading-none tracking-tighter"
                      :class="(pbxSecurityStatus.blocked_ips || 0) > 0 ? 'text-amber-600' : 'text-slate-800'">
-                  {{ pbxSecurityStatus.blocked_ips ?? '--' }}
+                  <span :key="pbxSecurityStatus.blocked_ips" class="pop-on-change inline-block">{{ pbxSecurityStatus.blocked_ips ?? '--' }}</span>
                 </div>
                 <div class="flex flex-col text-left">
                   <div class="flex items-center gap-1.5 text-slate-600">
@@ -267,7 +280,7 @@
               <div class="flex items-center gap-2.5">
                 <div class="text-3xl font-black font-mono leading-none tracking-tighter"
                      :class="(pbxSecurityStatus.suspicious_ips || 0) > 5 ? 'text-red-600' : 'text-slate-800'">
-                  {{ pbxSecurityStatus.suspicious_ips ?? '--' }}
+                  <span :key="pbxSecurityStatus.suspicious_ips" class="pop-on-change inline-block">{{ pbxSecurityStatus.suspicious_ips ?? '--' }}</span>
                 </div>
                 <div class="flex flex-col text-left">
                   <div class="flex items-center gap-1.5 text-slate-600">
@@ -320,7 +333,7 @@
       </div>
 
       <!-- Fila 3: Servicios PBX -->
-      <div v-if="issabelHostId" class="bg-white rounded-md shadow-sm border border-gray-200 p-4 mt-2 transition-all">
+      <div v-if="issabelHostId" class="bg-white rounded-md shadow-sm border border-gray-200 p-2 mt-0 transition-all shrink-0">
         <h3 class="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-4">
           Servicios PBX
         </h3>
@@ -399,7 +412,9 @@
       </div>
 
       <!-- Fila 4: Tráfico de Red (Full Width) -->
-      <div v-if="issabelHostId && comparisonData[issabelHostId]" class="mt-2 mb-2 w-full h-[350px]">
+      <div v-if="issabelHostId && comparisonData[issabelHostId]"
+           class="mt-1 w-full"
+           :class="isNocMode ? 'flex-1 min-h-0 max-h-[40vh] pb-2' : 'h-[42vh] min-h-[350px] mb-2'">
         <div class="bg-white p-3 rounded-md shadow-sm border border-gray-200 flex flex-col h-full w-full">
           <div class="flex justify-between items-center mb-1 shrink-0">
             <span class="text-[11px] font-bold text-slate-700 tracking-[0.1em] uppercase flex items-center gap-2">
@@ -863,6 +878,12 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch, nextTick, onErrorCaptured } from 'vue';
 import RecordingsModal from '@/components/pbx/RecordingsModal.vue';
+
+const isNocMode = ref(localStorage.getItem('pbx-noc-mode') === 'true');
+const toggleNocMode = () => {
+  isNocMode.value = !isNocMode.value;
+  localStorage.setItem('pbx-noc-mode', isNocMode.value);
+};
 import ActiveCallsModal from '@/components/pbx/ActiveCallsModal.vue';
 import SecurityModal from '@/components/pbx/SecurityModal.vue';
 import FortiGateMonitorView from './FortiGateMonitorView.vue';
@@ -902,6 +923,7 @@ const pbxSecurityStatus = ref({
   fail2ban: false,
   iptables: false,
   anomaly: false,
+  toll_fraud: false,
   failed_attempts_24h: null,
   blocked_ips: null,
   suspicious_ips: null,
@@ -2505,8 +2527,42 @@ onMounted(() => {
 onUnmounted(() => {
   if (globalTimer) clearTimeout(globalTimer);
   if (detailTimer) clearInterval(detailTimer);
+  document.body.classList.remove('hide-global-header');
+  document.body.classList.remove('noc-fullscreen');
 });
+
+// Ocultar cabecera blanca global SOLO cuando estamos en PBX Issabel
+watch([currentTemplate, isNocMode], ([tpl, noc]) => {
+  if (tpl === 'issabel') {
+    document.body.classList.add('hide-global-header');
+  } else {
+    document.body.classList.remove('hide-global-header');
+  }
+  // Full-screen NOC mode: remove main padding so content touches all edges
+  if (tpl === 'issabel' && noc) {
+    document.body.classList.add('noc-fullscreen');
+  } else {
+    document.body.classList.remove('noc-fullscreen');
+  }
+}, { immediate: true });
 </script>
+
+<style>
+/* CSS No-scopado para afectar a MainLayout.vue (se limpia automáticamente mediante la clase en el body) */
+body.hide-global-header header.h-12.bg-white.border-b {
+  display: none !important;
+}
+/* Modo NOC pantalla completa: quitar padding del contenedor principal */
+body.noc-fullscreen main {
+  padding: 0 !important;
+  overflow: hidden !important;
+  background: #0F172A !important;
+}
+/* Modo NOC: ocultar sidebar lateral para maximo aprovechamiento de pantalla */
+body.noc-fullscreen aside {
+  display: none !important;
+}
+</style>
 
 <style scoped>
 @keyframes fadeInUp {
@@ -2521,6 +2577,16 @@ onUnmounted(() => {
 }
 .animate-fade-in-up {
   animation: fadeInUp 0.4s ease-out forwards;
+}
+
+@keyframes valuePop {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.4); color: #ef4444; font-weight: 900; text-shadow: 0 0 10px rgba(239, 68, 68, 0.5); }
+  100% { transform: scale(1); }
+}
+.pop-on-change {
+  display: inline-block;
+  animation: valuePop 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 /* Transiciones suaves para datos reactivos (PBX) */
@@ -2651,7 +2717,239 @@ onUnmounted(() => {
   transition: opacity 0.12s ease;
 }
 
-.trend-chart :deep(.apexcharts-svg:has(.apexcharts-series.apexcharts-active) .apexcharts-series[rel].apexcharts-active) {
-  opacity: 1;
+/* ============================================================
+   NOC MODE — High-Contrast Screen Projection Styles
+   Solo aplica al contenedor .noc-mode del PBX Issabel.
+   Optimizado para lectura a 3-5 metros.
+   ============================================================ */
+.noc-mode {
+  --noc-bg:         #0F172A;
+  --noc-card:       #1E293B;
+  --noc-card-alt:   #243447;
+  --noc-border:     #334155;
+  --noc-text-1:     #F1F5F9;
+  --noc-text-2:     #CBD5E1;
+  --noc-text-3:     #94A3B8;
+  --noc-green:      #34D399;
+  --noc-red:        #F87171;
+  --noc-amber:      #FCD34D;
+  --noc-blue:       #60A5FA;
+  --noc-indigo:     #818CF8;
+
+  background-color: var(--noc-bg) !important;
+  color: var(--noc-text-1) !important;
+  transition: background-color 0.4s ease, color 0.4s ease;
+  /* Ensure the element starts right at the viewport top edge */
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+/* === BACKGROUNDS === */
+.noc-mode .bg-white,
+.noc-mode .bg-gray-50 {
+  background-color: var(--noc-card) !important;
+}
+.noc-mode .bg-slate-50,
+.noc-mode .bg-slate-100 {
+  background-color: var(--noc-card-alt) !important;
+}
+
+/* Barra de progreso (progress bar track) */
+.noc-mode .h-2\.5.bg-slate-100,
+.noc-mode .bg-slate-100.rounded-sm {
+  background-color: #334155 !important;
+}
+
+/* === BORDERS === */
+.noc-mode .border,
+.noc-mode .border-gray-200,
+.noc-mode .border-slate-100,
+.noc-mode .border-slate-200,
+.noc-mode .border-gray-100 {
+  border-color: var(--noc-border) !important;
+}
+/* Divisor en servicios PBX */
+.noc-mode .divide-slate-100 > * + * {
+  border-color: var(--noc-border) !important;
+}
+.noc-mode .bg-slate-100.w-px,
+.noc-mode .w-px.bg-slate-100 {
+  background-color: var(--noc-border) !important;
+}
+
+/* === ALL TEXT OVERRIDES (from dark to light) === */
+
+/* Texto principal (slate-800, slate-900, gray-900) → Blanco */
+.noc-mode .text-slate-800,
+.noc-mode .text-slate-900,
+.noc-mode .text-gray-800,
+.noc-mode .text-gray-900 {
+  color: var(--noc-text-1) !important;
+}
+
+/* Texto intermedio (slate-700, slate-600, gray-700, gray-600) → muy claro */
+.noc-mode .text-slate-700,
+.noc-mode .text-slate-600,
+.noc-mode .text-gray-700,
+.noc-mode .text-gray-600 {
+  color: var(--noc-text-2) !important;
+}
+
+/* Texto muted / etiquetas (slate-500, slate-400, gray-500, gray-400) → claro-gris */
+/* CRÍTICO: estos son los labels pequeños de 9px. En pantalla normal son grises,
+   en NOC mode DEBEN ser legibles a distancia. */
+.noc-mode .text-slate-500,
+.noc-mode .text-slate-400,
+.noc-mode .text-gray-500,
+.noc-mode .text-gray-400 {
+  color: var(--noc-text-2) !important;
+}
+
+/* Texto muy tenue (slate-300, slate-200, gray-300) → muted pero visible */
+.noc-mode .text-slate-300,
+.noc-mode .text-gray-300 {
+  color: var(--noc-text-3) !important;
+}
+
+/* === COLORES DE ESTADO (heredados, mejorar luminosidad) === */
+.noc-mode .text-emerald-500,
+.noc-mode .text-emerald-600,
+.noc-mode .text-emerald-700 {
+  color: var(--noc-green) !important;
+}
+.noc-mode .text-red-500,
+.noc-mode .text-red-600,
+.noc-mode .text-red-700 {
+  color: var(--noc-red) !important;
+}
+.noc-mode .text-amber-500,
+.noc-mode .text-amber-600,
+.noc-mode .text-amber-700 {
+  color: var(--noc-amber) !important;
+}
+.noc-mode .text-blue-500,
+.noc-mode .text-blue-600,
+.noc-mode .text-blue-700 {
+  color: var(--noc-blue) !important;
+}
+.noc-mode .text-indigo-500,
+.noc-mode .text-indigo-600 {
+  color: var(--noc-indigo) !important;
+}
+
+/* === ICONOS DINÁMICOS === */
+.noc-mode i.text-slate-400 { color: var(--noc-text-3) !important; }
+.noc-mode i.text-slate-300 { color: var(--noc-text-3) !important; }
+
+/* === FONDOS DE BADGE / ESTADO (semitransparentes para no tapar colores) === */
+.noc-mode .bg-emerald-50 {
+  background-color: rgba(52, 211, 153, 0.12) !important;
+  border-color: rgba(52, 211, 153, 0.3) !important;
+}
+.noc-mode .bg-red-50 {
+  background-color: rgba(248, 113, 113, 0.12) !important;
+  border-color: rgba(248, 113, 113, 0.4) !important;
+  /* Glow efecto para alertas críticas */
+  box-shadow: 0 0 14px rgba(248, 113, 113, 0.35) !important;
+}
+.noc-mode .bg-amber-50 {
+  background-color: rgba(252, 211, 77, 0.12) !important;
+  border-color: rgba(252, 211, 77, 0.3) !important;
+}
+.noc-mode .bg-blue-50 {
+  background-color: rgba(96, 165, 250, 0.12) !important;
+  border-color: rgba(96, 165, 250, 0.2) !important;
+}
+.noc-mode .bg-indigo-50 {
+  background-color: rgba(129, 140, 248, 0.12) !important;
+  border-color: rgba(129, 140, 248, 0.2) !important;
+}
+
+/* === BOTONES DENTRO DEL CARD (Grabaciones, Seguridad) === */
+.noc-mode button.bg-blue-50 {
+  background-color: rgba(96, 165, 250, 0.15) !important;
+  color: #93C5FD !important;
+  border: 1px solid rgba(96, 165, 250, 0.3) !important;
+}
+.noc-mode button.bg-blue-50:hover {
+  background-color: rgba(96, 165, 250, 0.25) !important;
+}
+.noc-mode button.bg-indigo-50 {
+  background-color: rgba(129, 140, 248, 0.15) !important;
+  color: #A5B4FC !important;
+  border: 1px solid rgba(129, 140, 248, 0.3) !important;
+}
+
+/* === GLOW EN BORDES DE TARJETAS DE ALERTA (border-l-4) === */
+.noc-mode .border-red-500 {
+  border-color: var(--noc-red) !important;
+  box-shadow: -3px 0 12px rgba(248, 113, 113, 0.4) !important;
+}
+.noc-mode .border-emerald-200 {
+  border-color: rgba(52, 211, 153, 0.4) !important;
+}
+.noc-mode .border-red-200 {
+  border-color: rgba(248, 113, 113, 0.4) !important;
+}
+
+/* === KPIs: TAMAÑO MAYOR EN MODO NOC (legibilidad a distancia) === */
+/* Llamadas activas / extensiones (text-2xl, text-xl) */
+.noc-mode .text-2xl { font-size: 2rem !important; line-height: 1 !important; }
+.noc-mode .text-xl  { font-size: 1.75rem !important; line-height: 1 !important; }
+/* Números grandes de seguridad (text-3xl) */
+.noc-mode .text-3xl { font-size: 2.5rem !important; line-height: 1 !important; }
+/* Título EN LÍNEA / CAÍDO (text-lg) */
+.noc-mode .text-lg  { font-size: 1.4rem !important; font-weight: 900 !important; }
+/* Labels de sección (los text-[9px]) — forzar tamaño y peso */
+.noc-mode .text-\[9px\] { font-size: 0.75rem !important; font-weight: 700 !important; }
+.noc-mode .text-\[8px\] { font-size: 0.7rem  !important; font-weight: 600 !important; }
+.noc-mode .text-\[10px\] { font-size: 0.8rem !important; font-weight: 700 !important; }
+/* Percentaje de almacenamiento (text-lg font-bold) ya cubierto arriba */
+
+/* === SOMBRAS GENERALES DE TARJETAS === */
+.noc-mode .shadow-sm,
+.noc-mode .shadow-md {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6) !important;
+}
+
+/* === SPINNERS / LOADING === */
+.noc-mode .border-slate-100 { border-color: var(--noc-border) !important; }
+
+/* === APEX CHARTS EN NOC MODE === */
+.noc-mode :deep(.apexcharts-canvas) {
+  background: transparent !important;
+}
+.noc-mode :deep(.apexcharts-text tspan),
+.noc-mode :deep(.apexcharts-legend-text) {
+  fill: var(--noc-text-3) !important;
+  color: var(--noc-text-3) !important;
+}
+.noc-mode :deep(.apexcharts-gridline) {
+  stroke: var(--noc-border) !important;
+}
+.noc-mode :deep(.apexcharts-xaxis-label tspan),
+.noc-mode :deep(.apexcharts-yaxis-label tspan) {
+  fill: var(--noc-text-3) !important;
+}
+.noc-mode :deep(.apexcharts-tooltip) {
+  background: #0F172A !important;
+  border: 1px solid var(--noc-border) !important;
+  color: var(--noc-text-1) !important;
+}
+.noc-mode :deep(.apexcharts-tooltip-title) {
+  background: #1E293B !important;
+  border-bottom: 1px solid var(--noc-border) !important;
+  color: var(--noc-text-3) !important;
+}
+.noc-mode :deep(.apexcharts-tooltip-text),
+.noc-mode :deep(.apexcharts-tooltip-y-group),
+.noc-mode :deep(.apexcharts-tooltip-text-y-value) {
+  color: var(--noc-text-1) !important;
+}
+.noc-mode :deep(.apexcharts-crosshairs line),
+.noc-mode :deep(.apexcharts-xcrosshairs line) {
+  stroke: var(--noc-text-3) !important;
 }
 </style>
+

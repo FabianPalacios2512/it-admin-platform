@@ -23,11 +23,13 @@ async def check_pbx_and_alert():
         
         under_attack = [u for u in data.get("under_attack", []) if u.get("failed_attempts", 0) >= 10]
         
-        if not compromised and not under_attack:
-            logger.info("Escaneo PBX completado. No se detectaron brechas ni ataques masivos.")
+        toll_fraud = data.get("toll_fraud", [])
+        
+        if not compromised and not under_attack and not toll_fraud:
+            logger.info("Escaneo PBX completado. No se detectaron brechas, ataques masivos ni fraude.")
             return
             
-        logger.warning(f"¡Alerta! Brechas: {len(compromised)}, Bajo ataque: {len(under_attack)}")
+        logger.warning(f"¡Alerta! Brechas: {len(compromised)}, Bajo ataque: {len(under_attack)}, Fraude: {len(toll_fraud)}")
         
         # Construir cuerpo del correo
         html_body = "<h2>⚠️ Alerta de Seguridad PBX ⚠️</h2>"
@@ -61,6 +63,22 @@ async def check_pbx_and_alert():
                 html_body += f"</tr>"
                 
             html_body += "</table><br>"
+            
+        if toll_fraud:
+            html_body += "<h3 style='color: #9f1239;'>🚨 FRAUDE TELEFÓNICO DETECTADO (Toll Fraud)</h3>"
+            html_body += "<p>Se han detectado llamadas sospechosas al extranjero (números que empiezan con 800/80 o >12 dígitos) en horario no hábil (9 PM - 7 AM). Posible inyección SIP o secuestro de PBX para generar llamadas de alto costo.</p>"
+            html_body += "<table border='1' cellpadding='10' style='border-collapse: collapse; text-align: left;'>"
+            html_body += "<tr style='background-color: #be123c; color: white;'><th>Extensión Origen</th><th>Destino (Sospechoso)</th><th>Hora de la Llamada</th></tr>"
+            
+            for fraud in toll_fraud:
+                html_body += f"<tr>"
+                html_body += f"<td><b>{fraud.get('extension')}</b></td>"
+                html_body += f"<td>{fraud.get('destination')}</td>"
+                html_body += f"<td>{fraud.get('time')}</td>"
+                html_body += f"</tr>"
+                
+            html_body += "</table>"
+            html_body += "<br><p>Por favor revise el Troncal SIP inmediatamente y bloquee la extensión en la PBX o en el portal de su proveedor (WolkVox/C&W) para detener el consumo facturado.</p><hr>"
         
         
         # Enviar correo usando Graph API
