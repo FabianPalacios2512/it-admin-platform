@@ -1,8 +1,11 @@
 import os
 import tempfile
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
+from app.core.database import get_db
+from app.models.pbx_alert import PBXAlert
 from typing import Optional
 import paramiko
 from datetime import datetime
@@ -426,6 +429,23 @@ def unblock_ip(request: UnblockIPRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+def get_raw_logs_for_ip(ip: str) -> str:
+    """
+    Extrae los últimos 50 logs de Asterisk y SSH relacionados con la IP.
+    """
+    try:
+        client = _get_ssh_client()
+        # Buscar en messages de Asterisk y secure de SSH
+        cmd = f"""
+        grep -i "{ip}" /var/log/asterisk/messages /var/log/secure | tail -n 50
+        """
+        stdin, stdout, stderr = client.exec_command(cmd)
+        logs = stdout.read().decode('utf-8').strip()
+        client.close()
+        return logs if logs else f"No se encontraron logs recientes para la IP {ip}."
+    except Exception as e:
+        return f"Error extrayendo logs para {ip}: {str(e)}"
+
 @router.get("/security/scan")
 def run_vulnerability_scan():
     """
@@ -725,3 +745,38 @@ def add_security_whitelist(payload: dict):
         return {"status": "success", "message": "IP added and Fail2Ban restarted"}
     except Exception as e:
         return {"status": "error", "message": str(e), "data": None}
+
+@router.get("/security/alerts")
+def get_security_alerts(db: Session = Depends(get_db)):
+    try:
+        alerts = db.query(PBXAlert).filter_by(resolved=False).order_by(PBXAlert.created_at.desc()).all()
+        return {
+            "status": "success",
+            "data": [
+                {
+                    "id": a.id,
+                    "alert_type": a.alert_type,
+                    "extension": a.extension,
+                    "attacker_ip": a.attacker_ip,
+                    "destination": a.destination,
+                    "details": a.details,
+                    "ai_summary": a.ai_summary,
+                    "created_at": a.created_at.isoformat() if a.created_at else None
+                } for a in alerts
+            ]
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@router.post("/security/alerts/{alert_id}/resolve")
+def resolve_security_alert(alert_id: int, db: Session = Depends(get_db)):
+    try:
+        alert = db.query(PBXAlert).filter_by(id=alert_id).first()
+        if not alert:
+            raise HTTPException(status_code=404, detail="Alert not found")
+        
+        alert.resolved = True
+        db.commit()
+        return {"status": "success", "message": "Alert resolved"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}

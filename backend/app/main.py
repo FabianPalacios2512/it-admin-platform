@@ -21,6 +21,7 @@ from app.models.server import ServerConfig
 from app.models.rds import RdsConfig  # Ensure table is created
 from app.models.delegation import TemporaryDelegation
 from app.models.license_audit import LicenseAudit
+from app.models.pbx_alert import PBXAlert
 from apscheduler.schedulers.background import BackgroundScheduler
 from app.services.ad_event_sync import sync_ad_events
 from app.services.monitoring_service import sync_monitoring_stats
@@ -32,7 +33,18 @@ import os
 try:
     if os.path.exists("./it_platform.db"):
         with sqlite3.connect("./it_platform.db") as conn:
-            conn.execute("ALTER TABLE rds_configs ADD COLUMN file_prefix VARCHAR DEFAULT 'nova.ft'")
+            # Migration for rds_configs
+            try:
+                conn.execute("ALTER TABLE rds_configs ADD COLUMN file_prefix VARCHAR DEFAULT 'nova.ft'")
+            except sqlite3.OperationalError:
+                pass
+            
+            # Migration for pbx_alerts
+            try:
+                conn.execute("ALTER TABLE pbx_alerts ADD COLUMN ai_summary VARCHAR")
+            except sqlite3.OperationalError:
+                pass
+            
             conn.commit()
 except Exception:
     pass

@@ -1,7 +1,11 @@
 import logging
 import asyncio
-from app.api.v1.pbx_recordings import run_vulnerability_scan
+import httpx
 from app.services.graph_service import MicrosoftGraphService
+from app.core.database import SessionLocal
+from app.models.pbx_alert import PBXAlert
+from app.api.v1.pbx_recordings import run_vulnerability_scan, get_raw_logs_for_ip
+from app.services.llm_rotator import llm_rotator
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +29,69 @@ async def check_pbx_and_alert():
         
         toll_fraud = data.get("toll_fraud", [])
         
+        # Guardar en base de datos de manera persistente
+        try:
+            db = SessionLocal()
+            
+            async def process_alert(alert_type, extension, attacker_ip, details, destination=None):
+                exists = db.query(PBXAlert).filter_by(
+                    alert_type=alert_type, 
+                    extension=extension, 
+                    attacker_ip=attacker_ip,
+                    destination=destination,
+                    resolved=False
+                ).first()
+                
+                if exists:
+                    return
+
+                # Geolocation y AI check para ips atacantes
+                ai_summary_text = None
+                is_malicious = True # Por defecto verdadero si es toll_fraud o falla geolocation
+                
+                if attacker_ip and attacker_ip != 'Multiple' and alert_type in ['BREACH', 'BRUTE_FORCE']:
+                    try:
+                        async with httpx.AsyncClient(timeout=10.0) as http_client:
+                            geo_resp = await http_client.get(f"http://ip-api.com/json/{attacker_ip}")
+                            geo_data = geo_resp.json()
+                            if geo_data.get("status") == "success":
+                                country = geo_data.get("country")
+                                # Si no es Colombia, pasa a AI
+                                if country != "Colombia":
+                                    raw_logs = get_raw_logs_for_ip(attacker_ip)
+                                    ai_result = await llm_rotator.analyze_logs(attacker_ip, raw_logs)
+                                    is_malicious = ai_result.get("is_malicious", True)
+                                    ai_summary_text = ai_result.get("summary")
+                    except Exception as e:
+                        logger.error(f"Error en Geolocation/AI para IP {attacker_ip}: {str(e)}")
+
+                if is_malicious:
+                    new_alert = PBXAlert(
+                        alert_type=alert_type,
+                        extension=extension,
+                        attacker_ip=attacker_ip,
+                        destination=destination,
+                        details=details,
+                        ai_summary=ai_summary_text
+                    )
+                    db.add(new_alert)
+
+            for comp in compromised:
+                await process_alert('BREACH', comp.get('extension'), comp.get('attacker_ip'), f"Fallos previos: {comp.get('failed_attempts_before_success')}")
+                    
+            for atk in under_attack:
+                await process_alert('BRUTE_FORCE', atk.get('extension'), atk.get('last_ip', 'Multiple'), f"Intentos fallidos: {atk.get('failed_attempts')}")
+                    
+            for fraud in toll_fraud:
+                await process_alert('TOLL_FRAUD', fraud.get('extension'), None, f"Hora: {fraud.get('time')}", destination=fraud.get('destination'))
+                    
+            db.commit()
+        except Exception as db_err:
+            logger.error(f"Error guardando alertas en BD: {str(db_err)}")
+        finally:
+            if 'db' in locals():
+                db.close()
+                
         if not compromised and not under_attack and not toll_fraud:
             logger.info("Escaneo PBX completado. No se detectaron brechas, ataques masivos ni fraude.")
             return

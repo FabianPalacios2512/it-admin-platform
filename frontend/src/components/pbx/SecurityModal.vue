@@ -55,6 +55,13 @@
                 <i class="fas fa-satellite-dish"></i> Tráfico en Vivo
               </button>
               <button 
+                @click="activeTab = 'alerts'; fetchAlerts()"
+                class="pb-3 text-sm font-bold border-b-2 transition-colors flex items-center gap-2"
+                :class="activeTab === 'alerts' ? 'border-rose-600 text-rose-600' : 'border-transparent text-slate-400 hover:text-slate-600'"
+              >
+                <i class="fas fa-bell"></i> Alertas Históricas
+              </button>
+              <button 
                 @click="activeTab = 'blocked'; fetchBlockedIps()"
                 class="pb-3 text-sm font-bold border-b-2 transition-colors flex items-center gap-2"
                 :class="activeTab === 'blocked' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-400 hover:text-slate-600'"
@@ -165,6 +172,100 @@
             </div>
           </div>
         </div>
+
+          <!-- TAB: HISTORICAL ALERTS -->
+          <div v-if="activeTab === 'alerts'" class="flex-1 overflow-auto bg-slate-50/50 px-8 pb-8">
+            <div v-if="loading && alerts.length === 0" class="flex flex-col items-center justify-center py-20">
+              <i class="fas fa-circle-notch fa-spin text-4xl text-slate-300 mb-4"></i>
+            </div>
+            
+            <div v-else-if="!loading && alerts.length === 0" class="flex flex-col items-center justify-center py-20 text-center">
+              <div class="w-16 h-16 rounded-full flex items-center justify-center mb-4 text-emerald-400 bg-emerald-50 border-2 border-emerald-100">
+                <i class="fas fa-check-circle text-2xl"></i>
+              </div>
+              <h3 class="text-slate-800 font-bold text-sm mb-1">Cero Alertas Activas</h3>
+              <p class="text-xs text-slate-500">El sistema PBX no presenta brechas de seguridad sin resolver.</p>
+            </div>
+
+            <div v-else class="w-full mt-4 flex flex-col gap-3">
+              <div v-for="alert in alerts" :key="alert.id" class="bg-white border rounded-lg p-4 shadow-sm relative overflow-hidden flex flex-col gap-2 group transition-colors hover:border-slate-300"
+                :class="{
+                  'border-rose-200': alert.alert_type === 'BREACH' || alert.alert_type === 'BRUTE_FORCE',
+                  'border-amber-200': alert.alert_type === 'TOLL_FRAUD'
+                }">
+                <!-- Background Accent -->
+                <div class="absolute top-0 left-0 w-1 h-full"
+                  :class="{
+                    'bg-rose-500': alert.alert_type === 'BREACH',
+                    'bg-orange-500': alert.alert_type === 'BRUTE_FORCE',
+                    'bg-amber-500': alert.alert_type === 'TOLL_FRAUD'
+                  }"></div>
+                
+                <div class="flex justify-between items-start pl-2">
+                  <div class="flex flex-col gap-1">
+                    <div class="flex items-center gap-2">
+                      <span class="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-sm"
+                        :class="{
+                          'bg-rose-100 text-rose-700': alert.alert_type === 'BREACH',
+                          'bg-orange-100 text-orange-700': alert.alert_type === 'BRUTE_FORCE',
+                          'bg-amber-100 text-amber-700': alert.alert_type === 'TOLL_FRAUD'
+                        }">
+                        <i class="fas mr-1"
+                          :class="{
+                            'fa-skull-crossbones': alert.alert_type === 'BREACH',
+                            'fa-bomb': alert.alert_type === 'BRUTE_FORCE',
+                            'fa-phone-slash': alert.alert_type === 'TOLL_FRAUD'
+                          }"></i>
+                        {{ alert.alert_type === 'BREACH' ? 'Brecha Confirmada' : (alert.alert_type === 'BRUTE_FORCE' ? 'Ataque Masivo' : 'Fraude Telefónico') }}
+                      </span>
+                      <span class="text-xs text-slate-500 font-mono">{{ new Date(alert.created_at).toLocaleString() }}</span>
+                    </div>
+                    
+                    <h4 class="font-bold text-slate-800 text-sm mt-1">
+                      Extensión Involucrada: <span class="font-mono bg-slate-100 px-1 rounded">{{ alert.extension }}</span>
+                    </h4>
+                    
+                    <div class="flex items-center gap-4 text-sm mt-2">
+                      <div v-if="alert.attacker_ip" class="flex items-center gap-1.5 text-slate-600">
+                        <i class="fas fa-network-wired text-slate-400"></i>
+                        <span class="font-semibold text-xs">IP Atacante:</span>
+                        <span class="font-mono text-xs bg-rose-50 text-rose-700 px-1 rounded">{{ alert.attacker_ip }}</span>
+                      </div>
+                      <div v-if="alert.destination" class="flex items-center gap-1.5 text-slate-600">
+                        <i class="fas fa-phone-alt text-slate-400"></i>
+                        <span class="font-semibold text-xs">Destino:</span>
+                        <span class="font-mono text-xs">{{ alert.destination }}</span>
+                      </div>
+                    </div>
+                    
+                    <p class="text-xs text-slate-500 mt-2 italic bg-slate-50 p-2 rounded border border-slate-100">{{ alert.details }}</p>
+                    
+                    <!-- AI Insights Block -->
+                    <div v-if="alert.ai_summary" class="mt-3 w-full bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-100 rounded-md p-3 relative overflow-hidden group-hover:shadow-md transition-shadow">
+                      <!-- Decorative background icon -->
+                      <i class="fas fa-robot absolute -right-2 -bottom-3 text-5xl text-indigo-100 opacity-50 transform -rotate-12"></i>
+                      
+                      <div class="flex items-center gap-2 mb-1.5 relative z-10">
+                        <div class="bg-indigo-600 text-white text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded shadow-sm flex items-center gap-1">
+                          <i class="fas fa-sparkles"></i> IA Insights
+                        </div>
+                        <span class="text-[10px] text-indigo-400 font-semibold uppercase tracking-wider">Análisis de Agente</span>
+                      </div>
+                      
+                      <p class="text-xs text-slate-700 leading-relaxed font-medium relative z-10">
+                        {{ alert.ai_summary }}
+                      </p>
+                    </div>
+                    
+                  </div>
+                  
+                  <button @click="resolveAlert(alert.id)" class="px-3 py-1.5 bg-white border border-emerald-200 text-emerald-600 hover:bg-emerald-50 rounded-md text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 opacity-80 hover:opacity-100">
+                    <i class="fas fa-check"></i> Marcar Resuelta
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
 
           <!-- TAB 2: BLOCKED IPS -->
           <div v-if="activeTab === 'blocked'" class="flex-1 overflow-auto bg-slate-50/50 px-8 pb-8">
@@ -454,6 +555,7 @@ const emit = defineEmits(['close']);
 const activeTab = ref('live');
 const logs = ref([]);
 const blockedIps = ref([]);
+const alerts = ref([]);
 const scanData = ref(null);
 const scanError = ref(null);
 const loading = ref(false);
@@ -565,6 +667,36 @@ const fetchBlockedIps = async () => {
     console.error('Error fetching blocked IPs:', error);
   } finally {
     loading.value = false;
+  }
+};
+
+const fetchAlerts = async () => {
+  loading.value = true;
+  try {
+    const response = await fetch('http://localhost:8000/api/v1/pbx/recordings/security/alerts');
+    if (!response.ok) throw new Error('Error de red');
+    const data = await response.json();
+    if (data.status === 'success') {
+      alerts.value = data.data || [];
+    }
+  } catch (error) {
+    console.error('Error fetching alerts:', error);
+  } finally {
+    loading.value = false;
+  }
+};
+
+const resolveAlert = async (alertId) => {
+  try {
+    const response = await fetch(`http://localhost:8000/api/v1/pbx/recordings/security/alerts/${alertId}/resolve`, {
+      method: 'POST'
+    });
+    const data = await response.json();
+    if (data.status === 'success') {
+      fetchAlerts();
+    }
+  } catch (error) {
+    console.error('Error resolving alert:', error);
   }
 };
 
